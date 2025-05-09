@@ -75,5 +75,5 @@ def model_implementation(env):
 
 if __name__ == "__main__":
     env = gym.make("MyMuJoCoEnv-v0")
-    model_training(env)
-    # model_implementation(env)
+    # model_training(env)
+    model_implementation(env)

@@ -26,6 +26,7 @@ class MyMuJoCoEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         mujoco.mj_resetData(self.model, self.data)
+        mujoco.mj_forward(self.model, self.data)
         self.current_step = 0
         right_pad_pos = self.data.xpos[self.right_pad_id]
         left_pad_pos = self.data.xpos[self.left_pad_id]
@@ -33,7 +34,7 @@ class MyMuJoCoEnv(gym.Env):
         middle = (right_pad_pos + left_pad_pos) / 2
         target_pos = self.data.xpos[self.target_body_id]
         self.prev_dist = np.linalg.norm(middle - target_pos)  # 初始化距离
-        self.target_init_pos = np.copy(([-8.30454536e-19 , 1.00000000e+00 , 3.97844892e-02]))
+        self.target_init_pos = np.copy(target_pos)  # 记录目标的初始位置
         return self._get_obs(), {}
 
 
@@ -64,7 +65,7 @@ class MyMuJoCoEnv(gym.Env):
         terminated = dist < 0.02
         if terminated:
             print(f"terminated")
-            reward += 10
+            reward += 1000
         self.current_step += 1
         truncated = self.current_step >= self.max_steps or target_moved
         info = {}
