@@ -61,3 +61,5 @@
         <position joint="right_finger" kp="1" ctrlrange="0 0.025"/>
     </actuator>
 </mujoco>
+
+
