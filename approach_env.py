@@ -56,15 +56,15 @@ class ApproachMuJoCoEnv(gym.Env):
 
         target_moved = False
         if np.linalg.norm(target_pos - self.target_init_pos) > 0.02:  # 阈值可调整
-            print (f"target_pos: {target_pos}, target_init_pos: {self.target_init_pos}")
+            # print (f"target_pos: {target_pos}, target_init_pos: {self.target_init_pos}")
             reward -= 5
             target_moved = True
 
-        print(f"Distance: {dist}, Reward: {reward}")
+        # print(f"Distance: {dist}, Reward: {reward}")
         self.prev_dist = dist
         terminated = dist < 0.02
         if terminated:
-            print(f"terminated")
+            # print(f"terminated")
             reward += 1000
         self.current_step += 1
         truncated = self.current_step >= self.max_steps or target_moved
