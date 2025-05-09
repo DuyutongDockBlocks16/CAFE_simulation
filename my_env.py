@@ -61,7 +61,7 @@ class MyMuJoCoEnv(gym.Env):
 
         print(f"Distance: {dist}, Reward: {reward}")
         self.prev_dist = dist
-        terminated = dist < 0.01
+        terminated = dist < 0.02
         if terminated:
             print(f"terminated")
             reward += 10
