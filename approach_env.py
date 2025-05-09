@@ -3,7 +3,7 @@ import numpy as np
 import mujoco
 import mujoco.viewer
 
-class MyMuJoCoEnv(gym.Env):
+class ApproachMuJoCoEnv(gym.Env):
     def __init__(self, xml_path):
         super().__init__()
         self.model = mujoco.MjModel.from_xml_path(xml_path)

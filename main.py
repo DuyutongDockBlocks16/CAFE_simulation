@@ -1,15 +1,17 @@
 import gymnasium as gym
-import my_env  # 确保你的环境类已实现并在同目录
+import approach_env 
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from time import sleep
 import mujoco.viewer
 import time
 
+APPROACHING_MODEL_NAME = "ppo_mujoco_car_20250509_ready"
+
 # 注册环境
 gym.register(
-    id="MyMuJoCoEnv-v0",
-    entry_point="my_env:MyMuJoCoEnv",
+    id="ApproachMuJoCoEnv-v0",
+    entry_point="approach_env:ApproachMuJoCoEnv",
     kwargs={"xml_path": "scene.xml"}
 )
 
@@ -25,15 +27,15 @@ class RenderCallback(BaseCallback):
             self.env.render()
         return True
 
-def model_training(env):
-    # model = PPO.load("ppo_mujoco_car", env=env)
-    model = PPO("MlpPolicy", env, verbose=1)
+def approach_model_training(env):
+    model = PPO.load("ppo_mujoco_car", env=env)
+    # model = PPO("MlpPolicy", env, verbose=1)
     model.learn(total_timesteps=300_000, callback=RenderCallback(env))
     model.save("ppo_mujoco_car")
     env.close()
 
-def model_implementation(env):
-    model = PPO.load("ppo_mujoco_car", env=env)
+def approach_model_implementation(env):
+    model = PPO.load(APPROACHING_MODEL_NAME, env=env)
     obs, info = env.reset()
     for _ in range(200000000000):
         env.render()  # 每步都渲染
@@ -57,6 +59,9 @@ def model_implementation(env):
     time_step = 0.001
     model.opt.timestep = time_step  # 将自定义步长应用到模型
 
+    actuator_index = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "fingers_actuator")
+    data.ctrl[actuator_index] = 255
+
     # 启动被动查看器
     with mujoco.viewer.launch_passive(model, data) as viewer:
         print("Press ESC to exit viewer...")
@@ -68,12 +73,11 @@ def model_implementation(env):
             frame_count += 1
             now = time.time()
             if now - last_time >= 1.0:
-                print(f"Simulated FPS: {frame_count}")
+                # print(f"Simulated FPS: {frame_count}")
                 frame_count = 0
                 last_time = now
 
-
 if __name__ == "__main__":
-    env = gym.make("MyMuJoCoEnv-v0")
-    # model_training(env)
-    model_implementation(env)
+    approach_env = gym.make("ApproachMuJoCoEnv-v0")
+    # approach_model_training(approach_env)
+    approach_model_implementation(approach_env)
