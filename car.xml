@@ -1,5 +1,4 @@
 <mujoco>
-  <!-- <include file="2f85.xml"/> -->
   <compiler autolimits="true" meshdir="assets" angle="radian"/>
 
   <option cone="elliptic" impratio="10"/>
