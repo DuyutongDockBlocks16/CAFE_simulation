@@ -3,7 +3,8 @@ import mujoco.viewer
 import time
 
 # 加载模型
-model = mujoco.MjModel.from_xml_path("approached_scene.xml")
+# model = mujoco.MjModel.from_xml_path("approached_scene.xml")
+model = mujoco.MjModel.from_xml_path("mirobot.xml")
 data = mujoco.MjData(model)
 
 # 设置仿真步长
@@ -24,6 +25,6 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
         frame_count += 1
         now = time.time()
         if now - last_time >= 1.0:
-            print(f"Simulated FPS: {frame_count}")
+            # print(f"Simulated FPS: {frame_count}")
             frame_count = 0
             last_time = now
