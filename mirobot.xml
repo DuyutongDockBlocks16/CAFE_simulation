@@ -16,27 +16,31 @@
     <default class="WL-MiroPRO-6R200-05MM">
       <geom contype="2" conaffinity="1" />
       <default class="Joint1"> 
-        <joint pos="0 0 0" axis="0 0 1" range="-1.919 2.792" damping="2.86"/>
-        <position ctrlrange="-1.919 2.792" kp="25"/>
+        <joint pos="0 0 0" axis="0 0 1" range="-1.919 2.792" damping="70.86"/>
+        <position ctrlrange="-1.919 2.792" kp="300"/>
       </default>
       <default class="Joint2">
-        <joint pos="0 0 0" axis="0 0 1" range="-0.611 1.222" damping="2.86"/>
+        <joint pos="0 0 0" axis="0 0 1" range="-0.611 1.222" damping="90.86"/>
         <!-- <joint pos="0 0 0" axis="0 0 1" range="-0.031 1.802" damping="2.86"/> -->
-        <position ctrlrange="-0.611 1.222" kp="25"/>
+        <position ctrlrange="-0.611 1.222" kp="300"/>
       </default>
       <default class="Joint3">
         <!-- <joint pos="0 0 0" axis="0 0 1 " range="-2.094 1.047" damping="2.86"/> -->
-        <joint pos="0 0 0" axis="0 0 1 " range="-1.565 1.40" damping="2.86"/>
-        <position ctrlrange="-1.565 1.40" kp="25"/>
+        <joint pos="0 0 0" axis="0 0 1 " range="-1.565 1.40" damping="85.86"/>
+        <position ctrlrange="-1.565 1.40" kp="250"/>
       </default>
       <default class="Joint4">
-        <joint pos="0 0 0" axis="0 0 1" range="-3.142 3.142" damping="2.86"/>
-        <position ctrlrange="-3.142 3.142" kp="25"/>
+        <joint pos="0 0 0" axis="0 0 1" range="-3.142 3.142" damping="12.86"/>
+        <position ctrlrange="-3.142 3.142" kp="200"/>
       </default>
       <default class="Joint5">
         <!-- <joint pos="0 0 0" axis="0 0 -1" range="-3.49 0.523" damping="2.86"/> -->
-         <joint pos="0 0 0" axis="0 0 -1" range="-1.8 2.2" damping="2.86"/>
-        <position ctrlrange="-1.8 2.2" kp="25"/>
+         <joint pos="0 0 0" axis="0 0 -1" range="-1.8 2.2" damping="12.86"/>
+        <position ctrlrange="-1.8 2.2" kp="100"/>
+      </default>
+      <default class="Joint6">
+        <joint pos="0 0 0" axis="0 0 1" range="-6.283 6.283" damping="2.86"/>
+        <position ctrlrange="-6.283 6.283" kp="50"/>
       </default>
     </default>
     <!-- <default class="endeffector">
@@ -67,7 +71,7 @@
 
   <worldbody>
     <!-- ROBOT ARM -->
-    <body name="base" pos="0 0 0"  childclass="WL-MiroPRO-6R200-05MM">
+    <body name="base" pos="0 0 0" childclass="WL-MiroPRO-6R200-05MM">
       <body name="base_link" pos="0 0 0" >
         <inertial pos="0 0 0.0295631" quat="0.5 0.5 -0.5 0.5" mass="0.83046"
           diaginertia="0.00181346 0.00122515 0.00122515" />
@@ -112,9 +116,8 @@
                   <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="link5" />
 
 
-                  <body name="link6" pos="0.0 -0.01665 0.0105"
-                     quat="0.707 -0.707 0 0">
-                    <joint name="Joint6" pos="0 0 0" axis="0 2.7322e-05 1" range="-6.283 6.283" />
+                  <body name="link6" pos="0.0 -0.01665 0.0105" quat="0.707 -0.707 0 0">
+                    <joint name="Joint6" class="Joint6" />
                     <geom type="mesh" size="0.001 0.001" mass="0.001" mesh="link6"/>
 
                   </body>
@@ -198,6 +201,7 @@
     <position class="Joint3" name="Joint3" joint="Joint3"/>
     <position class="Joint4" name="Joint4" joint="Joint4"/>
     <position class="Joint5" name="Joint5" joint="Joint5"/>
+    <position class="Joint6" name="Joint6" joint="Joint6"/>
   </actuator>
 
 </mujoco>
