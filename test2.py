@@ -4,7 +4,8 @@ import time
 
 # 加载模型
 # model = mujoco.MjModel.from_xml_path("approached_scene.xml")
-model = mujoco.MjModel.from_xml_path("mirobot.xml")
+# model = mujoco.MjModel.from_xml_path("mirobot.xml")
+model = mujoco.MjModel.from_xml_path("mirobot_with_fork_lift.xml")
 data = mujoco.MjData(model)
 
 # 设置仿真步长
