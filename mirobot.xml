@@ -13,13 +13,35 @@
       <equality solref="${compliance_timestep} 1" />
       </default> -->
 
-    <default class="robot">
+    <default class="WL-MiroPRO-6R200-05MM">
       <geom contype="2" conaffinity="1" />
+      <default class="Joint1"> 
+        <joint pos="0 0 0" axis="0 0 1" range="-1.919 2.792" damping="2.86"/>
+        <position ctrlrange="-1.919 2.792" kp="25"/>
+      </default>
+      <default class="Joint2">
+        <joint pos="0 0 0" axis="0 0 1" range="-0.611 1.222" damping="2.86"/>
+        <!-- <joint pos="0 0 0" axis="0 0 1" range="-0.031 1.802" damping="2.86"/> -->
+        <position ctrlrange="-0.611 1.222" kp="25"/>
+      </default>
+      <default class="Joint3">
+        <!-- <joint pos="0 0 0" axis="0 0 1 " range="-2.094 1.047" damping="2.86"/> -->
+        <joint pos="0 0 0" axis="0 0 1 " range="-1.565 1.40" damping="2.86"/>
+        <position ctrlrange="-1.565 1.40" kp="25"/>
+      </default>
+      <default class="Joint4">
+        <joint pos="0 0 0" axis="0 0 1" range="-3.142 3.142" damping="2.86"/>
+        <position ctrlrange="-3.142 3.142" kp="25"/>
+      </default>
+      <default class="Joint5">
+        <!-- <joint pos="0 0 0" axis="0 0 -1" range="-3.49 0.523" damping="2.86"/> -->
+         <joint pos="0 0 0" axis="0 0 -1" range="-1.8 2.2" damping="2.86"/>
+        <position ctrlrange="-1.8 2.2" kp="25"/>
+      </default>
     </default>
-
-    <default class="endeffector">
+    <!-- <default class="endeffector">
       <geom contype="4" conaffinity="1" />
-    </default>
+    </default> -->
 
   </default>
 
@@ -45,7 +67,7 @@
 
   <worldbody>
     <!-- ROBOT ARM -->
-    <body name="base" pos="0 0 0" gravcomp="1" childclass="robot">
+    <body name="base" pos="0 0 0" gravcomp="1" childclass="WL-MiroPRO-6R200-05MM">
       <body name="base_link" pos="0 0 0" gravcomp="1">
         <inertial pos="0 0 0.0295631" quat="0.5 0.5 -0.5 0.5" mass="0.83046"
           diaginertia="0.00181346 0.00122515 0.00122515" />
@@ -54,7 +76,7 @@
         <body name="link1" pos="0 0 0.0657039" gravcomp="1">
           <inertial pos="0.0139205 0.000175676 0.0278205" quat="0.63697 0.301503 0.306394 0.639912"
             mass="0.100784" diaginertia="6.20698e-05 5.14973e-05 2.49373e-05" />
-          <joint name="Joint1" pos="0 0.05 0" axis="0 0 1" range="-1.919 2.792" />
+          <joint name="Joint1" class = "Joint1" />
           <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="link1" />
 
 
@@ -65,14 +87,14 @@
               quat="0.707123 -0.0011095 -0.00125416 0.707089"
               mass="0.132171"
               diaginertia="0.000225757 0.000214472 2.33029e-05" />
-            <joint name="Joint2" pos="0 0 0" axis="0 1 0" range="-0.611 1.222" />
+            <joint name="Joint2" class="Joint2" />
             <geom type="mesh" rgba="1 0.6 0.247059 1" mesh="link2" />
 
             <body name="link3" pos="0.108 0 -0.0098" gravcomp="1">
               <inertial pos="0.0158955 0.0218157 0.00468223"
                 quat="0.0042885 0.613846 -0.00270477 0.78941" mass="0.0999859"
                 diaginertia="0.000128775 0.000119394 2.89671e-05" />
-              <joint name="Joint3" pos="0 0 0" axis="0 1 0" range="-2.094 1.047" />
+              <joint name="Joint3" class="Joint3" />
               <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="link3" />
               
               <!-- quat="1 0 0 0" -->
@@ -80,13 +102,13 @@
                 <inertial pos="0.0397448 -3.52691e-07 8.51159e-07"
                   quat="-1.72755e-05 0.70712 1.30532e-05 0.707094" mass="0.0455777"
                   diaginertia="2.34679e-05 1.74414e-05 1.02362e-05" />
-                <joint name="Joint4" pos="0 0 0" axis="-1 0 0" range="-3.142 3.142" />
+                <joint name="Joint4" class="Joint4" />
                 <geom type="mesh" rgba="1 0.6 0.247059 1" mesh="link4" />
 
                 <body name="link5" pos="0.00 -0.011 0.0615" gravcomp="1" quat="0.707 -0.707 0 0">
                   <inertial pos="0 0.006295 0.00755281" quat="1 1.17491e-05 0 0" mass="0.0143828"
                     diaginertia="1.94302e-06 1.83053e-06 1.09304e-06" />
-                  <joint name="Joint5" pos="0 0 0" axis="0 -1 0" range="-3.49 0.523" />
+                  <joint name="Joint5" class="Joint5" />
                   <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="link5" />
 
 
@@ -171,7 +193,11 @@
   </custom> -->
 
   <actuator>
-    <motor name="forward" tendon="forward" ctrlrange="-0.7 0.7" />
+    <position class="Joint1" name="Joint1" joint="Joint1"/>
+    <position class="Joint2" name="Joint2" joint="Joint2"/>
+    <position class="Joint3" name="Joint3" joint="Joint3"/>
+    <position class="Joint4" name="Joint4" joint="Joint4"/>
+    <position class="Joint5" name="Joint5" joint="Joint5"/>
   </actuator>
 
 </mujoco>
