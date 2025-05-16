@@ -3,16 +3,11 @@ import mujoco.viewer
 import time
 
 # 加载模型
-# model = mujoco.MjModel.from_xml_path("approached_scene.xml")
-# model = mujoco.MjModel.from_xml_path("mirobot.xml")
-# model = mujoco.MjModel.from_xml_path("mirobot_with_fork_lift_with_car.xml")
-# model = mujoco.MjModel.from_xml_path("robot_husky_mobile.xml")
-# model = mujoco.MjModel.from_xml_path("rover4We-only.xml")
 model = mujoco.MjModel.from_xml_path("scene_mirobot.xml")
 data = mujoco.MjData(model)
 
 # 设置仿真步长
-time_step = 0.001
+time_step = 0.0001
 model.opt.timestep = time_step  # 将自定义步长应用到模型
 
 # print model.geom()
