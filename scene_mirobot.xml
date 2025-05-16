@@ -19,33 +19,48 @@
 
     <geom type="plane" size="3 3 .01" material="grid" />
 
-    <geom name="pickingplace:table0" type="box" pos="0.98 -2.5 .27" size="0.005 0.005 0.005" rgba="0.7 0.5 0.3 1" />
-    <geom name="pickingplace:table1" type="box" pos="1.02 -2.5 .27" size="0.005 0.005 0.005" rgba="0.7 0.5 0.3 1" />
+    <geom name="pickingplace:table0" type="box" pos="0.98 -2.5 .27" size="0.005 0.005 0.005"
+      rgba="0.7 0.5 0.3 1" />
+    <geom name="pickingplace:table1" type="box" pos="1.02 -2.5 .27" size="0.005 0.005 0.005"
+      rgba="0.7 0.5 0.3 1" />
 
     <body name="pickingplace:object0" pos="1 -2.5 0.28">
       <joint name="object0:joint" type="free" />
-      <geom name="object0_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6" friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1" conaffinity="1"/>
+      <geom name="object0_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
+        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+        conaffinity="1" />
     </body>
 
-    <geom name="pickingplace:table2" type="box" pos="-1.02 -2.5 .27" size="0.005 0.005 0.005" rgba="0.7 0.5 0.3 1" />
-    <geom name="pickingplace:table3" type="box" pos="-0.98 -2.5 .27" size="0.005 0.005 0.005" rgba="0.7 0.5 0.3 1" />
+    <geom name="pickingplace:table2" type="box" pos="-1.02 -2.5 .27" size="0.005 0.005 0.005"
+      rgba="0.7 0.5 0.3 1" />
+    <geom name="pickingplace:table3" type="box" pos="-0.98 -2.5 .27" size="0.005 0.005 0.005"
+      rgba="0.7 0.5 0.3 1" />
 
     <body name="pickingplace:object1" pos="-1 -2.5 0.28">
       <joint name="object1:joint" type="free" />
-      <geom name="object1_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6" friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1" conaffinity="1"/>
+      <geom name="object1_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
+        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+        conaffinity="1" />
     </body>
 
-    <geom name="pickingplace1:low_plane" type="box" pos="2.8 1 .05" size="0.2 0.2 0.005" rgba="0.7 0.5 0.3 1" />
-    <geom name="pickingplace1:high_plane" type="box" pos="2.8 1 .35" size="0.2 0.2 0.005" rgba="0.7 0.5 0.3 1" />
-        <geom name="pickingplace2:low_plane" type="box" pos="2.8 -1 .05" size="0.2 0.2 0.005" rgba="0.7 0.5 0.3 1" />
-    <geom name="pickingplace2:high_plane" type="box" pos="2.8 -1 .35" size="0.2 0.2 0.005" rgba="0.7 0.5 0.3 1" />
+    <geom name="pickingplace1:low_plane" type="box" pos="2.8 1 .05" size="0.2 0.2 0.005"
+      rgba="0.7 0.5 0.3 1" />
+    <geom name="pickingplace1:high_plane" type="box" pos="2.8 1 .35" size="0.2 0.2 0.005"
+      rgba="0.7 0.5 0.3 1" />
+    <geom name="pickingplace2:low_plane" type="box" pos="2.8 -1 .05" size="0.2 0.2 0.005"
+      rgba="0.7 0.5 0.3 1" />
+    <geom name="pickingplace2:high_plane" type="box" pos="2.8 -1 .35" size="0.2 0.2 0.005"
+      rgba="0.7 0.5 0.3 1" />
 
-    <!-- <geom name="pickingplace:table4" type="box" pos="0.18 -0.02 .45" size="0.005 0.005 0.005" rgba="0.7 0.5 0.3 1" />
-    <geom name="pickingplace:table5" type="box" pos="0.18 0.02 .45" size="0.005 0.005 0.005" rgba="0.7 0.5 0.3 1" />
+    <!-- <geom name="pickingplace:table4" type="box" pos="0.18 -0.02 .45" size="0.005 0.005 0.005"
+    rgba="0.7 0.5 0.3 1" />
+    <geom name="pickingplace:table5" type="box" pos="0.18 0.02 .45" size="0.005 0.005 0.005" rgba="0.7
+    0.5 0.3 1" />
 
     <body name="pickingplace:object2" pos="0.18 0 0.457">
       <joint name="object2:joint" type="free" />
-      <geom name="object2_geom" type="box" size="0.017 .03 0.017" material="block_mat" mass="0.6" friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1" conaffinity="1"/>
+      <geom name="object2_geom" type="box" size="0.017 .03 0.017" material="block_mat" mass="0.6"
+    friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1" conaffinity="1"/>
     </body> -->
 
     <geom name="wall_front" type="box" pos="0 3 0.5" size="3 0.1 0.5" rgba="0.5 0.5 0.5 1"
