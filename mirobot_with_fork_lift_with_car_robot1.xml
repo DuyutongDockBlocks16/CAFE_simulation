@@ -112,7 +112,7 @@
 
 
   <worldbody>
-    <body name="robot1:rover" pos="0 0 0.2">
+    <body name="robot1:rover" pos="-1 0 0.2" >
 
       <light name="robot1:lamp" active="true" directional="true" cutoff="4" exponent="20"
         diffuse="1 1 1"
