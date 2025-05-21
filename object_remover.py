@@ -2,7 +2,7 @@ import time
 import random
 import threading
 
-def remove_object_on_plane(model, data, plane_positions, plane_radius, plane_z, joint_ids, check_interval=0.05):
+def remove_object_on_plane(model, data, plane_positions, plane_radius, plane_z, object_joint_ids, check_interval=0.05):
     print("remover thread running")
     removed_ids = set()
 
@@ -21,7 +21,7 @@ def remove_object_on_plane(model, data, plane_positions, plane_radius, plane_z, 
         threading.Timer(delay, remove).start()
 
     while True:
-        for i, joint_id in joint_ids:
+        for i, joint_id in object_joint_ids:
             # or joint_id != 0
             if i in removed_ids :
                 continue
