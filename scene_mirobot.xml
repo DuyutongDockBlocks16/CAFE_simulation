@@ -24,33 +24,33 @@
     <geom name="pickingplace:table1" type="box" pos="1.02 -2.5 .27" size="0.005 0.005 0.005"
       rgba="0.7 0.5 0.3 1" />
 
-    <body name="pickingplace:object0" pos="1 -2.5 0.28">
+    <!-- <body name="pickingplace:object0" pos="1 -2.5 0.28">
       <joint name="object0:joint" type="free" />
       <geom name="object0_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
         friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
         conaffinity="1" />
-    </body>
+    </body> -->
 
     <geom name="pickingplace:table2" type="box" pos="-1.02 -2.5 .27" size="0.005 0.005 0.005"
       rgba="0.7 0.5 0.3 1" />
     <geom name="pickingplace:table3" type="box" pos="-0.98 -2.5 .27" size="0.005 0.005 0.005"
       rgba="0.7 0.5 0.3 1" />
 
-    <body name="pickingplace:object1" pos="-1 -2.5 0.28">
+    <!-- <body name="pickingplace:object1" pos="-1 -2.5 0.28">
       <joint name="object1:joint" type="free" />
       <geom name="object1_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
         friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
         conaffinity="1" />
-    </body>
+    </body> -->
 
     <geom name="pickingplace1:low_plane" type="cylinder" pos="2.8 1 .23" size="0.23 0.01"
-          rgba="0.7 0.5 0.3 1" friction="5" solimp="0.99 0.99 0.001" solref="0.002 1"/>
+      rgba="0.7 0.5 0.3 1" friction="5" solimp="0.99 0.99 0.001" solref="0.002 1" />
     <geom name="pickingplace1:high_plane" type="cylinder" pos="2.8 1 .4" size="0.15 0.01"
-          rgba="0.7 0.5 0.3 1" friction="5" solimp="0.99 0.99 0.001" solref="0.002 1"/>
+      rgba="0.7 0.5 0.3 1" friction="5" solimp="0.99 0.99 0.001" solref="0.002 1" />
     <geom name="pickingplace2:low_plane" type="cylinder" pos="2.8 -1 .23" size="0.23 0.01"
-          rgba="0.7 0.5 0.3 1" friction="5" solimp="0.99 0.99 0.001" solref="0.002 1"/>
+      rgba="0.7 0.5 0.3 1" friction="5" solimp="0.99 0.99 0.001" solref="0.002 1" />
     <geom name="pickingplace2:high_plane" type="cylinder" pos="2.8 -1 .4" size="0.15 0.01"
-          rgba="0.7 0.5 0.3 1" friction="5" solimp="0.99 0.99 0.001" solref="0.002 1"/>
+      rgba="0.7 0.5 0.3 1" friction="5" solimp="0.99 0.99 0.001" solref="0.002 1" />
 
     <!-- <geom name="pickingplace:table4" type="box" pos="0.18 -0.02 .45" size="0.005 0.005 0.005"
     rgba="0.7 0.5 0.3 1" />
@@ -74,5 +74,77 @@
 
     <geom name="wall_right" type="box" pos="3 0 0.5" size="0.1 3 0.5" rgba="0.5 0.5 0.5 1"
       contype="1" conaffinity="1" />
+
+    <body name="pickingplace:object0" pos="-1.1 -3.5 0.28">
+      <joint name="object0:joint" type="free" />
+      <geom name="object0_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
+        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+        conaffinity="1" />
+    </body>
+
+    <body name="pickingplace:object1" pos="-1.0 -3.5 0.28">
+      <joint name="object1:joint" type="free" />
+      <geom name="object1_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
+        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+        conaffinity="1" />
+    </body>
+
+    <body name="pickingplace:object2" pos="-0.9 -3.5 0.28">
+      <joint name="object2:joint" type="free" />
+      <geom name="object2_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
+        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+        conaffinity="1" />
+    </body>
+
+    <body name="pickingplace:object3" pos="-0.8 -3.5 0.28">
+      <joint name="object3:joint" type="free" />
+      <geom name="object3_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
+        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+        conaffinity="1" />
+    </body>
+
+    <body name="pickingplace:object4" pos="-0.7 -3.5 0.28">
+      <joint name="object4:joint" type="free" />
+      <geom name="object4_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
+        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+        conaffinity="1" />
+    </body>
+
+    <body name="pickingplace:object5" pos="-0.6 -3.5 0.28">
+      <joint name="object5:joint" type="free" />
+      <geom name="object5_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
+        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+        conaffinity="1" />
+    </body>
+
+    <body name="pickingplace:object6" pos="-0.5 -3.5 0.28">
+      <joint name="object6:joint" type="free" />
+      <geom name="object6_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
+        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+        conaffinity="1" />
+    </body>
+
+    <body name="pickingplace:object7" pos="-0.4 -3.5 0.28">
+      <joint name="object7:joint" type="free" />
+      <geom name="object7_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
+        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+        conaffinity="1" />
+    </body>
+
+    <body name="pickingplace:object8" pos="-0.3 -3.5 0.28">
+      <joint name="object8:joint" type="free" />
+      <geom name="object8_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
+        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+        conaffinity="1" />
+    </body>
+
+    <body name="pickingplace:object9" pos="-0.2 -3.5 0.28">
+      <joint name="object9:joint" type="free" />
+      <geom name="object9_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
+        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+        conaffinity="1" />
+    </body>
+
   </worldbody>
+
 </mujoco>
