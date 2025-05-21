@@ -6,11 +6,38 @@ import threading
 import time
 import random
 
-def main():
+def get_data_and_model():
     model = mujoco.MjModel.from_xml_path("scene_mirobot.xml")
     data = mujoco.MjData(model)
+    time_step = 0.001
+    model.opt.timestep = time_step  
+    return model, data
 
-    object_ids = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+def get_object_ids(model):
+    object_ids = []
+    for i in range(model.njnt):
+        name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
+        if name and name.startswith("object") and name.endswith(":joint"):
+            # extract the N from the name
+            try:
+                num = int(name.split(":")[0][6:])  # "objectN:joint" -> N
+                object_ids.append(num)
+            except Exception:
+                continue
+    return sorted(object_ids)
+
+def start_remover_thread(model, data, plane_positions, lower_plane_radius, lower_plane_z, joint_ids):
+    threading.Thread(
+        target=remove_object_on_plane,
+        args=(model, data, plane_positions, lower_plane_radius, lower_plane_z, joint_ids),
+        daemon=True
+    ).start()
+
+def main():
+    model, data = get_data_and_model()
+
+    object_ids = get_object_ids(model)
+
     joint_ids = []
     for i in object_ids:
         joint_name = f"object{i}:joint"
@@ -20,20 +47,15 @@ def main():
         except Exception:
             print(f"Joint {joint_name} not found in main thread")
 
-    time_step = 0.001
-    model.opt.timestep = time_step  
-
     # plane parameters
     plane_positions = [[2.8, 1.0],[2.8, -1.0]]
     lower_plane_radius = 0.23
     lower_plane_z = 0.23
 
     # Start the asynchronous thread
-    threading.Thread(
-        target=remove_object_on_plane,
-        args=(model, data, plane_positions, lower_plane_radius, lower_plane_z, joint_ids),
-        daemon=True
-    ).start()
+    start_remover_thread(model, data, plane_positions, lower_plane_radius, lower_plane_z, joint_ids)
+
+    
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         controller = MirobotController(viewer, model, data)
