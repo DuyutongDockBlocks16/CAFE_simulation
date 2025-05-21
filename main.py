@@ -26,10 +26,26 @@ def get_object_ids(model):
                 continue
     return sorted(object_ids)
 
-def start_remover_thread(model, data, plane_positions, lower_plane_radius, lower_plane_z, joint_ids):
+def start_remover_thread(model, data, joint_ids):
+    # plane parameters
+    plane_positions = [[2.8, 1.0],[2.8, -1.0]]
+    lower_plane_radius = 0.23
+    lower_plane_z = 0.23
+
     threading.Thread(
         target=remove_object_on_plane,
         args=(model, data, plane_positions, lower_plane_radius, lower_plane_z, joint_ids),
+        daemon=True
+    ).start()
+
+def start_placer_thread(model, data, joint_ids):
+    # object positions parameters
+    left_object_position = [1, -2.5, 0.28]
+    right_object_position = [-1, -2.5, 0.28]
+
+    threading.Thread(
+        target=add_object_on_plane,
+        args=(model, data, left_object_position, right_object_position, joint_ids),
         daemon=True
     ).start()
 
@@ -37,7 +53,6 @@ def main():
     model, data = get_data_and_model()
 
     object_ids = get_object_ids(model)
-
     joint_ids = []
     for i in object_ids:
         joint_name = f"object{i}:joint"
@@ -47,15 +62,9 @@ def main():
         except Exception:
             print(f"Joint {joint_name} not found in main thread")
 
-    # plane parameters
-    plane_positions = [[2.8, 1.0],[2.8, -1.0]]
-    lower_plane_radius = 0.23
-    lower_plane_z = 0.23
-
     # Start the asynchronous thread
-    start_remover_thread(model, data, plane_positions, lower_plane_radius, lower_plane_z, joint_ids)
-
-    
+    start_remover_thread(model, data, joint_ids)
+    start_placer_thread(model, data, joint_ids)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         controller = MirobotController(viewer, model, data)

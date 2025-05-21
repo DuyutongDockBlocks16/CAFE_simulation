@@ -19,6 +19,7 @@
 
     <geom type="plane" size="3 3 .01" material="grid" />
 
+    <!-- left object -->
     <geom name="pickingplace:table0" type="box" pos="0.98 -2.5 .27" size="0.005 0.005 0.005"
       rgba="0.7 0.5 0.3 1" />
     <geom name="pickingplace:table1" type="box" pos="1.02 -2.5 .27" size="0.005 0.005 0.005"
@@ -31,6 +32,7 @@
         conaffinity="1" />
     </body> -->
 
+    <!-- right object -->
     <geom name="pickingplace:table2" type="box" pos="-1.02 -2.5 .27" size="0.005 0.005 0.005"
       rgba="0.7 0.5 0.3 1" />
     <geom name="pickingplace:table3" type="box" pos="-0.98 -2.5 .27" size="0.005 0.005 0.005"
