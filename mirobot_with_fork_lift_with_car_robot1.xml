@@ -345,7 +345,7 @@
   </tendon>
 
   <actuator>
-    <position class="Joint1" name="robot1:Joint1" joint="robot1:Joint1" />
+    <position class="Joint1" name="robot1:Joint1" joint="robot1:Joint1" gear="1.0"/>
     <position class="Joint2" name="robot1:Joint2" joint="robot1:Joint2" />
     <position class="Joint3" name="robot1:Joint3" joint="robot1:Joint3" />
     <position class="Joint4" name="robot1:Joint4" joint="robot1:Joint4" />

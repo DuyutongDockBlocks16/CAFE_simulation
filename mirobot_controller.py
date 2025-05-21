@@ -2,6 +2,15 @@ import mujoco
 import mujoco.viewer
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+from enum import Enum
+
+class Direction(Enum):
+    RIGHT = -1
+    LEFT = 1
+
+class Layer(Enum):
+    LOWER = 0
+    UPPER = 1
 
 class MirobotController:
     def __init__(self, viewer, model, data):
@@ -33,7 +42,9 @@ class MirobotController:
                             Kd_pos=0.2, 
                             Kp_yaw=1.5, 
                             Kd_yaw=0.05, 
-                            max_steps=100000, tol=1e-2):
+                            max_steps=100000, tol=1e-2,
+                            render_flag:bool = False
+                            ):
         prev_pos_error = np.zeros(2)
         prev_yaw_error = 0.0
         for _ in range(max_steps):
@@ -56,7 +67,8 @@ class MirobotController:
             self.data.ctrl[self.robot1_ghost_steer_index] = np.clip(steer_ctrl, -0.2, 0.2)
 
             mujoco.mj_step(self.model, self.data)
-            self.viewer.sync()
+            if render_flag:
+                self.viewer.sync()
 
             prev_pos_error = direction
             prev_yaw_error = yaw_error
@@ -78,7 +90,9 @@ class MirobotController:
                             Kd_pos=1.0, 
                             Kp_yaw=3.0, 
                             Kd_yaw=0.1, 
-                            max_steps=200000, tol=1e-3):
+                            max_steps=200000, tol=1e-3,
+                            render_flag:bool = False
+                            ):
         prev_pos_error = np.zeros(2)
         prev_yaw_error = 0.0
         for _ in range(max_steps):
@@ -106,7 +120,8 @@ class MirobotController:
             self.data.ctrl[self.robot1_ghost_steer_index] = np.clip(steer_ctrl, -0.9, 0.9)
 
             mujoco.mj_step(self.model, self.data)
-            self.viewer.sync()
+            if render_flag:
+                self.viewer.sync()
 
             prev_pos_error = direction
             prev_yaw_error = yaw_error
@@ -121,51 +136,60 @@ class MirobotController:
         self.data.ctrl[self.robot1_ghost_steer_index] = 0
     
     # dirction_flag = -1 is right, dirction_flag = 1 is left
-    def origin_position_to_picking_position(self, direction_flag):
+    def origin_position_to_picking_position(self, direction_flag: Direction, render_flag: bool = False):
         quat = [0.707, 0.0, 0.0, -0.707] 
         target_yaw = self.quat_to_yaw(quat)
         # print(f"target_yaw: {target_yaw}")
-        if direction_flag == -1:
+        if direction_flag == Direction.RIGHT:
             target_pos = np.array([-1, -2.3]) 
-        else:
+        elif direction_flag == Direction.LEFT:
             target_pos = np.array([1, -2.3]) 
-        self.pid_origin_position_to_picking_position(target_pos, target_yaw)
+        self.pid_origin_position_to_picking_position(target_pos, target_yaw, render_flag=render_flag)
 
     # dirction_flag = -1 is right, dirction_flag = 1 is left
-    def execute_pick_motion(self, direction_flag):
+    def execute_pick_motion(self, direction_flag: Direction, render_flag: bool = False):
         self.data.ctrl[self.robot1_joint3_index] = 1.1
         self.data.ctrl[self.robot1_joint5_index] = -0.64
 
         step_count = 0
         while step_count < 1000:
             mujoco.mj_step(self.model, self.data)
-            self.viewer.sync()
+            if render_flag:
+                self.viewer.sync()
             step_count += 1
-        
-        if direction_flag == -1:
+
+        if direction_flag == Direction.RIGHT:
             self.data.ctrl[self.robot1_joint1_index] = 0.507
-        elif direction_flag == 1:
+            
+        elif direction_flag == Direction.LEFT:
             self.data.ctrl[self.robot1_joint1_index] = -0.80
             
         step_count = 0
         while step_count < 1000:
             mujoco.mj_step(self.model, self.data)
-            self.viewer.sync()
+            if render_flag:
+                self.viewer.sync()
             step_count += 1
 
         self.data.ctrl[self.robot1_joint3_index] = 0.674
         step_count = 0
         while step_count < 3000:
             mujoco.mj_step(self.model, self.data)
-            self.viewer.sync()
+            if render_flag:
+                self.viewer.sync()
             step_count += 1
 
-    def picking_position_to_pre_placing_position(self):
+    def picking_position_to_pre_placing_position(self, render_flag: bool = False):
         quat = [0.707, 0.0, 0.0, -0.707] 
         target_yaw = self.quat_to_yaw(quat)
-        self.pid_picking_position_to_pre_placing_position(np.array([0, 2]) , target_yaw)
+        self.pid_picking_position_to_pre_placing_position(np.array([0, 2]) , target_yaw, render_flag=render_flag)
 
-    def rotate_joint1_to_front(self, target_angle=0.0, Kp=0.5, tol=1e-3, max_steps=5000):
+    def rotate_joint1_to_front(self, target_angle=0.0, Kp=0.0000001, tol=1e-3, max_steps=5000000, render_flag: bool = False):
+        # 保存原始 gear
+        original_gear = self.model.actuator_gear[self.robot1_joint1_index].copy()
+        # 临时设置 gear
+        self.model.actuator_gear[self.robot1_joint1_index] = 0.3  # 你想要的慢速 gear
+
         joint1_qpos_addr = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot1:Joint1")
         step_count = 0
         while step_count < max_steps:
@@ -174,13 +198,17 @@ class MirobotController:
             ctrl = Kp * error
             if abs(error) < 0.05:
                 ctrl *= 0.2
-            self.data.ctrl[self.robot1_joint1_index] = np.clip(ctrl, -0.05, 0.05)
+            self.data.ctrl[self.robot1_joint1_index] = np.clip(ctrl, -0.001, 0.001)
             mujoco.mj_step(self.model, self.data)
-            self.viewer.sync()
+            if render_flag:
+                self.viewer.sync()
             if abs(error) < tol:
                 break
             step_count += 1
         self.data.ctrl[self.robot1_joint1_index] = 0
+
+        # 恢复 gear
+        self.model.actuator_gear[self.robot1_joint1_index] = original_gear
 
     def pid_pre_placing_position_to_placing_position(self, 
                             target_pos=np.zeros(2), 
@@ -189,7 +217,9 @@ class MirobotController:
                             Kd_pos=0.2, 
                             Kp_yaw=1.5, 
                             Kd_yaw=0.05, 
-                            max_steps=100000, tol=1e-2):
+                            max_steps=100000, tol=1e-2,
+                            render_flag:bool = False
+                            ):
         prev_pos_error = np.zeros(2)
         prev_yaw_error = 0.0
         for _ in range(max_steps):
@@ -212,7 +242,8 @@ class MirobotController:
             self.data.ctrl[self.robot1_ghost_steer_index] = np.clip(steer_ctrl, -0.9, 0.9)
 
             mujoco.mj_step(self.model, self.data)
-            self.viewer.sync()
+            if render_flag:
+                self.viewer.sync()
 
             prev_pos_error = direction
             prev_yaw_error = yaw_error
@@ -228,36 +259,39 @@ class MirobotController:
         self.data.ctrl[self.robot1_ghost_steer_index] = 0
 
     # dirction_flag = -1 is right, dirction_flag = 1 is left
-    def pre_placing_position_to_placing_position(self, direction_flag, layer_flag):
+    def pre_placing_position_to_placing_position(self, direction_flag: Direction, render_flag: bool = False):
         quat = [1, 0.0, 0.0, 0.0] 
         target_yaw = self.quat_to_yaw(quat)
         # right
-        if direction_flag == -1:
-            target_pos = np.array([2.45, -1]) 
+        if direction_flag == Direction.RIGHT:
+            target_pos = np.array([2.51, -0.8])
         # left
-        else:
+        elif direction_flag == Direction.LEFT:
             target_pos = np.array([2.45, 1]) 
             
-        self.pid_pre_placing_position_to_placing_position(target_pos, target_yaw)
+        self.pid_pre_placing_position_to_placing_position(target_pos, target_yaw, render_flag=render_flag)
 
-    def placing_at_lower_layer(self, joint3_target=0.674, joint5_target=0.4, hold_steps=3000):
+    def placing_at_lower_layer(self, joint3_target=0.674, joint5_target=0.4, hold_steps=3000, render_flag: bool = False):
         self.data.ctrl[self.robot1_joint3_index] = joint3_target
         self.data.ctrl[self.robot1_joint5_index] = joint5_target
         for _ in range(hold_steps):
             mujoco.mj_step(self.model, self.data)
-            self.viewer.sync()
+            if render_flag:
+                self.viewer.sync()
 
-    def placing_position_to_origin_position(self):
-        self.pid_placing_position_to_origin_position(self.robot_origin_pos, self.robot_origin_yaw)
+    def placing_position_to_pre_origin_position(self, render_flag: bool = False):
+        self.pid_placing_position_to_pre_origin_position(np.array([-2.5, 0.0]), self.robot_origin_yaw, render_flag=render_flag)
 
-    def pid_placing_position_to_origin_position(self, 
-                            target_pos=np.zeros(2), 
-                            target_yaw=0.0, 
-                            Kp_pos=10.0, 
-                            Kd_pos=1.0, 
-                            Kp_yaw=3.0, 
-                            Kd_yaw=0.1, 
-                            max_steps=200000, tol=1e-3):
+    def pid_placing_position_to_pre_origin_position(self, 
+                                target_pos=np.zeros(2), 
+                                target_yaw=0.0, 
+                                Kp_pos=10.0, 
+                                Kd_pos=1.0, 
+                                Kp_yaw=3.0, 
+                                Kd_yaw=0.1, 
+                                max_steps=200000, tol=1e-3,
+                                render_flag:bool = False
+                                ):
         prev_pos_error = np.zeros(2)
         prev_yaw_error = 0.0
         for _ in range(max_steps):
@@ -266,35 +300,99 @@ class MirobotController:
             yaw = self.quat_to_yaw(quat)
 
             direction = target_pos - pos
-            # print(f"pos: {pos}, target_pos: {target_pos}, direction: {direction}")
             distance = np.linalg.norm(direction)
             target_heading = np.arctan2(direction[1], direction[0])
             yaw_error = (target_heading - yaw + np.pi) % (2 * np.pi) - np.pi
 
-            drive_ctrl = Kp_pos * distance + Kd_pos * (distance - np.linalg.norm(prev_pos_error))
-            # if abs(yaw_error) < 0.2:
-            #     drive_ctrl = Kp_pos * distance + Kd_pos * (distance - np.linalg.norm(prev_pos_error))
-                
-            # else:
-            #     drive_ctrl = 0
+            # 判断目标点是否在后方
+            if abs(yaw_error) > np.pi / 2:
+                drive_sign = -1
+                # 让小车尾部对准目标点
+                yaw_error = ((target_heading + np.pi) % (2 * np.pi)) - yaw
+                yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi
+            else:
+                drive_sign = 1
 
+            drive_ctrl = drive_sign * (Kp_pos * distance + Kd_pos * (distance - np.linalg.norm(prev_pos_error)))
             steer_ctrl = Kp_yaw * yaw_error + Kd_yaw * (yaw_error - prev_yaw_error)
-            
 
-            self.data.ctrl[self.robot1_drive_index] = np.clip(drive_ctrl, 3, -3)
-            self.data.ctrl[self.robot1_ghost_steer_index] = np.clip(steer_ctrl, -0.4, 0.4)
+            self.data.ctrl[self.robot1_drive_index] = np.clip(drive_ctrl, -1.5, 1.5)
+            self.data.ctrl[self.robot1_ghost_steer_index] = -1 * np.clip(steer_ctrl, -0.5, 0.5)
 
             mujoco.mj_step(self.model, self.data)
-            self.viewer.sync()
+            if render_flag:
+                self.viewer.sync()
 
             prev_pos_error = direction
             prev_yaw_error = yaw_error
 
-            # print(f"drive_ctrl: {drive_ctrl}, steer_ctrl: {steer_ctrl}, distance: {distance}, yaw_error: {yaw_error}")
-
-            # if distance < tol and abs(yaw_error) < tol:
             if distance < tol:
                 break
 
         self.data.ctrl[self.robot1_drive_index] = 0
         self.data.ctrl[self.robot1_ghost_steer_index] = 0
+
+        
+    def placing_position_to_origin_position(self, render_flag: bool = False):
+        self.pid_placing_position_to_origin_position(self.robot_origin_pos, self.robot_origin_yaw, render_flag=render_flag)
+    
+    def pid_placing_position_to_origin_position(self, 
+                                target_pos=np.zeros(2), 
+                                target_yaw=0.0, 
+                                Kp_pos=10.0, 
+                                Kd_pos=1.0, 
+                                Kp_yaw=3.0, 
+                                Kd_yaw=0.1, 
+                                max_steps=200000, tol=1e-3,
+                                render_flag:bool = False
+                                ):
+        prev_pos_error = np.zeros(2)
+        prev_yaw_error = 0.0
+        for _ in range(max_steps):
+            pos = self.data.xpos[self.robot_1_rover_id][:2]
+            quat = self.data.xquat[self.robot_1_rover_id]
+            yaw = self.quat_to_yaw(quat)
+
+            direction = target_pos - pos
+            distance = np.linalg.norm(direction)
+            target_heading = np.arctan2(direction[1], direction[0])
+            yaw_error = (target_heading - yaw + np.pi) % (2 * np.pi) - np.pi
+
+            # 判断目标点是否在后方
+            if abs(yaw_error) > np.pi / 2:
+                drive_sign = -1
+                # 让小车尾部对准目标点
+                yaw_error = ((target_heading + np.pi) % (2 * np.pi)) - yaw
+                yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi
+            else:
+                drive_sign = 1
+
+            drive_ctrl = drive_sign * (Kp_pos * distance + Kd_pos * (distance - np.linalg.norm(prev_pos_error)))
+            steer_ctrl = Kp_yaw * yaw_error + Kd_yaw * (yaw_error - prev_yaw_error)
+
+            self.data.ctrl[self.robot1_drive_index] = np.clip(drive_ctrl, -1.5, 1.5)
+            self.data.ctrl[self.robot1_ghost_steer_index] = np.clip(steer_ctrl, -0.5, 0.5)
+
+            mujoco.mj_step(self.model, self.data)
+            if render_flag:
+                self.viewer.sync()
+
+            prev_pos_error = direction
+            prev_yaw_error = yaw_error
+
+            if distance < tol:
+                break
+
+        self.data.ctrl[self.robot1_drive_index] = 0
+        self.data.ctrl[self.robot1_ghost_steer_index] = 0
+
+    def reset_all_joints(self, render_flag: bool = False):
+        self.data.ctrl[self.robot1_joint1_index] = 0
+        self.data.ctrl[self.robot1_joint2_index] = 0
+        self.data.ctrl[self.robot1_joint3_index] = 0
+        self.data.ctrl[self.robot1_joint4_index] = 0
+        self.data.ctrl[self.robot1_joint5_index] = 0
+        for _ in range(100):
+            mujoco.mj_step(self.model, self.data)
+            if render_flag:
+                self.viewer.sync()
