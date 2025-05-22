@@ -142,7 +142,8 @@
                       <!-- <joint name="Joint6" class="Joint6" /> -->
                       <geom class="visual" type="mesh" size="0.001 0.001" mass="0.001"
                         mesh="ForkLift" />
-                      <geom class="collision" mesh="ForkLift" />
+                      <geom class="collision" mesh="ForkLift" friction="5 5 5"
+                        solimp="0.99 0.99 0.001" solref="0.02 1" />
 
                     </body>
                   </body>

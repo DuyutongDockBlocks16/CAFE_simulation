@@ -150,6 +150,7 @@ class MirobotController:
     def execute_pick_motion(self, direction_flag: Direction, render_flag: bool = False):
         self.data.ctrl[self.robot1_joint3_index] = 1.1
         self.data.ctrl[self.robot1_joint5_index] = -0.64
+        # self.data.ctrl[self.robot1_joint5_index] = -0.22
 
         step_count = 0
         while step_count < 1000:
@@ -172,6 +173,7 @@ class MirobotController:
             step_count += 1
 
         self.data.ctrl[self.robot1_joint3_index] = 0.674
+        # self.data.ctrl[self.robot1_joint3_index] = 0.629
         step_count = 0
         while step_count < 3000:
             mujoco.mj_step(self.model, self.data)
