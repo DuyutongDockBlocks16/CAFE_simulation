@@ -36,14 +36,14 @@ class MirobotController:
         return yaw
 
     def pid_picking_position_to_pre_placing_position(self, 
-                            target_pos=np.zeros(2), 
-                            target_yaw=0.0, 
-                            Kp_pos=5.0, 
-                            Kd_pos=0.2, 
-                            Kp_yaw=1.5, 
-                            Kd_yaw=0.05, 
-                            max_steps=100000, tol=1e-2,
-                            render_flag:bool = False
+                                target_pos=np.zeros(2), 
+                                target_yaw=0.0, 
+                                Kp_pos=5.0, 
+                                Kd_pos=0.2, 
+                                Kp_yaw=1.5, 
+                                Kd_yaw=0.05, 
+                                max_steps=100000, tol=1e-2,
+                                render_flag:bool = False
                             ):
         prev_pos_error = np.zeros(2)
         prev_yaw_error = 0.0
@@ -72,8 +72,6 @@ class MirobotController:
 
             prev_pos_error = direction
             prev_yaw_error = yaw_error
-
-            # print(f"drive_ctrl: {drive_ctrl}, steer_ctrl: {steer_ctrl}, distance: {distance}, yaw_error: {yaw_error}")
 
             # if distance < tol and abs(yaw_error) < tol:
             if distance < tol:
@@ -187,10 +185,10 @@ class MirobotController:
         self.pid_picking_position_to_pre_placing_position(np.array([0, 2]) , target_yaw, render_flag=render_flag)
 
     def rotate_joint1_to_front(self, target_angle=0.0, Kp=0.0000001, tol=1e-3, max_steps=5000000, render_flag: bool = False):
-        # 保存原始 gear
+        
         original_gear = self.model.actuator_gear[self.robot1_joint1_index].copy()
-        # 临时设置 gear
-        self.model.actuator_gear[self.robot1_joint1_index] = 0.3  # 你想要的慢速 gear
+        
+        self.model.actuator_gear[self.robot1_joint1_index] = 0.2  
 
         joint1_qpos_addr = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot1:Joint1")
         step_count = 0
@@ -208,9 +206,6 @@ class MirobotController:
                 break
             step_count += 1
         self.data.ctrl[self.robot1_joint1_index] = 0
-
-        # 恢复 gear
-        self.model.actuator_gear[self.robot1_joint1_index] = original_gear
 
     def pid_pre_placing_position_to_placing_position(self, 
                             target_pos=np.zeros(2), 
@@ -306,10 +301,10 @@ class MirobotController:
             target_heading = np.arctan2(direction[1], direction[0])
             yaw_error = (target_heading - yaw + np.pi) % (2 * np.pi) - np.pi
 
-            # 判断目标点是否在后方
+            
             if abs(yaw_error) > np.pi / 2:
                 drive_sign = -1
-                # 让小车尾部对准目标点
+                
                 yaw_error = ((target_heading + np.pi) % (2 * np.pi)) - yaw
                 yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi
             else:
@@ -360,10 +355,10 @@ class MirobotController:
             target_heading = np.arctan2(direction[1], direction[0])
             yaw_error = (target_heading - yaw + np.pi) % (2 * np.pi) - np.pi
 
-            # 判断目标点是否在后方
+            
             if abs(yaw_error) > np.pi / 2:
                 drive_sign = -1
-                # 让小车尾部对准目标点
+                
                 yaw_error = ((target_heading + np.pi) % (2 * np.pi)) - yaw
                 yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi
             else:
@@ -389,12 +384,63 @@ class MirobotController:
         self.data.ctrl[self.robot1_ghost_steer_index] = 0
 
     def reset_all_joints(self, render_flag: bool = False):
+
         self.data.ctrl[self.robot1_joint1_index] = 0
         self.data.ctrl[self.robot1_joint2_index] = 0
         self.data.ctrl[self.robot1_joint3_index] = 0
         self.data.ctrl[self.robot1_joint4_index] = 0
         self.data.ctrl[self.robot1_joint5_index] = 0
+
+        # all gears sets to 1.0
+        for joint_index in [self.robot1_joint1_index, self.robot1_joint2_index, self.robot1_joint3_index,
+                            self.robot1_joint4_index, self.robot1_joint5_index]:
+            self.model.actuator_gear[joint_index] = 1.0
+
         for _ in range(100):
             mujoco.mj_step(self.model, self.data)
             if render_flag:
                 self.viewer.sync()
+
+
+
+    def placing_at_upper_layer(self, targets = {"robot1:Joint2": 0.327, "robot1:Joint3": -0.394, "robot1:Joint5": 0.288}
+            , hold_steps=2000, render_flag=False):
+
+        
+        original_gears = {}
+        for joint_name in targets:
+            idx = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name)
+            original_gears[joint_name] = self.model.actuator_gear[idx].copy()
+            self.model.actuator_gear[idx] = 0.8  
+        
+        idx = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot1:Joint2")
+        self.data.ctrl[idx] = -0.230 / 0.8
+
+        idx = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot1:Joint5")
+        self.data.ctrl[idx] = -0.4 / 0.8
+
+        for _ in range(hold_steps):
+            mujoco.mj_step(self.model, self.data)
+            if render_flag:
+                self.viewer.sync()
+
+        gear = 0.5
+
+        for joint_name in targets:
+            idx = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name)
+            original_gears[joint_name] = self.model.actuator_gear[idx].copy()
+            self.model.actuator_gear[idx] = gear
+
+        for joint_name, target_pos in targets.items():
+            idx = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name)
+            self.data.ctrl[idx] = target_pos / gear
+
+        for _ in range(hold_steps):
+            mujoco.mj_step(self.model, self.data)
+            if render_flag:
+                self.viewer.sync()
+
+        # 恢复原始 gear
+        # for joint_name in targets:
+        #     idx = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name)
+        #     self.model.actuator_gear[idx] = original_gears[joint_name]

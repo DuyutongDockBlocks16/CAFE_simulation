@@ -2,17 +2,20 @@ import threading
 import random
 import numpy as np
 import time
+from mirobot_controller import Direction
 
-def place_object_on_table(model, data, left_object_position, right_object_position, object_joint_ids, check_interval=0.05):
+def place_object_on_table(model, data, left_object_position, right_object_position, object_joint_ids, shared_state, check_interval=0.05):
 
     placed_flag = False
-    # next_object_position = random.choice([left_object_position, right_object_position])
-    next_object_position = right_object_position
+    next_object_position = random.choice([left_object_position, right_object_position])
+    # next_object_position = right_object_position
     current_object_position = [0, 0, 0]
     i = 0
     _, object_joint_id = object_joint_ids[i]
     qpos_adr = model.jnt_qposadr[object_joint_id]
     obj_pos = data.qpos[qpos_adr : qpos_adr+3]
+    shared_state["current_object_index"] = i
+    shared_state["current_object_position"] = obj_pos
 
     def is_another_object_near(model, data, next_object_position):
         for j in range(len(object_joint_ids)):
@@ -25,7 +28,7 @@ def place_object_on_table(model, data, left_object_position, right_object_positi
                 return True
         return False
 
-    while True:
+    while i < len(object_joint_ids):
         # The current_object is not in the correct position
         # print(np.allclose(obj_pos, next_object_position))
         if not np.allclose(obj_pos[:2], next_object_position[:2]) and not placed_flag:
@@ -36,10 +39,14 @@ def place_object_on_table(model, data, left_object_position, right_object_positi
             obj_pos = data.qpos[qpos_adr : qpos_adr+3]
             current_object_position = next_object_position
             placed_flag = True
+            shared_state["current_object_index"] = i
+            shared_state["current_object_position"] = current_object_position
             if np.allclose(next_object_position, left_object_position):
                 next_object_position = right_object_position
+                
             else:
                 next_object_position = left_object_position
+
             
         # The current_object is moved by the robot
         if not np.allclose(obj_pos[:2], current_object_position[:2]):

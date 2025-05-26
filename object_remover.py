@@ -6,7 +6,7 @@ def remove_object_on_plane(model, data, plane_positions, plane_radius, plane_z, 
     print("remover thread running")
     removed_ids = set()
 
-    def is_on_plane(obj_pos, plane_pos, plane_radius, plane_z, z_tol=0.03):
+    def is_on_plane(obj_pos, plane_pos, plane_radius, plane_z, z_tol=0.05):
         # print(f"Checking if object at {obj_pos} is on plane at {plane_pos}")
         dx = obj_pos[0] - plane_pos[0]
         dy = obj_pos[1] - plane_pos[1]
