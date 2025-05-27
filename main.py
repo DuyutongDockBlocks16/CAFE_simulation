@@ -6,6 +6,7 @@ from object_placer import place_object_on_table
 import threading
 import time
 import numpy as np
+import random
 
 def get_data_and_model():
     model = mujoco.MjModel.from_xml_path("scene_mirobot.xml")
@@ -27,22 +28,32 @@ def get_object_ids(model):
                 continue
     return sorted(object_ids)
 
-def start_object_remover_thread(model, data, object_joint_ids):
-    # plane parameters
-    plane_positions = [[2.8, 1.0],[2.8, -1.0]]
+def start_object_remover_threads(model, data, object_joint_ids):
+    # lower plane parameters
+    lower_plane_positions = [[2.8, 1.0],[2.8, -1.0]]
     lower_plane_radius = 0.23
     lower_plane_z = 0.23
 
     threading.Thread(
         target=remove_object_on_plane,
-        args=(model, data, plane_positions, lower_plane_radius, lower_plane_z, object_joint_ids),
+        args=(model, data, lower_plane_positions, lower_plane_radius, lower_plane_z, object_joint_ids),
         daemon=True
     ).start()
 
+    # upper plane parameters
+    upper_plane_positions = [[2.8, 1.0],[2.8, -1.0]]
+    upper_plane_radius = 0.08
+    upper_plane_z = 0.33
+
+    threading.Thread(
+        target=remove_object_on_plane,
+        args=(model, data, upper_plane_positions, upper_plane_radius, upper_plane_z, object_joint_ids),
+        daemon=True
+    ).start()
+
+
 def start_object_placer_thread(model, data, object_joint_ids, left_object_position, right_object_position, shared_state):
     # object positions parameters
-
-
     threading.Thread(
         target=place_object_on_table,
         args=(model, data, left_object_position, right_object_position, object_joint_ids),
@@ -67,7 +78,7 @@ def main():
             print(f"Joint {joint_name} not found in main thread")
 
     # Start the asynchronous thread
-    start_object_remover_thread(model, data, object_joint_ids)
+    start_object_remover_threads(model, data, object_joint_ids)
 
     shared_state = {"current_object_index": None, "current_object_position": None}
     start_object_placer_thread(model, data, object_joint_ids, left_object_position, right_object_position, shared_state)

@@ -47,7 +47,7 @@
 
     <geom name="pickingplace1:low_plane" type="cylinder" pos="2.8 1 .23" size="0.23 0.01"
       rgba="0.7 0.5 0.3 1" friction="5" solimp="0.99 0.99 0.001" solref="0.002 1" />
-    <geom name="pickingplace1:high_plane" type="cylinder" pos="2.8 1 .30" size="0.08 0.005"
+    <geom name="pickingplace1:high_plane" type="cylinder" pos="2.8 1 .33" size="0.08 0.005"
       rgba="0.7 0.5 0.3 1" friction="5" solimp="0.99 0.99 0.001" solref="0.002 1" />
     <geom name="pickingplace2:low_plane" type="cylinder" pos="2.8 -1 .23" size="0.23 0.01"
       rgba="0.7 0.5 0.3 1" friction="5" solimp="0.99 0.99 0.001" solref="0.002 1" />
