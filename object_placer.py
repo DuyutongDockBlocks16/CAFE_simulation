@@ -4,7 +4,7 @@ import numpy as np
 import time
 from mirobot_controller import Direction
 
-def place_object_on_table(model, data, left_object_position, right_object_position, object_joint_ids, shared_state, check_interval=0.05):
+def place_object_on_table(model, data, left_object_position, right_object_position, object_joint_ids, shared_state, check_interval=0.5):
 
     placed_flag = False
     next_object_position = random.choice([left_object_position, right_object_position])
@@ -39,7 +39,6 @@ def place_object_on_table(model, data, left_object_position, right_object_positi
             obj_pos = data.qpos[qpos_adr : qpos_adr+3]
             current_object_position = next_object_position
             placed_flag = True
-            shared_state["current_object_index"] = i
             shared_state["current_object_position"] = current_object_position
             if np.allclose(next_object_position, left_object_position):
                 next_object_position = right_object_position
@@ -58,6 +57,10 @@ def place_object_on_table(model, data, left_object_position, right_object_positi
             # if there is not, then update the next_object_position
             else:
                 i += 1
+                shared_state["current_object_index"] = i
+                if i >= len(object_joint_ids):
+                    print("All objects placed, THREAD EXIT")
+                    return  
                 _, object_joint_id = object_joint_ids[i]
                 qpos_adr = model.jnt_qposadr[object_joint_id]
                 obj_pos = data.qpos[qpos_adr : qpos_adr+3]

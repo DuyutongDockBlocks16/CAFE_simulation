@@ -87,49 +87,53 @@ def main():
         controller = MirobotController(viewer, model, data)
 
         while True:
+            print(f"Current object index: {shared_state['current_object_index']}")
             if shared_state["current_object_index"] >= len(object_joint_ids):
+                print("All objects have been placed. Exit")
                 break
 
             if np.allclose(shared_state["current_object_position"], left_object_position):
-                controller.origin_position_to_picking_position(direction_flag = Direction.LEFT, render_flag = True)
-                controller.execute_pick_motion(direction_flag = Direction.LEFT, render_flag = True)
-                controller.picking_position_to_pre_placing_position(render_flag = True)
-                controller.rotate_joint1_to_front(render_flag = True)
+                controller.origin_position_to_picking_position(direction_flag = Direction.LEFT, render_flag = False)
+                controller.execute_pick_motion(direction_flag = Direction.LEFT, render_flag = False)
+                controller.picking_position_to_pre_placing_position(render_flag = False)
+                controller.rotate_joint1_to_front(render_flag = False)
 
                 placing_position = random.choice([Direction.LEFT, Direction.RIGHT])
-                controller.pre_placing_position_to_placing_position(direction_flag = placing_position, render_flag = True)
+                controller.pre_placing_position_to_placing_position(direction_flag = placing_position, render_flag = False)
 
                 placing_layer = random.choices(
                     [Layer.LOWER, Layer.UPPER],
                     weights=[0.8, 0.2] 
                 )[0]
                 if placing_layer == Layer.LOWER:
-                    controller.placing_at_lower_layer(render_flag = True)
+                    controller.placing_at_lower_layer(render_flag = False)
                 else:
-                    controller.placing_at_upper_layer(render_flag = True)
+                    controller.placing_at_upper_layer(render_flag = False)
 
-                controller.placing_position_to_pre_origin_position(render_flag = True)
-                controller.placing_position_to_origin_position(render_flag = True)
+                controller.placing_position_to_pre_origin_position(render_flag = False)
+                controller.placing_position_to_origin_position(render_flag = False)
+                controller.reset_all_joints(render_flag = False)
             else:
-                controller.origin_position_to_picking_position(direction_flag = Direction.RIGHT, render_flag = True)
-                controller.execute_pick_motion(direction_flag = Direction.RIGHT, render_flag = True)
-                controller.picking_position_to_pre_placing_position(render_flag = True)
-                controller.rotate_joint1_to_front(render_flag = True)
+                controller.origin_position_to_picking_position(direction_flag = Direction.RIGHT, render_flag = False)
+                controller.execute_pick_motion(direction_flag = Direction.RIGHT, render_flag = False)
+                controller.picking_position_to_pre_placing_position(render_flag = False)
+                controller.rotate_joint1_to_front(render_flag = False)
 
                 placing_position = random.choice([Direction.LEFT, Direction.RIGHT])
-                controller.pre_placing_position_to_placing_position(direction_flag = placing_position, render_flag = True)
+                controller.pre_placing_position_to_placing_position(direction_flag = placing_position, render_flag = False)
 
                 placing_layer = random.choices(
                     [Layer.LOWER, Layer.UPPER],
                     weights=[0.8, 0.2] 
                 )[0]
                 if placing_layer == Layer.LOWER:
-                    controller.placing_at_lower_layer(render_flag = True)
+                    controller.placing_at_lower_layer(render_flag = False)
                 else:
-                    controller.placing_at_upper_layer(render_flag = True)
+                    controller.placing_at_upper_layer(render_flag = False)
 
-                controller.placing_position_to_pre_origin_position(render_flag = True)
-                controller.placing_position_to_origin_position(render_flag = True)
+                controller.placing_position_to_pre_origin_position(render_flag = False)
+                controller.placing_position_to_origin_position(render_flag = False)
+                controller.reset_all_joints(render_flag = False)
 
         while viewer.is_running():
             mujoco.mj_step(model, data)
