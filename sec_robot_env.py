@@ -53,7 +53,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
             shape=(num_actuators - 7,), 
             dtype=np.float32
         )
-        self.max_steps = 10000
+        self.max_steps = 1000000
         self.current_step = 0
         self.initial_qpos = np.copy(self.data.qpos)
         self.initial_qvel = np.copy(self.data.qvel)

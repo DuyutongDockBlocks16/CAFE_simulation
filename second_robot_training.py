@@ -26,7 +26,7 @@ class RenderCallback(BaseCallback):
 
 def approach_model_training(env):
     model = PPO("MlpPolicy", env, verbose=1)
-    model.learn(total_timesteps=300_000, callback=RenderCallback(env))
+    model.learn(total_timesteps=300_000_000, callback=RenderCallback(env))
     model.save("ppo_mujoco_car")
     env.close()
 
