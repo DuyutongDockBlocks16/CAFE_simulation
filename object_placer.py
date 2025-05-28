@@ -2,13 +2,13 @@ import threading
 import random
 import numpy as np
 import time
-from mirobot_controller import Direction
+from env_config import Direction
 
-def place_object_on_table(model, data, left_object_position, right_object_position, object_joint_ids, shared_state, check_interval=0.5):
+def place_object_on_table(model, data, left_object_position, right_object_position, object_joint_ids, shared_state, check_interval=0.01):
 
     placed_flag = False
     next_object_position = random.choice([left_object_position, right_object_position])
-    # next_object_position = right_object_position
+    # next_object_position = left_object_position
     current_object_position = [0, 0, 0]
     i = 0
     _, object_joint_id = object_joint_ids[i]
@@ -28,7 +28,7 @@ def place_object_on_table(model, data, left_object_position, right_object_positi
                 return True
         return False
 
-    while i < len(object_joint_ids):
+    while i < len(object_joint_ids) and not shared_state["stop"]:
         # The current_object is not in the correct position
         # print(np.allclose(obj_pos, next_object_position))
         if not np.allclose(obj_pos[:2], next_object_position[:2]) and not placed_flag:
@@ -67,3 +67,5 @@ def place_object_on_table(model, data, left_object_position, right_object_positi
                 placed_flag = False
 
         time.sleep(check_interval)
+
+    shared_state["stopped"] = True

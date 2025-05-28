@@ -16,10 +16,6 @@ gym.register(
     kwargs={"xml_path": "scene.xml"}
 )
 
-
-
-
-# 定义渲染回调
 class RenderCallback(BaseCallback):
     def __init__(self, env, render_freq=10):
         super().__init__()
@@ -32,7 +28,7 @@ class RenderCallback(BaseCallback):
         return True
 
 def approach_model_training(env):
-    model = PPO.load("ppo_mujoco_car", env=env)
+    model = PPO.load("ppo_mujoco_car_20250509_ready", env=env)
     # model = PPO("MlpPolicy", env, verbose=1)
     model.learn(total_timesteps=300_000, callback=RenderCallback(env))
     model.save("ppo_mujoco_car")
@@ -134,26 +130,26 @@ def moving_model_implementation(env):
 
 if __name__ == "__main__":
     approach_env = gym.make("ApproachMuJoCoEnv-v0")
-    # approach_model_training(approach_env)
-    data, model = approach_model_implementation(approach_env)
+    approach_model_training(approach_env)
+    # data, model = approach_model_implementation(approach_env)
 
-    # actuator_index = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "fingers_actuator")
-    # print("Data of actuator:", data.ctrl[actuator_index])
+    # # actuator_index = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "fingers_actuator")
+    # # print("Data of actuator:", data.ctrl[actuator_index])
 
-    target_area_geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "target_area")
-    print("Target area geom_pos:", model.geom_pos[target_area_geom_id])
+    # target_area_geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "target_area")
+    # print("Target area geom_pos:", model.geom_pos[target_area_geom_id])
 
-    print("Model ID:", id(model))
-    print("Data ID:", id(data))
+    # print("Model ID:", id(model))
+    # print("Data ID:", id(data))
 
-    gym.register(
-        id="MovingMuJoCoEnv-v0",
-        entry_point="moving_env:MovingMuJoCoEnv",
-        kwargs={"model": model, "data": data}
-    )
+    # gym.register(
+    #     id="MovingMuJoCoEnv-v0",
+    #     entry_point="moving_env:MovingMuJoCoEnv",
+    #     kwargs={"model": model, "data": data}
+    # )
 
-    moving_env = gym.make("MovingMuJoCoEnv-v0")
-    # moving_model_training(moving_env)
-    moving_model_implementation(moving_env)
+    # moving_env = gym.make("MovingMuJoCoEnv-v0")
+    # # moving_model_training(moving_env)
+    # moving_model_implementation(moving_env)
 
     

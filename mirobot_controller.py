@@ -2,19 +2,13 @@ import mujoco
 import mujoco.viewer
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-from enum import Enum
-
-class Direction(Enum):
-    RIGHT = -1
-    LEFT = 1
-
-class Layer(Enum):
-    LOWER = 0
-    UPPER = 1
+import random
+from object_remover import remove_object_on_plane
+from object_placer import place_object_on_table
+from env_config import Layer, FiniteState, Direction
 
 class MirobotController:
-    def __init__(self, viewer, model, data):
-        self.viewer = viewer
+    def __init__(self, model, data, left_object_position, right_object_position):
         self.model = model
         self.data = data
         self.robot1_joint1_index = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot1:Joint1")
@@ -28,6 +22,13 @@ class MirobotController:
         self.robot_origin_pos = data.xpos[self.robot_1_rover_id][:2].copy()  # [x, y]
         self.robot_origin_quat = data.xquat[self.robot_1_rover_id].copy()  # [w, x, y, z]
         self.robot_origin_yaw = self.quat_to_yaw(self.robot_origin_quat)  # [yaw]
+        self.state = FiniteState.IDLE
+        self.left_object_position = left_object_position
+        self.right_object_position = right_object_position
+        self.pick_position = None
+        self.placing_position = None
+        self.placing_layer = None
+        self.waiting_timer = 0
 
     def quat_to_yaw(self, quat):
         # MuJoCo: [w, x, y, z] -> scipy: [x, y, z, w]
@@ -43,43 +44,37 @@ class MirobotController:
                                 Kp_yaw=1.5, 
                                 Kd_yaw=0.05, 
                                 max_steps=100000, tol=1e-2,
-                                render_flag:bool = False
                             ):
         prev_pos_error = np.zeros(2)
         prev_yaw_error = 0.0
-        for _ in range(max_steps):
-            pos = self.data.xpos[self.robot_1_rover_id][:2]
-            quat = self.data.xquat[self.robot_1_rover_id]
-            yaw = self.quat_to_yaw(quat)
 
-            direction = target_pos - pos
-            # print(f"pos: {pos}, target_pos: {target_pos}, direction: {direction}")
-            distance = np.linalg.norm(direction)
-            target_heading = np.arctan2(direction[1], direction[0])
-            yaw_error = (target_heading - yaw + np.pi) % (2 * np.pi) - np.pi
+        pos = self.data.xpos[self.robot_1_rover_id][:2]
+        quat = self.data.xquat[self.robot_1_rover_id]
+        yaw = self.quat_to_yaw(quat)
 
-            drive_ctrl = Kp_pos * distance + Kd_pos * (distance - np.linalg.norm(prev_pos_error))
+        direction = target_pos - pos
+        # print(f"pos: {pos}, target_pos: {target_pos}, direction: {direction}")
+        distance = np.linalg.norm(direction)
+        target_heading = np.arctan2(direction[1], direction[0])
+        yaw_error = (target_heading - yaw + np.pi) % (2 * np.pi) - np.pi
 
-            steer_ctrl = Kp_yaw * yaw_error + Kd_yaw * (yaw_error - prev_yaw_error)
-            
+        drive_ctrl = Kp_pos * distance + Kd_pos * (distance - np.linalg.norm(prev_pos_error))
 
-            self.data.ctrl[self.robot1_drive_index] = np.clip(drive_ctrl, 1.5, -1.5)
-            self.data.ctrl[self.robot1_ghost_steer_index] = np.clip(steer_ctrl, -0.2, 0.2)
+        steer_ctrl = Kp_yaw * yaw_error + Kd_yaw * (yaw_error - prev_yaw_error)
+        
+        self.data.ctrl[self.robot1_drive_index] = np.clip(drive_ctrl, 1.5, -1.5)
+        self.data.ctrl[self.robot1_ghost_steer_index] = np.clip(steer_ctrl, -0.2, 0.2)
 
-            mujoco.mj_step(self.model, self.data)
-            if render_flag:
-                self.viewer.sync()
+        prev_pos_error = direction
+        prev_yaw_error = yaw_error
 
-            prev_pos_error = direction
-            prev_yaw_error = yaw_error
-
-            # if distance < tol and abs(yaw_error) < tol:
-            if distance < tol:
-                # print("break")
-                break
-
-        self.data.ctrl[self.robot1_drive_index] = 0
-        self.data.ctrl[self.robot1_ghost_steer_index] = 0
+        if distance < tol:
+            # print("break")
+            self.data.ctrl[self.robot1_drive_index] = 0
+            self.data.ctrl[self.robot1_ghost_steer_index] = 0
+            return True
+        
+        return False
 
     def pid_origin_position_to_picking_position(self, 
                             target_pos=np.zeros(2), 
@@ -89,52 +84,39 @@ class MirobotController:
                             Kp_yaw=3.0, 
                             Kd_yaw=0.1, 
                             max_steps=200000, tol=1e-3,
-                            render_flag:bool = False
                             ):
         prev_pos_error = np.zeros(2)
         prev_yaw_error = 0.0
-        for _ in range(max_steps):
-            pos = self.data.xpos[self.robot_1_rover_id][:2]
-            quat = self.data.xquat[self.robot_1_rover_id]
-            yaw = self.quat_to_yaw(quat)
+    
+        pos = self.data.xpos[self.robot_1_rover_id][:2]
+        quat = self.data.xquat[self.robot_1_rover_id]
+        yaw = self.quat_to_yaw(quat)
 
-            direction = target_pos - pos
-            # print(f"pos: {pos}, target_pos: {target_pos}, direction: {direction}")
-            distance = np.linalg.norm(direction)
-            target_heading = np.arctan2(direction[1], direction[0])
-            yaw_error = (target_heading - yaw + np.pi) % (2 * np.pi) - np.pi
+        direction = target_pos - pos
+        distance = np.linalg.norm(direction)
+        target_heading = np.arctan2(direction[1], direction[0])
+        yaw_error = (target_heading - yaw + np.pi) % (2 * np.pi) - np.pi
 
-            drive_ctrl = Kp_pos * distance + Kd_pos * (distance - np.linalg.norm(prev_pos_error))
-            # if abs(yaw_error) < 0.2:
-            #     drive_ctrl = Kp_pos * distance + Kd_pos * (distance - np.linalg.norm(prev_pos_error))
-                
-            # else:
-            #     drive_ctrl = 0
+        drive_ctrl = Kp_pos * distance + Kd_pos * (distance - np.linalg.norm(prev_pos_error))
 
-            steer_ctrl = Kp_yaw * yaw_error + Kd_yaw * (yaw_error - prev_yaw_error)
-            
+        steer_ctrl = Kp_yaw * yaw_error + Kd_yaw * (yaw_error - prev_yaw_error)
+        
 
-            self.data.ctrl[self.robot1_drive_index] = np.clip(drive_ctrl, -3, 3)
-            self.data.ctrl[self.robot1_ghost_steer_index] = np.clip(steer_ctrl, -0.9, 0.9)
+        self.data.ctrl[self.robot1_drive_index] = np.clip(drive_ctrl, -3, 3)
+        self.data.ctrl[self.robot1_ghost_steer_index] = np.clip(steer_ctrl, -0.9, 0.9)
 
-            mujoco.mj_step(self.model, self.data)
-            if render_flag:
-                self.viewer.sync()
+        prev_pos_error = direction
+        prev_yaw_error = yaw_error
 
-            prev_pos_error = direction
-            prev_yaw_error = yaw_error
-
-            # print(f"drive_ctrl: {drive_ctrl}, steer_ctrl: {steer_ctrl}, distance: {distance}, yaw_error: {yaw_error}")
-
-            # if distance < tol and abs(yaw_error) < tol:
-            if distance < tol:
-                break
-
-        self.data.ctrl[self.robot1_drive_index] = 0
-        self.data.ctrl[self.robot1_ghost_steer_index] = 0
+        if distance < tol:
+            self.data.ctrl[self.robot1_drive_index] = 0
+            self.data.ctrl[self.robot1_ghost_steer_index] = 0            
+            return True
+        
+        return False
     
     # dirction_flag = -1 is right, dirction_flag = 1 is left
-    def origin_position_to_picking_position(self, direction_flag: Direction, render_flag: bool = False):
+    def origin_position_to_picking_position(self, direction_flag: Direction):
         quat = [0.707, 0.0, 0.0, -0.707] 
         target_yaw = self.quat_to_yaw(quat)
         # print(f"target_yaw: {target_yaw}")
@@ -142,71 +124,89 @@ class MirobotController:
             target_pos = np.array([-1, -2.3]) 
         elif direction_flag == Direction.LEFT:
             target_pos = np.array([1, -2.3]) 
-        self.pid_origin_position_to_picking_position(target_pos, target_yaw, render_flag=render_flag)
+        return self.pid_origin_position_to_picking_position(target_pos, target_yaw)
 
-    # dirction_flag = -1 is right, dirction_flag = 1 is left
-    def execute_pick_motion(self, direction_flag: Direction, render_flag: bool = False):
-        self.data.ctrl[self.robot1_joint3_index] = 1.1
-        self.data.ctrl[self.robot1_joint5_index] = -0.64
-        # self.data.ctrl[self.robot1_joint5_index] = -0.22
+    def decreasing_joint3_and_joint5(self):
+        target3, target5 = 1.1, -0.64
+        current3 = self.data.ctrl[self.robot1_joint3_index]
+        current5 = self.data.ctrl[self.robot1_joint5_index]
+        self.data.ctrl[self.robot1_joint3_index] += 0.01 * (target3 - current3)
+        self.data.ctrl[self.robot1_joint5_index] += 0.01 * (target5 - current5)
+        if abs(current3 - target3) < 0.01 and abs(current5 - target5) < 0.01:
+            return True
+        return False
 
-        step_count = 0
-        while step_count < 1000:
-            mujoco.mj_step(self.model, self.data)
-            if render_flag:
-                self.viewer.sync()
-            step_count += 1
+    def waiting_decreasing_joint3_and_joint5(self):
+        self.waiting_timer += 1
+        if self.waiting_timer > 300:
+            self.waiting_timer = 0
+            return True
+        return False
 
+    def joint1_turning(self, direction_flag: Direction):
         if direction_flag == Direction.RIGHT:
-            self.data.ctrl[self.robot1_joint1_index] = 0.507
-            
-        elif direction_flag == Direction.LEFT:
-            self.data.ctrl[self.robot1_joint1_index] = -0.80
-            
-        step_count = 0
-        while step_count < 1000:
-            mujoco.mj_step(self.model, self.data)
-            if render_flag:
-                self.viewer.sync()
-            step_count += 1
+            target1 = 0.507
+        else:
+            target1 = -0.80
+        current1 = self.data.ctrl[self.robot1_joint1_index]
+        self.data.ctrl[self.robot1_joint1_index] += 0.01 * (target1 - current1)
+        if abs(current1 - target1) < 0.01:
+            return True
+        return False
 
-        self.data.ctrl[self.robot1_joint3_index] = 0.674
-        # self.data.ctrl[self.robot1_joint3_index] = 0.629
-        step_count = 0
-        while step_count < 3000:
-            mujoco.mj_step(self.model, self.data)
-            if render_flag:
-                self.viewer.sync()
-            step_count += 1
+    def waiting_joint1_turning(self):
+        self.waiting_timer += 1
+        if self.waiting_timer > 300:
+            self.waiting_timer = 0
+            return True
+        return False
 
-    def picking_position_to_pre_placing_position(self, render_flag: bool = False):
+    def lifting_joint3(self):
+        target3 = 0.674
+        current3 = self.data.ctrl[self.robot1_joint3_index]
+        self.data.ctrl[self.robot1_joint3_index] += 0.01 * (target3 - current3)
+        if abs(current3 - target3) < 0.01:
+            return True
+        return False
+
+    def waiting_lifting_joint3(self):
+        self.waiting_timer += 1
+        if self.waiting_timer > 300:
+            self.waiting_timer = 0
+            return True
+        return False
+
+    def picking_position_to_pre_placing_position(self):
         quat = [0.707, 0.0, 0.0, -0.707] 
         target_yaw = self.quat_to_yaw(quat)
-        self.pid_picking_position_to_pre_placing_position(np.array([0, 2]) , target_yaw, render_flag=render_flag)
+        return self.pid_picking_position_to_pre_placing_position(np.array([0, 2]) , target_yaw)
 
-    def rotate_joint1_to_front(self, target_angle=0.0, Kp=0.0000001, tol=1e-3, max_steps=5000000, render_flag: bool = False):
-        
+    def rotate_joint1_to_front(self, target_angle=0.0, Kp=0.0000001, tol=1e-3, max_steps=5000000):
         original_gear = self.model.actuator_gear[self.robot1_joint1_index].copy()
         
         self.model.actuator_gear[self.robot1_joint1_index] = 0.2  
 
         joint1_qpos_addr = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot1:Joint1")
-        step_count = 0
-        while step_count < max_steps:
-            current_angle = self.data.qpos[joint1_qpos_addr]
-            error = target_angle - current_angle
-            ctrl = Kp * error
-            if abs(error) < 0.05:
-                ctrl *= 0.2
-            self.data.ctrl[self.robot1_joint1_index] = np.clip(ctrl, -0.001, 0.001)
-            mujoco.mj_step(self.model, self.data)
-            if render_flag:
-                self.viewer.sync()
-            if abs(error) < tol:
-                break
-            step_count += 1
-        self.data.ctrl[self.robot1_joint1_index] = 0
 
+        current_angle = self.data.qpos[joint1_qpos_addr]
+        error = target_angle - current_angle
+        ctrl = Kp * error
+        if abs(error) < 0.05:
+            ctrl *= 0.2
+        self.data.ctrl[self.robot1_joint1_index] = np.clip(ctrl, -0.001, 0.001)
+
+        if abs(error) < tol:
+            self.data.ctrl[self.robot1_joint1_index] = 0
+            return True
+        return False
+
+    def waiting_joint1_to_front(self):
+        self.waiting_timer += 1
+        if self.waiting_timer > 2000:
+            self.waiting_timer = 0
+            return True
+        return False
+        
     def pid_pre_placing_position_to_placing_position(self, 
                             target_pos=np.zeros(2), 
                             target_yaw=0.0, 
@@ -214,49 +214,41 @@ class MirobotController:
                             Kd_pos=0.2, 
                             Kp_yaw=1.5, 
                             Kd_yaw=0.05, 
-                            max_steps=100000, tol=1e-2,
-                            render_flag:bool = False
+                            max_steps=100000, tol=1e-2
                             ):
         prev_pos_error = np.zeros(2)
         prev_yaw_error = 0.0
-        for _ in range(max_steps):
-            pos = self.data.xpos[self.robot_1_rover_id][:2]
-            quat = self.data.xquat[self.robot_1_rover_id]
-            yaw = self.quat_to_yaw(quat)
+        pos = self.data.xpos[self.robot_1_rover_id][:2]
+        quat = self.data.xquat[self.robot_1_rover_id]
+        yaw = self.quat_to_yaw(quat)
 
-            direction = target_pos - pos
-            # print(f"pos: {pos}, target_pos: {target_pos}, direction: {direction}")
-            distance = np.linalg.norm(direction)
-            target_heading = np.arctan2(direction[1], direction[0])
-            yaw_error = (target_heading - yaw + np.pi) % (2 * np.pi) - np.pi
+        direction = target_pos - pos
+        # print(f"pos: {pos}, target_pos: {target_pos}, direction: {direction}")
+        distance = np.linalg.norm(direction)
+        target_heading = np.arctan2(direction[1], direction[0])
+        yaw_error = (target_heading - yaw + np.pi) % (2 * np.pi) - np.pi
 
-            drive_ctrl = Kp_pos * distance + Kd_pos * (distance - np.linalg.norm(prev_pos_error))
+        drive_ctrl = Kp_pos * distance + Kd_pos * (distance - np.linalg.norm(prev_pos_error))
 
-            steer_ctrl = Kp_yaw * yaw_error + Kd_yaw * (yaw_error - prev_yaw_error)
-            
+        steer_ctrl = Kp_yaw * yaw_error + Kd_yaw * (yaw_error - prev_yaw_error)
+        
 
-            self.data.ctrl[self.robot1_drive_index] = np.clip(drive_ctrl, -3, 3)
-            self.data.ctrl[self.robot1_ghost_steer_index] = np.clip(steer_ctrl, -0.9, 0.9)
+        self.data.ctrl[self.robot1_drive_index] = np.clip(drive_ctrl, -3, 3)
+        self.data.ctrl[self.robot1_ghost_steer_index] = np.clip(steer_ctrl, -0.9, 0.9)
 
-            mujoco.mj_step(self.model, self.data)
-            if render_flag:
-                self.viewer.sync()
+        prev_pos_error = direction
+        prev_yaw_error = yaw_error
 
-            prev_pos_error = direction
-            prev_yaw_error = yaw_error
+        # if distance < tol and abs(yaw_error) < tol:
+        if distance < tol:
+            self.data.ctrl[self.robot1_drive_index] = 0
+            self.data.ctrl[self.robot1_ghost_steer_index] = 0   
+            return True
 
-            # print(f"drive_ctrl: {drive_ctrl}, steer_ctrl: {steer_ctrl}, distance: {distance}, yaw_error: {yaw_error}")
-
-            # if distance < tol and abs(yaw_error) < tol:
-            if distance < tol:
-                # print("break")
-                break
-
-        self.data.ctrl[self.robot1_drive_index] = 0
-        self.data.ctrl[self.robot1_ghost_steer_index] = 0
+        return False
 
     # dirction_flag = -1 is right, dirction_flag = 1 is left
-    def pre_placing_position_to_placing_position(self, direction_flag: Direction, render_flag: bool = False):
+    def pre_placing_position_to_placing_position(self, direction_flag: Direction):
         quat = [1, 0.0, 0.0, 0.0] 
         target_yaw = self.quat_to_yaw(quat)
         # right
@@ -265,73 +257,68 @@ class MirobotController:
         # left
         elif direction_flag == Direction.LEFT:
             target_pos = np.array([2.45, 1]) 
-            
-        self.pid_pre_placing_position_to_placing_position(target_pos, target_yaw, render_flag=render_flag)
 
-    def placing_at_lower_layer(self, joint3_target=0.674, joint5_target=0.4, hold_steps=3000, render_flag: bool = False):
-        self.data.ctrl[self.robot1_joint3_index] = joint3_target
-        self.data.ctrl[self.robot1_joint5_index] = joint5_target
-        for _ in range(hold_steps):
-            mujoco.mj_step(self.model, self.data)
-            if render_flag:
-                self.viewer.sync()
+        return self.pid_pre_placing_position_to_placing_position(target_pos, target_yaw)
 
-    def placing_position_to_pre_origin_position(self, render_flag: bool = False):
-        self.pid_placing_position_to_pre_origin_position(np.array([-2.5, 0.0]), self.robot_origin_yaw, render_flag=render_flag)
+    def placing_at_lower_layer(self, joint3_target=0.674, joint5_target=0.4, tol=1e-3):
+        current3 = self.data.ctrl[self.robot1_joint3_index]
+        current5 = self.data.ctrl[self.robot1_joint5_index]
+        self.data.ctrl[self.robot1_joint3_index] += 0.01 * (joint3_target - current3)
+        self.data.ctrl[self.robot1_joint5_index] += 0.01 * (joint5_target - current5)
+        if abs(current3 - joint3_target) < tol and abs(current5 - joint5_target) < tol:
+            return True
+
+        return False
+
+    def placing_position_to_pre_origin_position(self):
+        return self.pid_placing_position_to_pre_origin_position(np.array([-2.5, 0.0]), self.robot_origin_yaw)
 
     def pid_placing_position_to_pre_origin_position(self, 
-                                target_pos=np.zeros(2), 
-                                target_yaw=0.0, 
-                                Kp_pos=10.0, 
-                                Kd_pos=1.0, 
-                                Kp_yaw=3.0, 
-                                Kd_yaw=0.1, 
-                                max_steps=200000, tol=1e-3,
-                                render_flag:bool = False
+                                    target_pos=np.zeros(2), 
+                                    target_yaw=0.0, 
+                                    Kp_pos=10.0, 
+                                    Kd_pos=1.0, 
+                                    Kp_yaw=3.0, 
+                                    Kd_yaw=0.1, 
+                                    max_steps=200000, tol=1e-3
                                 ):
         prev_pos_error = np.zeros(2)
         prev_yaw_error = 0.0
-        for _ in range(max_steps):
-            pos = self.data.xpos[self.robot_1_rover_id][:2]
-            quat = self.data.xquat[self.robot_1_rover_id]
-            yaw = self.quat_to_yaw(quat)
 
-            direction = target_pos - pos
-            distance = np.linalg.norm(direction)
-            target_heading = np.arctan2(direction[1], direction[0])
-            yaw_error = (target_heading - yaw + np.pi) % (2 * np.pi) - np.pi
+        pos = self.data.xpos[self.robot_1_rover_id][:2]
+        quat = self.data.xquat[self.robot_1_rover_id]
+        yaw = self.quat_to_yaw(quat)
 
+        direction = target_pos - pos
+        distance = np.linalg.norm(direction)
+        target_heading = np.arctan2(direction[1], direction[0])
+        yaw_error = (target_heading - yaw + np.pi) % (2 * np.pi) - np.pi
+
+        if abs(yaw_error) > np.pi / 2:
+            drive_sign = -1
             
-            if abs(yaw_error) > np.pi / 2:
-                drive_sign = -1
-                
-                yaw_error = ((target_heading + np.pi) % (2 * np.pi)) - yaw
-                yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi
-            else:
-                drive_sign = 1
+            yaw_error = ((target_heading + np.pi) % (2 * np.pi)) - yaw
+            yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi
+        else:
+            drive_sign = 1
 
-            drive_ctrl = drive_sign * (Kp_pos * distance + Kd_pos * (distance - np.linalg.norm(prev_pos_error)))
-            steer_ctrl = Kp_yaw * yaw_error + Kd_yaw * (yaw_error - prev_yaw_error)
+        drive_ctrl = drive_sign * (Kp_pos * distance + Kd_pos * (distance - np.linalg.norm(prev_pos_error)))
+        steer_ctrl = Kp_yaw * yaw_error + Kd_yaw * (yaw_error - prev_yaw_error)
 
-            self.data.ctrl[self.robot1_drive_index] = np.clip(drive_ctrl, -1.5, 1.5)
-            self.data.ctrl[self.robot1_ghost_steer_index] = -1 * np.clip(steer_ctrl, -0.5, 0.5)
+        self.data.ctrl[self.robot1_drive_index] = np.clip(drive_ctrl, -1.5, 1.5)
+        self.data.ctrl[self.robot1_ghost_steer_index] = -1 * np.clip(steer_ctrl, -0.5, 0.5)
 
-            mujoco.mj_step(self.model, self.data)
-            if render_flag:
-                self.viewer.sync()
+        prev_pos_error = direction
+        prev_yaw_error = yaw_error
 
-            prev_pos_error = direction
-            prev_yaw_error = yaw_error
+        if distance < tol:
+            self.data.ctrl[self.robot1_drive_index] = 0
+            self.data.ctrl[self.robot1_ghost_steer_index] = 0
+            return True
+        return False
 
-            if distance < tol:
-                break
-
-        self.data.ctrl[self.robot1_drive_index] = 0
-        self.data.ctrl[self.robot1_ghost_steer_index] = 0
-
-        
-    def placing_position_to_origin_position(self, render_flag: bool = False):
-        self.pid_placing_position_to_origin_position(self.robot_origin_pos, self.robot_origin_yaw, render_flag=render_flag)
+    def placing_position_to_origin_position(self):
+        return self.pid_placing_position_to_origin_position(self.robot_origin_pos, self.robot_origin_yaw)
     
     def pid_placing_position_to_origin_position(self, 
                                 target_pos=np.zeros(2), 
@@ -340,107 +327,206 @@ class MirobotController:
                                 Kd_pos=1.0, 
                                 Kp_yaw=3.0, 
                                 Kd_yaw=0.1, 
-                                max_steps=200000, tol=1e-3,
-                                render_flag:bool = False
+                                max_steps=200000, tol=1e-3
                                 ):
         prev_pos_error = np.zeros(2)
         prev_yaw_error = 0.0
-        for _ in range(max_steps):
-            pos = self.data.xpos[self.robot_1_rover_id][:2]
-            quat = self.data.xquat[self.robot_1_rover_id]
-            yaw = self.quat_to_yaw(quat)
 
-            direction = target_pos - pos
-            distance = np.linalg.norm(direction)
-            target_heading = np.arctan2(direction[1], direction[0])
-            yaw_error = (target_heading - yaw + np.pi) % (2 * np.pi) - np.pi
+        pos = self.data.xpos[self.robot_1_rover_id][:2]
+        quat = self.data.xquat[self.robot_1_rover_id]
+        yaw = self.quat_to_yaw(quat)
 
+        direction = target_pos - pos
+        distance = np.linalg.norm(direction)
+        target_heading = np.arctan2(direction[1], direction[0])
+        yaw_error = (target_heading - yaw + np.pi) % (2 * np.pi) - np.pi
+
+        
+        if abs(yaw_error) > np.pi / 2:
+            drive_sign = -1
             
-            if abs(yaw_error) > np.pi / 2:
-                drive_sign = -1
-                
-                yaw_error = ((target_heading + np.pi) % (2 * np.pi)) - yaw
-                yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi
-            else:
-                drive_sign = 1
+            yaw_error = ((target_heading + np.pi) % (2 * np.pi)) - yaw
+            yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi
+        else:
+            drive_sign = 1
 
-            drive_ctrl = drive_sign * (Kp_pos * distance + Kd_pos * (distance - np.linalg.norm(prev_pos_error)))
-            steer_ctrl = Kp_yaw * yaw_error + Kd_yaw * (yaw_error - prev_yaw_error)
+        drive_ctrl = drive_sign * (Kp_pos * distance + Kd_pos * (distance - np.linalg.norm(prev_pos_error)))
+        steer_ctrl = Kp_yaw * yaw_error + Kd_yaw * (yaw_error - prev_yaw_error)
 
-            self.data.ctrl[self.robot1_drive_index] = np.clip(drive_ctrl, -1.5, 1.5)
-            self.data.ctrl[self.robot1_ghost_steer_index] = np.clip(steer_ctrl, -0.5, 0.5)
+        self.data.ctrl[self.robot1_drive_index] = np.clip(drive_ctrl, -1.5, 1.5)
+        self.data.ctrl[self.robot1_ghost_steer_index] = np.clip(steer_ctrl, -0.5, 0.5)
 
-            mujoco.mj_step(self.model, self.data)
-            if render_flag:
-                self.viewer.sync()
+        prev_pos_error = direction
+        prev_yaw_error = yaw_error
 
-            prev_pos_error = direction
-            prev_yaw_error = yaw_error
+        if distance < tol:
+            self.data.ctrl[self.robot1_drive_index] = 0
+            self.data.ctrl[self.robot1_ghost_steer_index] = 0
+            return True
+        return False
 
-            if distance < tol:
-                break
-
-        self.data.ctrl[self.robot1_drive_index] = 0
-        self.data.ctrl[self.robot1_ghost_steer_index] = 0
-
-    def reset_all_joints(self, render_flag: bool = False):
-
+    def reset_all_joints(self):
         self.data.ctrl[self.robot1_joint1_index] = 0
         self.data.ctrl[self.robot1_joint2_index] = 0
         self.data.ctrl[self.robot1_joint3_index] = 0
         self.data.ctrl[self.robot1_joint4_index] = 0
         self.data.ctrl[self.robot1_joint5_index] = 0
-
         # all gears sets to 1.0
         for joint_index in [self.robot1_joint1_index, self.robot1_joint2_index, self.robot1_joint3_index,
                             self.robot1_joint4_index, self.robot1_joint5_index]:
             self.model.actuator_gear[joint_index] = 1.0
+        return True
 
-        for _ in range(100):
-            mujoco.mj_step(self.model, self.data)
-            if render_flag:
-                self.viewer.sync()
+    def pid_joint2_joint5_to_upper_layer(self, joint2_target=-0.230, joint5_target=-0.4, gear=0.8, tol=1e-3):
+        idx2 = self.robot1_joint2_index
+        idx5 = self.robot1_joint5_index
+
+        self.model.actuator_gear[idx2] = gear
+        self.model.actuator_gear[idx5] = gear
+
+        current2 = self.data.ctrl[idx2]
+        current5 = self.data.ctrl[idx5]
+
+        self.data.ctrl[idx2] += 0.01 * ((joint2_target / gear) - current2)
+        self.data.ctrl[idx5] += 0.01 * ((joint5_target / gear) - current5)
+
+        if abs(current2 - (joint2_target / gear)) < tol and abs(current5 - (joint5_target / gear)) < tol:
+            return True
+        return False
+
+    def waiting_pid_joint2_joint5_to_upper_layer(self):
+        self.waiting_timer += 1
+        if self.waiting_timer > 700:
+            self.waiting_timer = 0
+            return True
+        return False
 
 
-
-    def placing_at_upper_layer(self, targets = {"robot1:Joint2": 0.327, "robot1:Joint3": -0.394, "robot1:Joint5": 0.288}
-            , hold_steps=2000, render_flag=False):
-
-        
-        original_gears = {}
-        for joint_name in targets:
-            idx = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name)
-            original_gears[joint_name] = self.model.actuator_gear[idx].copy()
-            self.model.actuator_gear[idx] = 0.8  
-        
-        idx = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot1:Joint2")
-        self.data.ctrl[idx] = -0.230 / 0.8
-
-        idx = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot1:Joint5")
-        self.data.ctrl[idx] = -0.4 / 0.8
-
-        for _ in range(hold_steps):
-            mujoco.mj_step(self.model, self.data)
-            if render_flag:
-                self.viewer.sync()
-
-        gear = 0.5
-
-        for joint_name in targets:
-            idx = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name)
-            original_gears[joint_name] = self.model.actuator_gear[idx].copy()
-            self.model.actuator_gear[idx] = gear
-
+    def pid_joint2_joint3_joint5_to_upper_layer(self, targets={"robot1:Joint2": 0.327, "robot1:Joint3": -0.394, "robot1:Joint5": 0.288}, gear=0.5, tol=1e-3):
+        finished = True
         for joint_name, target_pos in targets.items():
             idx = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name)
-            self.data.ctrl[idx] = target_pos / gear
+            self.model.actuator_gear[idx] = gear
+            current = self.data.ctrl[idx]
+            self.data.ctrl[idx] += 0.01 * ((target_pos / gear) - current)
+            if abs(current - (target_pos / gear)) >= tol:
+                finished = False
+        return finished
 
-        for _ in range(hold_steps):
-            mujoco.mj_step(self.model, self.data)
-            if render_flag:
-                self.viewer.sync()
+    def waiting_pid_joint2_joint3_joint5_to_upper_layer(self):
+        self.waiting_timer += 1
+        if self.waiting_timer > 700:
+            self.waiting_timer = 0
+            return True
+        return False
 
-        # 恢复原始 gear
-        # for joint_name in targets:
-        #     idx = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name)
-        #     self.model.actuator_gear[idx] = original_gears[joint_name]
+    def step(self, current_object_position):
+        if self.state == FiniteState.IDLE:
+            self.pick_position = current_object_position
+            self.state = FiniteState.ORIGIN_POSITION_TO_PICKING_POSITION
+        elif self.state == FiniteState.ORIGIN_POSITION_TO_PICKING_POSITION and np.allclose(self.pick_position, self.left_object_position):
+            finished = self.origin_position_to_picking_position(direction_flag=Direction.LEFT)
+            if finished:
+                self.state = FiniteState.DECREASING_JOINT3_AND_JOINT5 
+        elif self.state == FiniteState.ORIGIN_POSITION_TO_PICKING_POSITION and np.allclose(self.pick_position, self.right_object_position):
+            finished = self.origin_position_to_picking_position(direction_flag=Direction.RIGHT)
+            if finished:
+                self.state = FiniteState.DECREASING_JOINT3_AND_JOINT5
+        elif self.state == FiniteState.DECREASING_JOINT3_AND_JOINT5:
+            finished = self.decreasing_joint3_and_joint5()
+            if finished:
+                self.state = FiniteState.WAITING_DECREASING_JOINT3_AND_JOINT5
+        elif self.state == FiniteState.WAITING_DECREASING_JOINT3_AND_JOINT5:
+            finished = self.waiting_decreasing_joint3_and_joint5()
+            if finished:
+                self.state = FiniteState.JOINT1_TURNING
+        elif self.state == FiniteState.JOINT1_TURNING and np.allclose(self.pick_position, self.left_object_position):
+            finished = self.joint1_turning(direction_flag=Direction.LEFT)
+            if finished:
+                self.state = FiniteState.WAITING_JOINT1_TURNING
+        elif self.state == FiniteState.JOINT1_TURNING and np.allclose(self.pick_position, self.right_object_position):
+            finished = self.joint1_turning(direction_flag=Direction.RIGHT)
+            if finished:
+                self.state = FiniteState.WAITING_JOINT1_TURNING
+        elif self.state == FiniteState.WAITING_JOINT1_TURNING:
+            finished = self.waiting_joint1_turning()
+            if finished:
+                self.state = FiniteState.LIFTING_JOINT3
+        elif self.state == FiniteState.LIFTING_JOINT3:
+            finished = self.lifting_joint3()
+            if finished:
+                self.state = FiniteState.WAITING_LIFTING_JOINT3
+        elif self.state == FiniteState.WAITING_LIFTING_JOINT3:
+            finished = self.waiting_lifting_joint3()
+            if finished:
+                self.state = FiniteState.PICKING_POSITION_TO_PRE_PLACING_POSITION
+        elif self.state == FiniteState.PICKING_POSITION_TO_PRE_PLACING_POSITION:
+            finished = self.picking_position_to_pre_placing_position()
+            if finished:
+                self.state = FiniteState.ROTATING_JOINT1_TO_FRONT
+        elif self.state == FiniteState.ROTATING_JOINT1_TO_FRONT:
+            finished = self.rotate_joint1_to_front()
+            if finished:
+                self.state = FiniteState.WAITING_ROTATING_JOINT1_TO_FRONT
+        elif self.state == FiniteState.WAITING_ROTATING_JOINT1_TO_FRONT:
+            finished = self.waiting_joint1_to_front()
+            if finished:
+                self.state = FiniteState.PRE_PLACING_POSITION_TO_PLACING_POSITION
+                self.placing_position = random.choice([Direction.LEFT, Direction.RIGHT])
+        elif self.state == FiniteState.PRE_PLACING_POSITION_TO_PLACING_POSITION and self.placing_position == Direction.LEFT:
+            finished = self.pre_placing_position_to_placing_position(direction_flag=Direction.LEFT)
+            if finished:
+                self.state = FiniteState.PLACING_AT_LAYER
+                # self.placing_layer = random.choices(
+                #     [Layer.LOWER, Layer.UPPER],
+                #     weights=[0.8, 0.2] 
+                # )[0]
+                self.placing_layer = Layer.UPPER
+        elif self.state == FiniteState.PRE_PLACING_POSITION_TO_PLACING_POSITION and self.placing_position == Direction.RIGHT: 
+            finished = self.pre_placing_position_to_placing_position(direction_flag=Direction.RIGHT)
+            if finished:
+                self.state = FiniteState.PLACING_AT_LAYER
+                # self.placing_layer = random.choices(
+                #     [Layer.LOWER, Layer.UPPER],
+                #     weights=[0.8, 0.2] 
+                # )[0]  
+                self.placing_layer = Layer.UPPER
+        elif self.state == FiniteState.PLACING_AT_LAYER and self.placing_layer == Layer.LOWER:
+            finished = self.placing_at_lower_layer()
+            if finished:
+                self.state = FiniteState.PLACING_POSITION_TO_PRE_ORIGIN_POSITION
+        elif self.state == FiniteState.PLACING_AT_LAYER and self.placing_layer == Layer.UPPER:
+            finished = self.pid_joint2_joint5_to_upper_layer()
+            if finished:
+                self.state = FiniteState.WAITING_JOINT2_JOINT5_TO_UPPER_LAYER
+        elif self.state == FiniteState.WAITING_JOINT2_JOINT5_TO_UPPER_LAYER:
+            finished = self.waiting_pid_joint2_joint5_to_upper_layer()
+            if finished:
+                self.state = FiniteState.JOINT2_JOINT3_JOINT5_TO_UPPER_LAYER
+        elif self.state == FiniteState.JOINT2_JOINT3_JOINT5_TO_UPPER_LAYER:
+            finished = self.pid_joint2_joint3_joint5_to_upper_layer()
+            if finished:
+                self.state = FiniteState.WAITING_JOINT2_JOINT3_JOINT5_TO_UPPER_LAYER
+        elif self.state == FiniteState.WAITING_JOINT2_JOINT3_JOINT5_TO_UPPER_LAYER:
+            finished = self.waiting_pid_joint2_joint3_joint5_to_upper_layer()
+            if finished:
+                self.state = FiniteState.PLACING_POSITION_TO_PRE_ORIGIN_POSITION
+        elif self.state == FiniteState.PLACING_POSITION_TO_PRE_ORIGIN_POSITION:
+            finished = self.placing_position_to_pre_origin_position()
+            if finished:
+                self.state = FiniteState.PLACING_POSITION_TO_ORIGIN_POSITION
+        elif self.state == FiniteState.PLACING_POSITION_TO_ORIGIN_POSITION:
+            finished = self.placing_position_to_origin_position()
+            if finished:
+                self.state = FiniteState.RESETTING_ALL_JOINTS
+        elif self.state == FiniteState.RESETTING_ALL_JOINTS:
+            finished = self.reset_all_joints()
+            if finished:
+                self.state = FiniteState.IDLE
+                self.pick_position = None
+                self.placing_position = None
+                self.placing_layer = None
+                self.waiting_timer = 0
+    
+    def set_state(self, state: FiniteState):
+        self.state = state
