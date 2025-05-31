@@ -39,8 +39,8 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         self.shared_state = {"current_object_index": None, "current_object_position": None, "stop": False, "stopped": True}
         
-        self.target_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "pickingplace:object0")
-        self.target_area_geom_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "pickingplace1:low_plane")
+        self.target_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "object0")
+        self.target_area_geom_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "placingplace1:low_plane")
 
         obs = self._get_obs()
         self.observation_space = gym.spaces.Box(
