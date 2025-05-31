@@ -2,7 +2,7 @@
   <compiler angle="radian" meshdir="Mirobot-STL-master" autolimits="true" />
   <!-- <option cone="elliptic" impratio="10"/> -->
 
-  <default class="mirobot_with_fork_lift_with_car">
+  <default class="main">
 
     <!-- <equality solref="${error_timestep} 1" /> -->
     <!-- <geom solref="${error_timestep} 1" contype="${2**world_congroup}"
