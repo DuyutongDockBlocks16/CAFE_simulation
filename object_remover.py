@@ -13,7 +13,7 @@ def remove_object_on_plane(model, data, plane_positions, plane_radius, plane_z, 
         dz = abs(obj_pos[2] - plane_z)
         return (dx**2 + dy**2) <= plane_radius**2 and dz < z_tol
 
-    def delayed_remove(data, qpos_adr, joint_name, min_delay=5, max_delay=10):
+    def delayed_remove(data, qpos_adr, joint_name, min_delay=3, max_delay=6):
         delay = random.uniform(min_delay, max_delay)
         def remove():
             data.qpos[qpos_adr+2] = -100

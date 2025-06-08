@@ -14,7 +14,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
         self.model = mujoco.MjModel.from_xml_path(xml_path)
         self.data = mujoco.MjData(self.model)
 
-        time_step = 0.001
+        time_step = 0.005
         self.model.opt.timestep = time_step
 
         object_ids = self.get_object_ids(self.model)
@@ -50,7 +50,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
         self.action_space = gym.spaces.Box(
             low=-1,
             high=1,
-            shape=(num_actuators - 7,), 
+            shape=(num_actuators - 8,), 
             dtype=np.float32
         )
         self.max_steps = 1000000
@@ -84,7 +84,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
     def step(self, action):  
         self.first_robot_controller.step(self.shared_state["current_object_position"])
-        self.data.ctrl[7:7+len(action)] = action
+        self.data.ctrl[8:8+len(action)] = action
         mujoco.mj_step(self.model, self.data)
         obs = self._get_obs()
         reward = 0.0 
@@ -133,8 +133,8 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         # upper plane parameters
         upper_plane_positions = [[2.8, 1.0],[2.8, -1.0]]
-        upper_plane_radius = 0.08
-        upper_plane_z = 0.33
+        upper_plane_radius = 0.15
+        upper_plane_z = 0.43
 
         threading.Thread(
             target=remove_object_on_plane,

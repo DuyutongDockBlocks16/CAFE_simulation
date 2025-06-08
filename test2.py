@@ -3,7 +3,8 @@ import mujoco.viewer
 import time
 
 
-model = mujoco.MjModel.from_xml_path("scene_mirobot.xml")
+# model = mujoco.MjModel.from_xml_path("scene_mirobot.xml")
+model = mujoco.MjModel.from_xml_path("active_adhesion.xml")
 data = mujoco.MjData(model)
 
 

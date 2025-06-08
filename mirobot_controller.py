@@ -16,6 +16,7 @@ class MirobotController:
         self.robot1_joint3_index = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot1:Joint3")
         self.robot1_joint4_index = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot1:Joint4")
         self.robot1_joint5_index = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot1:Joint5")
+        self.robot_1_adhere_index = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot1:adhere_winch")
         self.robot1_ghost_steer_index = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot1:ghost-steer")
         self.robot1_drive_index = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot1:drive")
         self.robot_1_rover_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot1:rover")
@@ -29,6 +30,9 @@ class MirobotController:
         self.placing_position = None
         self.placing_layer = None
         self.waiting_timer = 0
+
+    def get_status(self):
+        return self.state
 
     def quat_to_yaw(self, quat):
         # MuJoCo: [w, x, y, z] -> scipy: [x, y, z, w]
@@ -127,7 +131,8 @@ class MirobotController:
         return self.pid_origin_position_to_picking_position(target_pos, target_yaw)
 
     def decreasing_joint3_and_joint5(self):
-        target3, target5 = 1.1, -0.64
+        self.data.ctrl[self.robot_1_adhere_index] = 1.0  # Set adhere to 1.0 to ensure the robot can pick the object
+        target3, target5 = 0.425, 1.22
         current3 = self.data.ctrl[self.robot1_joint3_index]
         current5 = self.data.ctrl[self.robot1_joint5_index]
         self.data.ctrl[self.robot1_joint3_index] += 0.01 * (target3 - current3)
@@ -162,7 +167,7 @@ class MirobotController:
         return False
 
     def lifting_joint3(self):
-        target3 = 0.674
+        target3 = 0.199
         current3 = self.data.ctrl[self.robot1_joint3_index]
         self.data.ctrl[self.robot1_joint3_index] += 0.01 * (target3 - current3)
         if abs(current3 - target3) < 0.01:
@@ -184,7 +189,7 @@ class MirobotController:
     def rotate_joint1_to_front(self, target_angle=0.0, Kp=0.0000001, tol=1e-3, max_steps=5000000):
         original_gear = self.model.actuator_gear[self.robot1_joint1_index].copy()
         
-        self.model.actuator_gear[self.robot1_joint1_index] = 0.2  
+        self.model.actuator_gear[self.robot1_joint1_index] = 0.3  
 
         joint1_qpos_addr = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot1:Joint1")
 
@@ -260,15 +265,18 @@ class MirobotController:
 
         return self.pid_pre_placing_position_to_placing_position(target_pos, target_yaw)
 
-    def placing_at_lower_layer(self, joint3_target=0.674, joint5_target=0.4, tol=1e-3):
-        current3 = self.data.ctrl[self.robot1_joint3_index]
-        current5 = self.data.ctrl[self.robot1_joint5_index]
-        self.data.ctrl[self.robot1_joint3_index] += 0.01 * (joint3_target - current3)
-        self.data.ctrl[self.robot1_joint5_index] += 0.01 * (joint5_target - current5)
-        if abs(current3 - joint3_target) < tol and abs(current5 - joint5_target) < tol:
-            return True
+    def placing_at_current_layer(self):
+        # current3 = self.data.ctrl[self.robot1_joint3_index]
+        # current5 = self.data.ctrl[self.robot1_joint5_index]
+        # self.data.ctrl[self.robot1_joint3_index] += 0.01 * (joint3_target - current3)
+        # self.data.ctrl[self.robot1_joint5_index] += 0.01 * (joint5_target - current5)
+        # if abs(current3 - joint3_target) < tol and abs(current5 - joint5_target) < tol:
+        #     self.data.ctrl[self.robot_1_adhere_index] = 0.0
+        #     return True
 
-        return False
+        # return False
+        self.data.ctrl[self.robot_1_adhere_index] = 0.0
+        return True
 
     def placing_position_to_pre_origin_position(self):
         return self.pid_placing_position_to_pre_origin_position(np.array([-2.5, 0.0]), self.robot_origin_yaw)
@@ -377,24 +385,27 @@ class MirobotController:
             self.model.actuator_gear[joint_index] = 1.0
         return True
 
-    def pid_joint2_joint5_to_upper_layer(self, joint2_target=-0.230, joint5_target=-0.4, gear=0.8, tol=1e-3):
+    def pid_joint2_joint3_to_upper_layer(self, joint2_target=-0.02735, joint3_target=-0.078, gear=0.05, tol=1e-3):
         idx2 = self.robot1_joint2_index
-        idx5 = self.robot1_joint5_index
+        idx3 = self.robot1_joint3_index
+
 
         self.model.actuator_gear[idx2] = gear
-        self.model.actuator_gear[idx5] = gear
+        self.model.actuator_gear[idx3] = gear
+
 
         current2 = self.data.ctrl[idx2]
-        current5 = self.data.ctrl[idx5]
+        current3 = self.data.ctrl[idx3]
+
 
         self.data.ctrl[idx2] += 0.01 * ((joint2_target / gear) - current2)
-        self.data.ctrl[idx5] += 0.01 * ((joint5_target / gear) - current5)
+        self.data.ctrl[idx3] += 0.01 * ((joint3_target / gear) - current3)
 
-        if abs(current2 - (joint2_target / gear)) < tol and abs(current5 - (joint5_target / gear)) < tol:
+        if abs(current2 - (joint2_target / gear)) < tol and abs(current3 - (joint3_target / gear)) < tol:
             return True
         return False
 
-    def waiting_pid_joint2_joint5_to_upper_layer(self):
+    def waiting_pid_joint2_joint3_to_upper_layer(self):
         self.waiting_timer += 1
         if self.waiting_timer > 700:
             self.waiting_timer = 0
@@ -402,7 +413,7 @@ class MirobotController:
         return False
 
 
-    def pid_joint2_joint3_joint5_to_upper_layer(self, targets={"robot1:Joint2": 0.327, "robot1:Joint3": -0.394, "robot1:Joint5": 0.288}, gear=0.5, tol=1e-3):
+    def pid_joint3_to_upper_layer(self, targets={"robot1:Joint2": 0.055}, gear=0.05, tol=1e-3):
         finished = True
         for joint_name, target_pos in targets.items():
             idx = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name)
@@ -411,11 +422,12 @@ class MirobotController:
             self.data.ctrl[idx] += 0.01 * ((target_pos / gear) - current)
             if abs(current - (target_pos / gear)) >= tol:
                 finished = False
+        # self.data.ctrl[self.robot_1_adhere_index] = 0.0  # Ensure the robot can pick the object
         return finished
 
-    def waiting_pid_joint2_joint3_joint5_to_upper_layer(self):
+    def waiting_pid_joint3_to_upper_layer(self):
         self.waiting_timer += 1
-        if self.waiting_timer > 700:
+        if self.waiting_timer > 1800:
             self.waiting_timer = 0
             return True
         return False
@@ -427,17 +439,9 @@ class MirobotController:
         elif self.state == FiniteState.ORIGIN_POSITION_TO_PICKING_POSITION and np.allclose(self.pick_position, self.left_object_position):
             finished = self.origin_position_to_picking_position(direction_flag=Direction.LEFT)
             if finished:
-                self.state = FiniteState.DECREASING_JOINT3_AND_JOINT5 
+                self.state = FiniteState.JOINT1_TURNING 
         elif self.state == FiniteState.ORIGIN_POSITION_TO_PICKING_POSITION and np.allclose(self.pick_position, self.right_object_position):
             finished = self.origin_position_to_picking_position(direction_flag=Direction.RIGHT)
-            if finished:
-                self.state = FiniteState.DECREASING_JOINT3_AND_JOINT5
-        elif self.state == FiniteState.DECREASING_JOINT3_AND_JOINT5:
-            finished = self.decreasing_joint3_and_joint5()
-            if finished:
-                self.state = FiniteState.WAITING_DECREASING_JOINT3_AND_JOINT5
-        elif self.state == FiniteState.WAITING_DECREASING_JOINT3_AND_JOINT5:
-            finished = self.waiting_decreasing_joint3_and_joint5()
             if finished:
                 self.state = FiniteState.JOINT1_TURNING
         elif self.state == FiniteState.JOINT1_TURNING and np.allclose(self.pick_position, self.left_object_position):
@@ -450,6 +454,14 @@ class MirobotController:
                 self.state = FiniteState.WAITING_JOINT1_TURNING
         elif self.state == FiniteState.WAITING_JOINT1_TURNING:
             finished = self.waiting_joint1_turning()
+            if finished:
+                self.state = FiniteState.DECREASING_JOINT3_AND_JOINT5
+        elif self.state == FiniteState.DECREASING_JOINT3_AND_JOINT5:
+            finished = self.decreasing_joint3_and_joint5()
+            if finished:
+                self.state = FiniteState.WAITING_DECREASING_JOINT3_AND_JOINT5
+        elif self.state == FiniteState.WAITING_DECREASING_JOINT3_AND_JOINT5:
+            finished = self.waiting_decreasing_joint3_and_joint5()
             if finished:
                 self.state = FiniteState.LIFTING_JOINT3
         elif self.state == FiniteState.LIFTING_JOINT3:
@@ -492,23 +504,27 @@ class MirobotController:
                 )[0]  
                 # self.placing_layer = Layer.UPPER
         elif self.state == FiniteState.PLACING_AT_LAYER and self.placing_layer == Layer.LOWER:
-            finished = self.placing_at_lower_layer()
+            finished = self.placing_at_current_layer()
             if finished:
                 self.state = FiniteState.PLACING_POSITION_TO_PRE_ORIGIN_POSITION
         elif self.state == FiniteState.PLACING_AT_LAYER and self.placing_layer == Layer.UPPER:
-            finished = self.pid_joint2_joint5_to_upper_layer()
+            finished = self.pid_joint2_joint3_to_upper_layer()
             if finished:
-                self.state = FiniteState.WAITING_JOINT2_JOINT5_TO_UPPER_LAYER
-        elif self.state == FiniteState.WAITING_JOINT2_JOINT5_TO_UPPER_LAYER:
-            finished = self.waiting_pid_joint2_joint5_to_upper_layer()
+                self.state = FiniteState.WAITING_JOINT2_JOINT3_TO_UPPER_LAYER
+        elif self.state == FiniteState.WAITING_JOINT2_JOINT3_TO_UPPER_LAYER:
+            finished = self.waiting_pid_joint2_joint3_to_upper_layer()
             if finished:
-                self.state = FiniteState.JOINT2_JOINT3_JOINT5_TO_UPPER_LAYER
-        elif self.state == FiniteState.JOINT2_JOINT3_JOINT5_TO_UPPER_LAYER:
-            finished = self.pid_joint2_joint3_joint5_to_upper_layer()
+                self.state = FiniteState.JOINT3_TO_UPPER_LAYER
+        elif self.state == FiniteState.JOINT3_TO_UPPER_LAYER:
+            finished = self.pid_joint3_to_upper_layer()
             if finished:
-                self.state = FiniteState.WAITING_JOINT2_JOINT3_JOINT5_TO_UPPER_LAYER
-        elif self.state == FiniteState.WAITING_JOINT2_JOINT3_JOINT5_TO_UPPER_LAYER:
-            finished = self.waiting_pid_joint2_joint3_joint5_to_upper_layer()
+                self.state = FiniteState.WAITING_JOINT3_TO_UPPER_LAYER
+        elif self.state == FiniteState.WAITING_JOINT3_TO_UPPER_LAYER:
+            finished = self.waiting_pid_joint3_to_upper_layer()
+            if finished:
+                self.state = FiniteState.PLACING_AT_UPPER_LAYER
+        elif self.state == FiniteState.PLACING_AT_UPPER_LAYER:
+            finished = self.placing_at_current_layer()
             if finished:
                 self.state = FiniteState.PLACING_POSITION_TO_PRE_ORIGIN_POSITION
         elif self.state == FiniteState.PLACING_POSITION_TO_PRE_ORIGIN_POSITION:

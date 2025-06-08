@@ -47,10 +47,10 @@
         <joint pos="0 0 0" axis="0 0 -1" range="-1.8 2.2" damping="1.286" />
         <position ctrlrange="-1.8 2.2" kp="10" />
       </default>
-      <default class="Joint6">
-        <joint pos="0 0 0" axis="0 1 0" range="-6.283 6.283" damping="0.286" />
-        <position ctrlrange="-6.283 6.283" kp="5" />
-      </default>
+      <!-- <default class="Joint6">
+        <joint pos="0 0 0" axis="0 0 1" range="-6.283 6.283" damping="0.286" />
+        <position ctrlrange="-6.283 6.283" kp="1" />
+      </default> -->
     </default>
     <!-- <default class="endeffector">
       <geom contype="4" conaffinity="1" />
@@ -68,6 +68,11 @@
 			k = d(r) / (dmax * dmax * timeconst * timeconst * dampratio * dampratio)
 		-->
       <equality solimp="0.9950 0.9990 0.0001" solref="0.0100 0.7500" />
+    </default>
+
+    <default class="active_adhesion">
+      <!-- <geom rgba=".8 .5 .5 1" margin=".01" gap=".01"/> -->
+      <geom margin=".01" gap=".01"/>
     </default>
 
   </default>
@@ -97,7 +102,7 @@
     <mesh name="link3" file="Link3.stl" />
     <mesh name="link4" file="Link4.stl" />
     <mesh name="link5" file="Link5.stl" />
-    <!-- <mesh name="link6" file="Link6.stl" /> -->
+    <mesh name="link6" file="Link6.stl" />
     <mesh name="ForkLift" file="ForkLift.stl" scale="0.0008 0.0008 0.001" />
   </asset>
 
@@ -255,12 +260,37 @@
                     <geom class="collision" mesh="link5" />
 
 
-                    <body name="robot1:link6" pos="0.0 -0.007 0.0005" quat="0 -0.707 0 -0.707">
-                      <!-- <joint name="Joint6" class="Joint6" /> -->
+                    <!-- <body name="robot1:link6" pos="0.0 -0.007 0.0005" quat="0 -0.707 0 -0.707">
                       <geom class="visual" type="mesh" size="0.001 0.001" mass="0.001"
                         mesh="ForkLift" />
                       <geom class="collision" mesh="ForkLift" friction="5 5 5"
-                        solimp="0.99 0.99 0.001" solref="0.02 1" />
+                        solimp="0.99 0.99 0.001" solref="0.02 1" /> -->
+
+                    <body name="link6" pos="0 -0.0165 0.0105" quat="0.707 -0.707 0 0" gravcomp="1">
+                    <!-- <joint name="robot1:Joint6" class="Joint6" /> -->
+                      <!-- <inertial pos="0 0.006295 0.00755281" quat="1 1.17491e-05 0 0" mass="0.01"
+                        diaginertia="1.94302e-06 1.83053e-06 1.09304e-06" />   -->
+                      <geom type="mesh" size="0.001 0.002" mass="0.0001" mesh="link6" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                      <geom class="collision" mesh="link6" />
+                      <body name="vacuum_sphere" pos="0 0 -0.028" childclass="active_adhesion">
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="0.0027 0.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="0.0027 -.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="-.0027 0.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="-.0027 -.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="-.003 0 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos=".003 0 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="0 -.003 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="0 .003 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                      </body>
+                      <!-- <body name="4boxes" pos=".12 0 -.08" childclass="active_adhesion">
+                        <site name="force_sensor" group="3"/>
+                        <joint name="arm3" damping=".01" pos="0 -.03 0"/>
+                        <geom size=".015 .015 .01" pos="0.015 0.015 0"/>
+                        <geom size=".015 .015 .01" pos="0.015 -.015 0"/>
+                        <geom size=".015 .015 .01" pos="-.015 0.015 0"/>
+                        <geom size=".015 .015 .01" pos="-.015 -.015 0"/>
+                      </body> -->
 
                     </body>
                   </body>
@@ -350,12 +380,14 @@
     <position class="Joint3" name="robot1:Joint3" joint="robot1:Joint3" />
     <position class="Joint4" name="robot1:Joint4" joint="robot1:Joint4" />
     <position class="Joint5" name="robot1:Joint5" joint="robot1:Joint5" />
-    <!-- <position class="Joint6" name="Joint6" joint="robot1:Joint6"/> -->
+    <!-- <position class="Joint6" name="robot1:Joint6" joint="robot1:Joint6"/> -->
     <position name="robot1:ghost-steer" joint="robot1:ghost-steer-hinge" ctrllimited="true"
       ctrlrange="-.9 .9"
       gear="4.0" />
     <motor name="robot1:drive" tendon="robot1:rear-differential" ctrllimited="true" ctrlrange="-3 3"
       gear="1.5" />
+    <adhesion name="robot1:adhere_winch" body="vacuum_sphere" ctrlrange="0 1" gain="4"/>
+    <!-- <adhesion name="robot1:adhere_winch" body="4boxes" ctrlrange="0 1" gain="5"/> -->
   </actuator>
 
   <equality>

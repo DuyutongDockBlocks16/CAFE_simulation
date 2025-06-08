@@ -11,7 +11,7 @@ import random
 def get_data_and_model():
     model = mujoco.MjModel.from_xml_path("scene_mirobot.xml")
     data = mujoco.MjData(model)
-    time_step = 0.001
+    time_step = 0.005
     model.opt.timestep = time_step  
     return model, data
 
@@ -42,8 +42,8 @@ def start_object_remover_threads(model, data, object_joint_ids):
 
     # upper plane parameters
     upper_plane_positions = [[2.8, 1.0],[2.8, -1.0]]
-    upper_plane_radius = 0.08
-    upper_plane_z = 0.33
+    upper_plane_radius = 0.15
+    upper_plane_z = 0.43
 
     threading.Thread(
         target=remove_object_on_plane,
@@ -80,68 +80,29 @@ def main():
     # Start the asynchronous thread
     start_object_remover_threads(model, data, object_joint_ids)
 
-    shared_state = {"current_object_index": None, "current_object_position": None}
+    shared_state = {"current_object_index": None, "current_object_position": None, "stop": False, "stopped": True}
     start_object_placer_thread(model, data, object_joint_ids, left_object_position, right_object_position, shared_state)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         controller = MirobotController(model, data, left_object_position, right_object_position)
+        
 
         while True:
+            status = controller.get_status()
             # print(f"Current object index: {shared_state['current_object_index']}")
-            if shared_state["current_object_index"] >= len(object_joint_ids):
+            if shared_state["current_object_index"] >= len(object_joint_ids) and status == FiniteState.IDLE:
                 print("All objects have been placed. Exit")
                 break
 
             controller.step(shared_state["current_object_position"])
 
             mujoco.mj_step(model, data)
-            viewer.sync()
 
+            if not np.all(np.isfinite(data.qacc)) or np.any(np.abs(data.qacc) > 1e7):
+                print("QACC error detected! Simulation unstable, exiting loop.")
+                break
 
-            # if np.allclose(shared_state["current_object_position"], left_object_position):
-            #     controller.origin_position_to_picking_position(direction_flag = Direction.LEFT, render_flag = True)
-            #     # controller.execute_pick_motion(direction_flag = Direction.LEFT, render_flag = False)
-            #     controller.execute_pick_motion_step(direction_flag = Direction.LEFT, render_flag = True)
-            #     controller.picking_position_to_pre_placing_position(render_flag = True)
-            #     controller.rotate_joint1_to_front(render_flag = True)
-
-            #     placing_position = random.choice([Direction.LEFT, Direction.RIGHT])
-            #     controller.pre_placing_position_to_placing_position(direction_flag = placing_position, render_flag = True)
-
-            #     placing_layer = random.choices(
-            #         [Layer.LOWER, Layer.UPPER],
-            #         weights=[0.8, 0.2] 
-            #     )[0]
-            #     if placing_layer == Layer.LOWER:
-            #         controller.placing_at_lower_layer(render_flag = True)
-            #     else:
-            #         controller.placing_at_upper_layer(render_flag = True)
-
-            #     controller.placing_position_to_pre_origin_position(render_flag = True)
-            #     controller.placing_position_to_origin_position(render_flag = True)
-            #     controller.reset_all_joints(render_flag = True)
-            # else:
-            #     controller.origin_position_to_picking_position(direction_flag = Direction.RIGHT, render_flag = True)
-            #     # controller.execute_pick_motion(direction_flag = Direction.RIGHT, render_flag = True)
-            #     controller.execute_pick_motion_step(direction_flag = Direction.LEFT, render_flag = True)
-            #     controller.picking_position_to_pre_placing_position(render_flag = True)
-            #     controller.rotate_joint1_to_front(render_flag = True)
-
-            #     placing_position = random.choice([Direction.LEFT, Direction.RIGHT])
-            #     controller.pre_placing_position_to_placing_position(direction_flag = placing_position, render_flag = True)
-
-            #     placing_layer = random.choices(
-            #         [Layer.LOWER, Layer.UPPER],
-            #         weights=[0.8, 0.2] 
-            #     )[0]
-            #     if placing_layer == Layer.LOWER:
-            #         controller.placing_at_lower_layer(render_flag = True)
-            #     else:
-            #         controller.placing_at_upper_layer(render_flag = True)
-
-            #     controller.placing_position_to_pre_origin_position(render_flag = True)
-            #     controller.placing_position_to_origin_position(render_flag = True)
-            #     controller.reset_all_joints(render_flag = True)
+            # viewer.sync()
 
         while viewer.is_running():
             mujoco.mj_step(model, data)

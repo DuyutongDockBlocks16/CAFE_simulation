@@ -46,13 +46,13 @@
     </body> -->
 
     <geom name="placingplace1:low_plane" type="cylinder" pos="2.8 1 .23" size="0.23 0.01"
-      rgba="0.7 0.5 0.3 1" friction="5" solimp="0.99 0.99 0.001" solref="0.002 1" />
-    <geom name="placingplace1:high_plane" type="cylinder" pos="2.8 1 .33" size="0.08 0.005"
-      rgba="0.7 0.5 0.3 1" friction="5" solimp="0.99 0.99 0.001" solref="0.002 1" />
+      rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
+    <geom name="placingplace1:high_plane" type="cylinder" pos="2.8 1 .43" size="0.15 0.01"
+      rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1"  />
     <geom name="placingplace2:low_plane" type="cylinder" pos="2.8 -1 .23" size="0.23 0.01"
-      rgba="0.7 0.5 0.3 1" friction="5" solimp="0.99 0.99 0.001" solref="0.002 1" />
-    <geom name="placingplace2:high_plane" type="cylinder" pos="2.8 -1 .33" size="0.08 0.005"
-      rgba="0.7 0.5 0.3 1" friction="5" solimp="0.99 0.99 0.001" solref="0.002 1" />
+      rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
+    <geom name="placingplace2:high_plane" type="cylinder" pos="2.8 -1 .43" size="0.15 0.01"
+      rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />    
 
     <!-- <geom name="pickingplace:table4" type="box" pos="0.18 -0.02 .45" size="0.005 0.005 0.005"
     rgba="0.7 0.5 0.3 1" />
@@ -79,71 +79,71 @@
 
     <body name="object0" pos="-1.1 -3.5 0.28">
       <joint name="object0:joint" type="free" />
-      <geom name="object0_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
-        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+      <geom name="object0_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.006"
+        friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
         conaffinity="1" />
     </body>
 
     <body name="object1" pos="-1.0 -3.5 0.28">
       <joint name="object1:joint" type="free" />
-      <geom name="object1_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
-        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+      <geom name="object1_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.006"
+        friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
         conaffinity="1" />
     </body>
 
     <body name="object2" pos="-0.9 -3.5 0.28">
       <joint name="object2:joint" type="free" />
-      <geom name="object2_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
-        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+      <geom name="object2_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.006"
+        friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
         conaffinity="1" />
     </body>
 
     <body name="object3" pos="-0.8 -3.5 0.28">
       <joint name="object3:joint" type="free" />
-      <geom name="object3_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
-        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+      <geom name="object3_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.006"
+        friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
         conaffinity="1" />
     </body>
 
     <body name="object4" pos="-0.7 -3.5 0.28">
       <joint name="object4:joint" type="free" />
-      <geom name="object4_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
-        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+      <geom name="object4_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.006"
+        friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
         conaffinity="1" />
     </body>
 
     <body name="object5" pos="-0.6 -3.5 0.28">
       <joint name="object5:joint" type="free" />
-      <geom name="object5_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
-        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+      <geom name="object5_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.006"
+        friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
         conaffinity="1" />
     </body>
 
     <body name="object6" pos="-0.5 -3.5 0.28">
       <joint name="object6:joint" type="free" />
-      <geom name="object6_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
-        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+      <geom name="object6_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.006"
+        friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
         conaffinity="1" />
     </body>
 
     <body name="object7" pos="-0.4 -3.5 0.28">
       <joint name="object7:joint" type="free" />
-      <geom name="object7_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
-        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+      <geom name="object7_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.006"
+        friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
         conaffinity="1" />
     </body>
 
     <body name="object8" pos="-0.3 -3.5 0.28">
       <joint name="object8:joint" type="free" />
-      <geom name="object8_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
-        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+      <geom name="object8_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.006"
+        friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
         conaffinity="1" />
     </body>
 
     <body name="object9" pos="-0.2 -3.5 0.28">
       <joint name="object9:joint" type="free" />
-      <geom name="object9_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.6"
-        friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
+      <geom name="object9_geom" type="box" size=".03 0.017 0.017" material="block_mat" mass="0.006"
+        friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1"
         conaffinity="1" />
     </body>
 
