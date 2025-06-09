@@ -102,7 +102,7 @@ def main():
                 print("QACC error detected! Simulation unstable, exiting loop.")
                 break
 
-            # viewer.sync()
+            viewer.sync()
 
         while viewer.is_running():
             mujoco.mj_step(model, data)

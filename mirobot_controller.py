@@ -413,7 +413,7 @@ class MirobotController:
         return False
 
 
-    def pid_joint3_to_upper_layer(self, targets={"robot1:Joint2": 0.055}, gear=0.05, tol=1e-3):
+    def pid_joint3_to_upper_layer(self, targets={"robot1:Joint2": 0.050}, gear=0.05, tol=1e-3):
         finished = True
         for joint_name, target_pos in targets.items():
             idx = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name)
@@ -489,20 +489,20 @@ class MirobotController:
             finished = self.pre_placing_position_to_placing_position(direction_flag=Direction.LEFT)
             if finished:
                 self.state = FiniteState.PLACING_AT_LAYER
-                self.placing_layer = random.choices(
-                    [Layer.LOWER, Layer.UPPER],
-                    weights=[0.8, 0.2] 
-                )[0]
-                # self.placing_layer = Layer.UPPER
+                # self.placing_layer = random.choices(
+                #     [Layer.LOWER, Layer.UPPER],
+                #     weights=[0.5, 0.5] 
+                # )[0]
+                self.placing_layer = Layer.UPPER
         elif self.state == FiniteState.PRE_PLACING_POSITION_TO_PLACING_POSITION and self.placing_position == Direction.RIGHT: 
             finished = self.pre_placing_position_to_placing_position(direction_flag=Direction.RIGHT)
             if finished:
                 self.state = FiniteState.PLACING_AT_LAYER
-                self.placing_layer = random.choices(
-                    [Layer.LOWER, Layer.UPPER],
-                    weights=[0.8, 0.2] 
-                )[0]  
-                # self.placing_layer = Layer.UPPER
+                # self.placing_layer = random.choices(
+                #     [Layer.LOWER, Layer.UPPER],
+                #     weights=[0.5, 0.5] 
+                # )[0]  
+                self.placing_layer = Layer.UPPER
         elif self.state == FiniteState.PLACING_AT_LAYER and self.placing_layer == Layer.LOWER:
             finished = self.placing_at_current_layer()
             if finished:

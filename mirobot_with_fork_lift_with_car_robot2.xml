@@ -234,10 +234,10 @@
     <position class="Joint4" name="robot2:Joint4" joint="robot2:Joint4" />
     <position class="Joint5" name="robot2:Joint5" joint="robot2:Joint5" />
     <!-- <position class="Joint6" name="Joint6" joint="robot2:Joint6"/> -->
+    <motor name="robot2:drive" tendon="robot2:rear-differential" ctrllimited="true" ctrlrange="-3 3"
+    gear="1.5" />
     <position name="robot2:ghost-steer" joint="robot2:ghost-steer-hinge" ctrllimited="true" ctrlrange="-.9 .9"
       gear="4.0" />
-    <motor name="robot2:drive" tendon="robot2:rear-differential" ctrllimited="true" ctrlrange="-3 3"
-      gear="1.5" />
   </actuator>
 
   <equality>

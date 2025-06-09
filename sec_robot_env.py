@@ -50,7 +50,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
         self.action_space = gym.spaces.Box(
             low=-1,
             high=1,
-            shape=(num_actuators - 8,), 
+            shape=(num_actuators - 14,), 
             dtype=np.float32
         )
         self.max_steps = 1000000
@@ -83,13 +83,24 @@ class SecondRobotMuJoCoEnv(gym.Env):
         return self._get_obs(), {}
 
     def step(self, action):  
+        terminated = False
         self.first_robot_controller.step(self.shared_state["current_object_position"])
-        self.data.ctrl[8:8+len(action)] = action
+        self.data.ctrl[14:14+len(action)] = action
+        status = self.first_robot_controller.get_status()
+        if self.shared_state["current_object_index"] >= len(self.object_joint_ids) and status == FiniteState.IDLE:
+            print("All objects have been placed. Exit")
+            terminated = True
+
         mujoco.mj_step(self.model, self.data)
+
+        if not np.all(np.isfinite(self.data.qacc)) or np.any(np.abs(self.data.qacc) > 1e7):
+            print("QACC error detected! Simulation unstable, exiting loop.")
+            terminated = True
+
         obs = self._get_obs()
         reward = 0.0 
         self.current_step += 1
-        terminated = False
+
         truncated = self.current_step >= self.max_steps
         info = {}
         return obs, reward, terminated, truncated, info
