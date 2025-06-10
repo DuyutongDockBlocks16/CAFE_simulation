@@ -379,6 +379,9 @@ class MirobotController:
         self.data.ctrl[self.robot1_joint3_index] = 0
         self.data.ctrl[self.robot1_joint4_index] = 0
         self.data.ctrl[self.robot1_joint5_index] = 0
+        self.data.ctrl[self.robot_1_adhere_index] = 0.0
+        self.data.ctrl[self.robot1_ghost_steer_index] = 0.0
+        self.data.ctrl[self.robot1_drive_index] = 0.0
         # all gears sets to 1.0
         for joint_index in [self.robot1_joint1_index, self.robot1_joint2_index, self.robot1_joint3_index,
                             self.robot1_joint4_index, self.robot1_joint5_index]:

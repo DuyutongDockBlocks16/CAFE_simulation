@@ -5,10 +5,11 @@
   <worldbody>
     <body name="robot2:rover" pos="-2 2 0.2">
 
+    <!-- <body name="robot2:rover" pos="-0. 0 0.2" quat="0 0 0 1"> -->
       <!-- <camera name="first-person" mode="fixed" pos=".22 0 .08" euler="180 -133 -90" fovy="90"/> -->
 
       <joint name="robot2:centroid" type="free" pos="0 0 0" />
-      <geom name="robot2:rover-body" type="box" pos="0 0 -0.1" size="0.15 0.11 0.044" mass="40"
+      <geom name="robot2:rover-body" type="box" pos="0 0 -0.1" size="0.15 0.11 0.044" mass="80"
         material="MatBody" />
       <geom class="collision" type="box" pos="0 0 -0.1" size="0.15 0.11 0.044"/>
       <!-- <site type="box" size=".01 .07 .07" pos=".2 0 0"/> -->
@@ -228,16 +229,19 @@
   </tendon>
 
   <actuator>
-    <position class="Joint1" name="robot2:Joint1" joint="robot2:Joint1" />
-    <position class="Joint2" name="robot2:Joint2" joint="robot2:Joint2" />
-    <position class="Joint3" name="robot2:Joint3" joint="robot2:Joint3" />
-    <position class="Joint4" name="robot2:Joint4" joint="robot2:Joint4" />
-    <position class="Joint5" name="robot2:Joint5" joint="robot2:Joint5" />
-    <!-- <position class="Joint6" name="Joint6" joint="robot2:Joint6"/> -->
     <motor name="robot2:drive" tendon="robot2:rear-differential" ctrllimited="true" ctrlrange="-3 3"
     gear="1.5" />
     <position name="robot2:ghost-steer" joint="robot2:ghost-steer-hinge" ctrllimited="true" ctrlrange="-.9 .9"
       gear="4.0" />
+
+    <position class="Joint1" name="robot2:Joint1" joint="robot2:Joint1" gear="0.1"/>
+    <position class="Joint2" name="robot2:Joint2" joint="robot2:Joint2" gear="0.1"/>
+    <position class="Joint3" name="robot2:Joint3" joint="robot2:Joint3" gear="0.1"/>
+
+    <!-- <position class="Joint6" name="Joint6" joint="robot2:Joint6"/> -->
+
+    <position class="Joint4" name="robot2:Joint4" joint="robot2:Joint4" gear="0.1"/>
+    <position class="Joint5" name="robot2:Joint5" joint="robot2:Joint5" gear="0.1"/>
   </actuator>
 
   <equality>
