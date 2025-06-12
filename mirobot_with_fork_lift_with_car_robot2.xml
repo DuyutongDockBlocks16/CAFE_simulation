@@ -41,17 +41,17 @@
         <geom type="capsule" size=".005" fromto="0 0 0 0 0 .08" contype="2" conaffinity="2" />
         <joint name="robot2:f-l-steer-hinge" type="hinge" pos="0 0 0" axis="0 0 1" damping="0.01"
           limited="true" range="-40 40" />
-        <body>
+        <body name="robot2:f-l-wheel-hub">
           <geom type="cylinder" size=".01" fromto="0 -.015 0 0 0.015 0" mass=".125"
             material="MatWheel" />
-          <body>
+          <body name="robot2:f-l-wheel-1">
             <joint name="robot2:f-l-drive-hinge-1" type="hinge" pos="0 0 0" axis="0 1 0" damping="0.01" />
             <geom type="cylinder" size=".05" fromto="0 -.015 0 0 -0.010 0" mass=".125"
               material="MatWheel" condim="4" />
             <site size=".01" pos="0 -0.0125  0.03" />
             <site size=".01" pos="0 -0.0125 -0.03" />
           </body>
-          <body>
+          <body name="robot2:f-l-wheel-2">
             <joint name="robot2:f-l-drive-hinge-2" type="hinge" pos="0 0 0" axis="0 1 0" damping="0.01" />
             <geom type="cylinder" size=".05" fromto="0 .010 0 0 0.015 0" mass=".125"
               material="MatWheel" condim="4" />
@@ -66,18 +66,18 @@
           limited="true" range="-40 40" />
 
 
-        <body>
+        <body name="robot2:f-r-wheel-hub">
           <geom type="cylinder" size=".01" fromto="0 -.015 0 0 0.015 0" mass=".125"
             material="MatWheel" />
-          <body>
-            <joint name="robot2:f-l-drive-hinge-3" type="hinge" pos="0 0 0" axis="0 1 0" damping="0.01" />
+          <body name="robot2:f-r-wheel-1">
+            <joint name="robot2:f-r-drive-hinge-1" type="hinge" pos="0 0 0" axis="0 1 0" damping="0.01" />
             <geom type="cylinder" size=".05" fromto="0 -.015 0 0 -0.010 0" mass=".125"
               material="MatWheel" condim="4" />
             <site size=".01" pos="0 -0.0125  0.03" />
             <site size=".01" pos="0 -0.0125 -0.03" />
           </body>
-          <body>
-            <joint name="robot2:f-l-drive-hinge-4" type="hinge" pos="0 0 0" axis="0 1 0" damping="0.01" />
+          <body name="robot2:f-r-wheel-2">
+            <joint name="robot2:f-r-drive-hinge-2" type="hinge" pos="0 0 0" axis="0 1 0" damping="0.01" />
             <geom type="cylinder" size=".05" fromto="0 .010 0 0 0.015 0" mass=".125"
               material="MatWheel" condim="4" />
             <site size=".01" pos="0  0.0125  0.03" />
@@ -229,19 +229,15 @@
   </tendon>
 
   <actuator>
+    <position class="Joint1" name="robot2:Joint1" joint="robot2:Joint1" gear="0.1"/>
+    <position class="Joint2" name="robot2:Joint2" joint="robot2:Joint2" gear="0.1"/>
+    <position class="Joint3" name="robot2:Joint3" joint="robot2:Joint3" gear="0.1"/>
+    <position class="Joint4" name="robot2:Joint4" joint="robot2:Joint4" gear="0.1"/>
+    <position class="Joint5" name="robot2:Joint5" joint="robot2:Joint5" gear="0.1"/>
     <motor name="robot2:drive" tendon="robot2:rear-differential" ctrllimited="true" ctrlrange="-3 3"
     gear="1.5" />
     <position name="robot2:ghost-steer" joint="robot2:ghost-steer-hinge" ctrllimited="true" ctrlrange="-.9 .9"
       gear="4.0" />
-
-    <position class="Joint1" name="robot2:Joint1" joint="robot2:Joint1" gear="0.1"/>
-    <position class="Joint2" name="robot2:Joint2" joint="robot2:Joint2" gear="0.1"/>
-    <position class="Joint3" name="robot2:Joint3" joint="robot2:Joint3" gear="0.1"/>
-
-    <!-- <position class="Joint6" name="Joint6" joint="robot2:Joint6"/> -->
-
-    <position class="Joint4" name="robot2:Joint4" joint="robot2:Joint4" gear="0.1"/>
-    <position class="Joint5" name="robot2:Joint5" joint="robot2:Joint5" gear="0.1"/>
   </actuator>
 
   <equality>
