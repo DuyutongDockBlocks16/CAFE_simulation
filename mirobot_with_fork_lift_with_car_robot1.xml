@@ -158,24 +158,24 @@
         <geom type="capsule" size=".005" fromto="0 0 0 0 0 .08" contype="2" conaffinity="2" />
         <joint name="robot1:f-l-steer-hinge" type="hinge" pos="0 0 0" axis="0 0 1" damping="0.01"
           limited="true" range="-40 40" />
-        <body>
+        <body name="robot1:f-l-steer-assembly">
           <geom type="cylinder" size=".01" fromto="0 -.015 0 0 0.015 0" mass=".125"
-            material="MatWheel" />
-          <body>
-            <joint name="robot1:f-l-drive-hinge-1" type="hinge" pos="0 0 0" axis="0 1 0"
-              damping="0.01" />
-            <geom type="cylinder" size=".05" fromto="0 -.015 0 0 -0.010 0" mass=".125"
-              material="MatWheel" condim="4" />
-            <site size=".01" pos="0 -0.0125  0.03" />
-            <site size=".01" pos="0 -0.0125 -0.03" />
+        material="MatWheel" />
+          <body name="robot1:f-l-wheel-1">
+        <joint name="robot1:f-l-drive-hinge-1" type="hinge" pos="0 0 0" axis="0 1 0"
+          damping="0.01" />
+        <geom type="cylinder" size=".05" fromto="0 -.015 0 0 -0.010 0" mass=".125"
+          material="MatWheel" condim="4" />
+        <site size=".01" pos="0 -0.0125  0.03" />
+        <site size=".01" pos="0 -0.0125 -0.03" />
           </body>
-          <body>
-            <joint name="robot1:f-l-drive-hinge-2" type="hinge" pos="0 0 0" axis="0 1 0"
-              damping="0.01" />
-            <geom type="cylinder" size=".05" fromto="0 .010 0 0 0.015 0" mass=".125"
-              material="MatWheel" condim="4" />
-            <site size=".01" pos="0  0.0125  0.03" />
-            <site size=".01" pos="0  0.0125 -0.03" />
+          <body name="robot1:f-l-wheel-2">
+        <joint name="robot1:f-l-drive-hinge-2" type="hinge" pos="0 0 0" axis="0 1 0"
+          damping="0.01" />
+        <geom type="cylinder" size=".05" fromto="0 .010 0 0 0.015 0" mass=".125"
+          material="MatWheel" condim="4" />
+        <site size=".01" pos="0  0.0125  0.03" />
+        <site size=".01" pos="0  0.0125 -0.03" />
           </body>
         </body>
       </body>
@@ -185,24 +185,24 @@
           limited="true" range="-40 40" />
 
 
-        <body>
+        <body name="robot1:f-r-steer-assembly">
           <geom type="cylinder" size=".01" fromto="0 -.015 0 0 0.015 0" mass=".125"
-            material="MatWheel" />
-          <body>
-            <joint name="robot1:f-l-drive-hinge-3" type="hinge" pos="0 0 0" axis="0 1 0"
-              damping="0.01" />
-            <geom type="cylinder" size=".05" fromto="0 -.015 0 0 -0.010 0" mass=".125"
-              material="MatWheel" condim="4" />
-            <site size=".01" pos="0 -0.0125  0.03" />
-            <site size=".01" pos="0 -0.0125 -0.03" />
+        material="MatWheel" />
+          <body name="robot1:f-r-wheel-1">
+        <joint name="robot1:f-l-drive-hinge-3" type="hinge" pos="0 0 0" axis="0 1 0"
+          damping="0.01" />
+        <geom type="cylinder" size=".05" fromto="0 -.015 0 0 -0.010 0" mass=".125"
+          material="MatWheel" condim="4" />
+        <site size=".01" pos="0 -0.0125  0.03" />
+        <site size=".01" pos="0 -0.0125 -0.03" />
           </body>
-          <body>
-            <joint name="robot1:f-l-drive-hinge-4" type="hinge" pos="0 0 0" axis="0 1 0"
-              damping="0.01" />
-            <geom type="cylinder" size=".05" fromto="0 .010 0 0 0.015 0" mass=".125"
-              material="MatWheel" condim="4" />
-            <site size=".01" pos="0  0.0125  0.03" />
-            <site size=".01" pos="0  0.0125 -0.03" />
+          <body name="robot1:f-r-wheel-2">
+        <joint name="robot1:f-l-drive-hinge-4" type="hinge" pos="0 0 0" axis="0 1 0"
+          damping="0.01" />
+        <geom type="cylinder" size=".05" fromto="0 .010 0 0 0.015 0" mass=".125"
+          material="MatWheel" condim="4" />
+        <site size=".01" pos="0  0.0125  0.03" />
+        <site size=".01" pos="0  0.0125 -0.03" />
           </body>
         </body>
       </body>

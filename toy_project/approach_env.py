@@ -50,7 +50,7 @@ class ApproachMuJoCoEnv(gym.Env):
         dist = np.linalg.norm(middle - target_pos)
         reward = (self.prev_dist - dist) * 100
         if reward < 0:
-            reward -= 0.01 * self.current_step / 1000  # 每步都减去0.01 * 当前步数，表示时间惩罚
+            reward -= 0.01 * self.current_step / 1000 
         else:
             reward += 0.01 * self.current_step / 1000
 

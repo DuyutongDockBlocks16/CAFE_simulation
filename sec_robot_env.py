@@ -51,12 +51,12 @@ class SecondRobotMuJoCoEnv(gym.Env):
         )
         num_actuators = self.model.nu
         self.action_space = gym.spaces.Box(
-            low=-1,
-            high=1,
+            low=-3,
+            high=3,
             shape=(num_actuators - ACTION_SPACE_REDUCTION,), 
             dtype=np.float32
         )
-        self.max_steps = 100000
+        self.max_steps = 20000
         self.current_step = 0
         self.initial_qpos = np.copy(self.data.qpos)
         self.initial_qvel = np.copy(self.data.qvel)
@@ -67,10 +67,29 @@ class SecondRobotMuJoCoEnv(gym.Env):
             "pickingplace:table0", "pickingplace:table1", 
             "pickingplace:table2", "pickingplace:table3",
             "placingplace2:low_plane", "placingplace2:high_plane",
-            "placingplace1:low_plane", "placingplace1:high_plane"
+            "placingplace1:low_plane", "placingplace1:high_plane",  
         ]
 
-        robot_bodies = [
+        self.robot1_bodies = [
+            "robot1:rover",         # chassis
+            "robot1:r-l-wheel",     # rear left wheel
+            "robot1:r-r-wheel",     # rear right wheel  
+            "robot1:f-l-wheel",     # front left wheel
+            "robot1:f-l-wheel-1", "robot1:f-l-wheel-2",  # front left wheel spokes
+            "robot1:f-r-wheel",     # front right wheel
+            "robot1:f-r-wheel-1", "robot1:f-r-wheel-2",  # front right wheel spokes
+            "robot1:base",          # arm base
+            "robot1:base_link",     # arm base link
+            "robot1:link1",         # arm joint 1
+            "robot1:link2",         # arm joint 2
+            "robot1:link3",         # arm joint 3
+            "robot1:link4",         # arm joint 4
+            "robot1:link5",         # arm joint 5
+            "robot1:link6",         # arm end effector
+            "vacuum_sphere"         # vacuum gripper
+        ]
+
+        self.robot2_bodies = [
             "robot2:rover",         # chassis
             "robot2:r-l-wheel",     # rear left wheel
             "robot2:r-r-wheel",     # rear right wheel  
@@ -78,6 +97,9 @@ class SecondRobotMuJoCoEnv(gym.Env):
             "robot2:f-l-wheel-hub", "robot2:f-l-wheel-1", "robot2:f-l-wheel-2",  # front left wheel hub and spokes
             "robot2:f-r-wheel-hub", "robot2:f-r-wheel-1", "robot2:f-r-wheel-2",  # front right wheel hub and spokes
             "robot2:f-r-wheel",     # front right wheel
+            "robot2:base",          # arm base
+            "robot2:base_link",     # arm base link
+            "robot2:link1",         # arm joint 1
             "robot2:link2",         # arm joint 2
             "robot2:link3",         # arm joint 3
             "robot2:link4",         # arm joint 4
@@ -85,11 +107,19 @@ class SecondRobotMuJoCoEnv(gym.Env):
             "robot2:link6"          # arm end effector
         ]
 
-        self.robot_body_ids = []
-        for body_name in robot_bodies:
+        self.robot1_body_ids = []
+        for body_name in self.robot1_bodies:
             try:
                 body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
-                self.robot_body_ids.append(body_id)
+                self.robot1_body_ids.append(body_id)
+            except:
+                continue
+
+        self.robot2_body_ids = []
+        for body_name in self.robot2_bodies:
+            try:
+                body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+                self.robot2_body_ids.append(body_id)
             except:
                 continue
         
@@ -97,6 +127,9 @@ class SecondRobotMuJoCoEnv(gym.Env):
         self.robot2_rover_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
         self.safe_distance = 0.8
         self.prev_dist = None
+        self.init_dist = None
+        self.static_counter = 0
+        self.max_static_steps = 400 
 
     def reset(self, seed=None, options=None):
 
@@ -123,6 +156,10 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id]
         self.prev_dist = np.linalg.norm(robot_2_rover_pos[0:2] - self.target_position_x_y)
+        self.init_dist = self.prev_dist
+
+        self.prev_position = None
+        self.static_counter = 0
 
         return self._get_obs(), {}
 
@@ -139,27 +176,36 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         robot_2_rover_pos = self._get_obs()
 
-        reward, reached, crushed = self.reward_function(robot_2_rover_pos)
+        reward, reached = self.reward_function(robot_2_rover_pos)
 
+        static_penalty = self.calculate_static_penalty(action, robot_2_rover_pos)
+        reward += static_penalty
+
+        truncated = False
         if self.check_robot_forbidden_collision():
             print("Robot collision with forbidden area detected! Terminating episode.")
-            reward -= 50
-            terminated = True
+            reward -= 20000
+            truncated = True
 
-        if crushed:
-            print("Robot distance violation detected! Terminating episode.")
-            terminated = True
+        if self.check_robot_robot_collision():
+            print("Robot-robot collision detected! Terminating episode.")
+            reward -= 20000
+            truncated = True
 
         if not np.all(np.isfinite(self.data.qacc)) or np.any(np.abs(self.data.qacc) > 1e7):
             print("QACC error detected! Simulation unstable, exiting loop.")
-            terminated = True
+            truncated = True
 
         if reached:
+            print("Robot2 has reached the target area! Terminating episode.")
             terminated = True
 
         self.current_step += 1
 
-        truncated = self.current_step >= self.max_steps
+        if self.current_step >= self.max_steps:
+            truncated = True
+            reward -= 10000
+        
         info = {}
         return robot_2_rover_pos, reward, terminated, truncated, info
 
@@ -237,8 +283,8 @@ class SecondRobotMuJoCoEnv(gym.Env):
             geom2_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom2_id)
             
             # Check if robot body collides with forbidden geom
-            if ((body1_id in self.robot_body_ids and geom2_name in self.forbidden_geoms) or
-                (body2_id in self.robot_body_ids and geom1_name in self.forbidden_geoms)):
+            if ((body1_id in self.robot2_body_ids and geom2_name in self.forbidden_geoms) or
+                (body2_id in self.robot2_body_ids and geom1_name in self.forbidden_geoms)):
                 return True
         
         return False
@@ -257,28 +303,65 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
     def reward_function(self, robot_2_rover_pos):
         dist_to_target = np.linalg.norm(robot_2_rover_pos - self.target_position_x_y)
-        target_reward = (self.prev_dist - dist_to_target) * 50
+        # target_reward = -(abs(robot_2_rover_pos[0] - self.target_position_x_y[0]) + abs(robot_2_rover_pos[1] - self.target_position_x_y[1]))
+        # target_reward = (self.prev_dist - dist_to_target) * 100
+        # if target_reward < 0:
+        #     target_reward -= 0.01 * self.current_step / 1000 
+        # else:
+        #     target_reward += 0.01 * self.current_step / 1000
+        
+
+        progress_reward = 0
+        if self.prev_dist is not None:
+            progress_amount = (self.prev_dist - dist_to_target) * 100
+            
+            
+            if dist_to_target > 4.0:
+                coefficient = 2.0      
+            elif dist_to_target > 3.0:
+                coefficient = 3.0      
+            elif dist_to_target > 2.0:
+                coefficient = 4.0     
+            elif dist_to_target > 1.0:
+                coefficient = 5.0      
+            elif dist_to_target > 0.5:
+                coefficient = 6.0      
+            elif dist_to_target > 0.2:
+                coefficient = 8.0      
+            else:
+                coefficient = 10.0     # 保持10.0
+            
+            progress = progress_amount * coefficient
+            
+            if progress > 0:
+                progress_reward = progress
+            else:
+                progress_reward = progress * 0.5
+
 
         robot_distance = self.get_robot_distance()
         safety_reward = self.calculate_safety_reward(robot_distance)
 
-        crushed = False
-        if safety_reward == -50 :
-            crushed = True
+        # crushed = False
+        # if safety_reward == -5000 :
+        #     crushed = True
 
-        time_penalty = -0.1
+        time_penalty = -0.3
 
         arrival_bonus = 0
 
-        reached = dist_to_target < 0.01
+        reached = dist_to_target < 2
         if reached:
-            arrival_bonus = 200
+            arrival_bonus = 200000
 
-        total_reward = target_reward + safety_reward + time_penalty + arrival_bonus
+        total_reward = progress_reward + safety_reward + arrival_bonus + time_penalty
+        # total_reward = target_reward + time_penalty + arrival_bonus
+
+        # print(f"Robot2 Position: {robot_2_rover_pos}, Distance to Target: {dist_to_target:.2f}, ")
 
         self.prev_dist = dist_to_target
 
-        return total_reward, reached, crushed
+        return total_reward, reached
 
     def get_robot_distance(self):
         """Calculate the distance between the two robots"""
@@ -289,10 +372,52 @@ class SecondRobotMuJoCoEnv(gym.Env):
     def calculate_safety_reward(self, robot_distance):
         """Safety distance reward design"""
         if robot_distance < 0.8:     # Collision
-            return -50             # Large penalty
-        elif robot_distance < 1.2:   # Danger zone
-            return -20             # Medium penalty  
-        elif robot_distance < 1.6:   # Warning zone
-            return -5               # Small penalty
+            return 0            # Large penalty
+        elif robot_distance < 1.0:   # Danger zone
+            return 0.5             # Medium penalty  
+        # elif robot_distance < 2.0: 
+        #     return 1               
         else:                        # Safe zone
-            return 2       
+            return 1
+
+    def check_robot_robot_collision(self):
+        """Directly detect collisions between two robots"""
+        for i in range(self.data.ncon):
+            contact = self.data.contact[i]
+            geom1_id = contact.geom1
+            geom2_id = contact.geom2
+            
+            body1_id = self.model.geom_bodyid[geom1_id]
+            body2_id = self.model.geom_bodyid[geom2_id]
+            
+            # Detection logic
+            is_robot1_involved = body1_id in self.robot1_body_ids or body2_id in self.robot1_body_ids
+            is_robot2_involved = body1_id in self.robot2_body_ids or body2_id in self.robot2_body_ids
+            
+            if is_robot1_involved and is_robot2_involved:
+                geom1_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom1_id)
+                geom2_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom2_id)
+                # print(f"🚨 ROBOT-ROBOT COLLISION: {geom1_name} <-> {geom2_name}")
+                return True
+        
+        return False
+
+    def calculate_static_penalty(self, action, current_pos):
+        penalty = 0
+        
+
+        if self.prev_position is not None:
+            position_change = np.linalg.norm(current_pos - self.prev_position)
+            
+            if position_change < 0.005:  
+                self.static_counter += 1
+                if self.static_counter > 50:  
+                    
+                    penalty -= min((self.static_counter - 50) * 0.05, -5) 
+            else:
+                self.static_counter = max(0, self.static_counter - 3)  
+                penalty += 0.5 
+        
+        self.prev_position = current_pos.copy()
+        
+        return penalty
