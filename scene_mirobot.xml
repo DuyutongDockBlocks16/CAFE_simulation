@@ -3,7 +3,7 @@
   <include file="mirobot_with_fork_lift_with_car_robot2.xml" />
   <!-- <include file="robot_husky_mobile.xml"/> -->
   <!-- <include file="rover4We-only.xml"/> -->
-  <compiler autolimits="true" meshdir="Mirobot-STL-master" angle="radian" />
+  <compiler autolimits="true" meshdir="Mirobot-STL" angle="radian" />
 
   <option cone="elliptic" impratio="1" />
 
