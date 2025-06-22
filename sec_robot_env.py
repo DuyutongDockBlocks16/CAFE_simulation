@@ -187,7 +187,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         obs = self._get_obs()
         robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]  # Get only the first two coordinates (x, y)
-
+        # print(robot_2_rover_pos)
         reward, reached = self.reward_function(robot_2_rover_pos)
 
         static_penalty = self.calculate_static_penalty(action, robot_2_rover_pos)
@@ -422,7 +422,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         arrival_bonus = 0
 
-        reached = dist_to_target < 0.02
+        reached = dist_to_target < 0.1
         if reached:
             arrival_bonus = 200000
 
