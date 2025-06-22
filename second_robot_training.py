@@ -39,7 +39,7 @@ def approach_model_training(env):
     
 
     save_interval = 50_000 
-    total_steps = 10_000_000  
+    total_steps = 1_600_000_000
     
     for i in range(total_steps // save_interval):  
         model.learn(total_timesteps=save_interval,      
