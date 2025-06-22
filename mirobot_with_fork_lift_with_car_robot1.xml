@@ -96,7 +96,7 @@
     <material name="gray" rgba="0.4627 0.4627 0.4627 1" />
     <material name="black" rgba="0.149 0.149 0.149 1" />
 
-    <mesh name="base_link" file="base_link.STL" />
+    <mesh name="base_link" file="base_link.stl" />
     <mesh name="link1" file="Link1.stl" />
     <mesh name="link2" file="Link2.stl" />
     <mesh name="link3" file="Link3.stl" />
