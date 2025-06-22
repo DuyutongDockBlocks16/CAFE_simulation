@@ -1,7 +1,4 @@
 <mujoco model="mirobot">
-
-
-
   <worldbody>
     <body name="robot2:rover" pos="-2 2 0.2">
 

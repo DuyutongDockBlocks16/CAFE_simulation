@@ -40,23 +40,31 @@ class SecondRobotMuJoCoEnv(gym.Env):
         self.start_object_remover_threads(self.model, self.data, self.object_joint_ids)
 
         self.shared_state = {"current_object_index": None, "current_object_position": None, "stop": False, "stopped": True}
-        
+
+        self.robot_1_rover_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot1:rover")
         self.robot_2_rover_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
+        
         # self.target_area_geom_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "placingplace1:low_plane")
         self.target_position_x_y = [2, -2] 
 
         obs = self._get_obs()
+        # print("Observation shape:", obs.shape)
         self.observation_space = gym.spaces.Box(
             low=-np.inf, high=np.inf, shape=obs.shape, dtype=np.float32
         )
         num_actuators = self.model.nu
+
+        self.low_bounds = np.array([-3.0, -0.9], dtype=np.float32)
+        self.high_bounds = np.array([3.0, 0.9], dtype=np.float32)
+
         self.action_space = gym.spaces.Box(
-            low=-3,
-            high=3,
+            low=self.low_bounds,
+            high=self.high_bounds,
             shape=(num_actuators - ACTION_SPACE_REDUCTION,), 
             dtype=np.float32
         )
-        self.max_steps = 20000
+
+        self.max_steps = 8000
         self.current_step = 0
         self.initial_qpos = np.copy(self.data.qpos)
         self.initial_qvel = np.copy(self.data.qvel)
@@ -164,9 +172,12 @@ class SecondRobotMuJoCoEnv(gym.Env):
         return self._get_obs(), {}
 
     def step(self, action):  
+        normalized_action = np.clip(action, -1, 1)
+        real_action = self.low_bounds + (normalized_action + 1) * (self.high_bounds - self.low_bounds) / 2
+
         terminated = False
         self.first_robot_controller.step(self.shared_state["current_object_position"])
-        self.data.ctrl[ACTION_SPACE_REDUCTION:ACTION_SPACE_REDUCTION+len(action)] = action
+        self.data.ctrl[ACTION_SPACE_REDUCTION:ACTION_SPACE_REDUCTION+len(real_action)] = real_action
         status = self.first_robot_controller.get_status()
         if self.shared_state["current_object_index"] >= len(self.object_joint_ids) and status == FiniteState.IDLE:
             print("All objects have been placed. Exit")
@@ -174,7 +185,8 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         mujoco.mj_step(self.model, self.data)
 
-        robot_2_rover_pos = self._get_obs()
+        obs = self._get_obs()
+        robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]  # Get only the first two coordinates (x, y)
 
         reward, reached = self.reward_function(robot_2_rover_pos)
 
@@ -207,13 +219,73 @@ class SecondRobotMuJoCoEnv(gym.Env):
             reward -= 10000
         
         info = {}
-        return robot_2_rover_pos, reward, terminated, truncated, info
+        return obs, reward, terminated, truncated, info
 
     def _get_obs(self):
-        robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id]
-        # target_area_pos = self.model.geom_pos[self.target_area_geom_id]
-        # return np.concatenate([robot_2_rover_pos]).astype(np.float32)
-        return robot_2_rover_pos[0:2]
+        robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]  
+        # robot2_vel = self.data.qvel[:2]  
+        
+        target_pos = np.array(self.target_position_x_y) 
+        target_rel = target_pos - robot2_pos  
+        target_distance = np.linalg.norm(target_rel) 
+        target_angle = np.arctan2(target_rel[1], target_rel[0]) 
+
+        robot1_pos = self.data.xpos[self.robot_1_rover_id][:2]  
+        robot1_rel = robot1_pos - robot2_pos  
+        robot1_distance = np.linalg.norm(robot1_rel)  
+        robot1_angle = np.arctan2(robot1_rel[1], robot1_rel[0])  
+
+        walls = {
+            "left": -3.0,   
+            "right": 3.0,   
+            "front": 3.0,   
+            "back": -3.0    
+        }
+        wall_distances = np.array([
+            robot2_pos[0] - walls["left"],   
+            walls["right"] - robot2_pos[0],  
+            robot2_pos[1] - walls["back"],   
+            walls["front"] - robot2_pos[1]   
+        ])
+
+        placing_place_1_pos = np.array([2.8, 1.0])  
+        placing_1_rel = placing_place_1_pos - robot2_pos
+        placing_1_distance = np.linalg.norm(placing_1_rel)
+        # placing_1_angle = np.arctan2(placing_1_rel[1], placing_1_rel[0])
+
+        placing_place_2_pos = np.array([2.8, -1.0])
+        placing_2_rel = placing_place_2_pos - robot2_pos
+        placing_2_distance = np.linalg.norm(placing_2_rel)
+        # placing_2_angle = np.arctan2(placing_2_rel[1], placing_2_rel[0])
+
+        
+        max_position = 3.0     
+        max_speed = 2.0        
+        max_distance = 9     
+        
+        observation = np.concatenate([
+            robot2_pos / max_position,                
+            # robot2_vel / max_speed,                   
+            
+            target_pos / max_position,               
+            [target_distance / max_distance,           
+            target_angle / np.pi],                   
+            
+
+            robot1_pos / max_position,               
+            [robot1_distance / max_distance,          
+            robot1_angle / np.pi],                 
+            
+            wall_distances / max_distance,            
+
+            placing_place_1_pos / max_position,       
+            [placing_1_distance / max_distance],      
+            
+            placing_place_2_pos / max_position,       
+            [placing_2_distance / max_distance]       
+        ], dtype=np.float32)
+
+        return observation
 
     def render(self):
         if not hasattr(self, "viewer") or self.viewer is None:
@@ -350,7 +422,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         arrival_bonus = 0
 
-        reached = dist_to_target < 2
+        reached = dist_to_target < 0.02
         if reached:
             arrival_bonus = 200000
 
@@ -409,7 +481,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
         if self.prev_position is not None:
             position_change = np.linalg.norm(current_pos - self.prev_position)
             
-            if position_change < 0.005:  
+            if position_change < 0.05:  
                 self.static_counter += 1
                 if self.static_counter > 50:  
                     

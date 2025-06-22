@@ -16,7 +16,7 @@ gym.register(
     kwargs={"xml_path": "scene_mirobot.xml"}
 )
 
-APPROACHING_MODEL_NAME = "ppo_mujoco_car_15000K_final.zip"
+APPROACHING_MODEL_NAME = "ppo_mujoco_continued_2050K.zip"
 
 class RenderCallback(BaseCallback):
     def __init__(self, env, render_freq=10):
@@ -49,6 +49,94 @@ def approach_model_training(env):
         current_steps = (i + 1) * save_interval
         model.save(f"ppo_mujoco_car_{current_steps // 1000}K")
         print(f"Saved model at {current_steps:,} steps (ppo_mujoco_car_{current_steps // 1000}K.zip)")
+    
+    env.close()
+
+def approach_model_training(env, load_model_path=None):
+    
+    if load_model_path is not None:
+        if not os.path.exists(load_model_path):
+            print(f"❌ Model {load_model_path} not found!")
+            return
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_name = f"backup_{timestamp}_{os.path.basename(load_model_path)}"
+        os.system(f"cp {load_model_path} {backup_name}")
+        print(f"📁 Created backup: {backup_name}")
+
+        model = PPO.load(load_model_path, env=env)
+        print(f"✅ Successfully loaded model from: {load_model_path}")
+        
+        model.tensorboard_log = f"./ppo_logs/continued_{timestamp}/"
+        
+        import re
+        match = re.search(r'(\d+)K', load_model_path)
+        if match:
+            loaded_steps = int(match.group(1)) * 1000
+            print(f"   Continuing from approximately {loaded_steps:,} steps")
+        else:
+            loaded_steps = 0
+            print("   Could not determine previous training steps from filename")
+            
+    else:
+        print("🆕 Creating new PPO model...")
+        model = PPO("MlpPolicy", env, verbose=1, 
+                    learning_rate=3e-4,     # Learning rate
+                    n_steps=2048,           # Collect 2048 steps of experience each time
+                    batch_size=64,          # Process 64 samples per batch
+                    tensorboard_log="./ppo_logs/")  # Log save path
+        loaded_steps = 0
+
+    save_interval = 50_000 
+    total_additional_steps = 10_000_000  
+    
+    print(f"🚀 Starting training...")
+    print(f"   Additional steps: {total_additional_steps:,}")
+    print(f"   Save interval: {save_interval:,} steps")
+    print(f"   Model type: {'Continued' if load_model_path else 'New'}")
+    
+    num_iterations = total_additional_steps // save_interval
+    
+    for i in range(num_iterations):
+        print(f"\n--- Training Progress: {i+1}/{num_iterations} ---")
+        
+        model.learn(total_timesteps=save_interval,      
+                   callback=RenderCallback(env),       # Render callback
+                   reset_num_timesteps=False)          # Don't reset timestep counter
+        
+        current_total_steps = loaded_steps + (i + 1) * save_interval
+        
+        if load_model_path:
+            model_name = f"ppo_mujoco_continued_{current_total_steps // 1000}K"
+        else:
+            model_name = f"ppo_mujoco_car_{current_total_steps // 1000}K"
+            
+        model.save(model_name)
+        print(f"💾 Saved: {model_name}.zip ({current_total_steps:,} total steps)")
+        
+        if (i + 1) * save_interval % 1_000_000 == 0:
+            millions = current_total_steps // 1_000_000
+            print(f"🎉 Milestone: Reached {millions}M total steps!")
+    
+    final_total_steps = loaded_steps + total_additional_steps
+    if load_model_path:
+        final_model_name = f"ppo_mujoco_continued_{final_total_steps // 1000}K_final"
+    else:
+        final_model_name = f"ppo_mujoco_car_{final_total_steps // 1000}K_final"
+    
+    model.save(final_model_name)
+    
+    print(f"\n🎊 ============ TRAINING COMPLETED! ============")
+    print(f"📊 Training Summary:")
+    if load_model_path:
+        print(f"   Original model: {load_model_path}")
+        print(f"   Starting steps: {loaded_steps:,}")
+    else:
+        print(f"   Training type: New model from scratch")
+        print(f"   Starting steps: 0")
+    print(f"   Additional steps: {total_additional_steps:,}")
+    print(f"   Final total steps: {final_total_steps:,}")
+    print(f"   Final model: {final_model_name}.zip")
     
     env.close()
 
@@ -177,68 +265,55 @@ def continue_training_with_backup():
         env.close()
 
 def continue_training_from_10000K():
-    """从 ppo_mujoco_car_10000K.zip 继续训练"""
     
-    # 模型文件名
     model_to_load = "ppo_mujoco_car_10000K.zip"
     
-    # 创建环境
     env = gym.make("SecondRobotMuJoCoEnv-v0")
     
     try:
-        # 检查模型文件是否存在
         if not os.path.exists(model_to_load):
             print(f"❌ Model {model_to_load} not found!")
             return
         
-        # 备份原模型
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_name = f"backup_{timestamp}_{model_to_load}"
         os.system(f"cp {model_to_load} {backup_name}")
         print(f"📁 Created backup: {backup_name}")
         
-        # 🎯 加载 ppo_mujoco_car_10000K.zip 模型
         model = PPO.load(model_to_load, env=env)
         print(f"✅ Successfully loaded {model_to_load}")
         print(f"   Starting from 10,000K (10M) steps")
         
-        # 设置新的tensorboard日志
         model.tensorboard_log = f"./ppo_logs/continued_from_10000K_{timestamp}/"
         
-        # 继续训练配置
-        save_interval = 50_000      # 每5万步保存一次
-        total_additional_steps = 5_000_000  # 额外训练5M步
-        starting_step_count = 10_000_000    # 从10M步开始计数
+        save_interval = 50_000      
+        total_additional_steps = 5_000_000  
+        starting_step_count = 10_000_000    
         
         print(f"🚀 Continuing training from 10M steps...")
         print(f"   Additional steps: {total_additional_steps:,}")
         print(f"   Save interval: {save_interval:,} steps")
         print(f"   Final target: {starting_step_count + total_additional_steps:,} steps")
         
-        # 训练循环
-        num_iterations = total_additional_steps // save_interval  # 100次迭代
+        num_iterations = total_additional_steps // save_interval  
         
         for i in range(num_iterations):
             print(f"\n--- Continuing Training Progress: {i+1}/{num_iterations} ---")
             
-            # 训练5万步
             model.learn(total_timesteps=save_interval,
                        callback=RenderCallback(env),
-                       reset_num_timesteps=False)  # 🎯 重要：不重置步数计数器
+                       reset_num_timesteps=False) 
             
-            # 保存模型
             current_total_steps = starting_step_count + (i + 1) * save_interval
             model_name = f"ppo_mujoco_car_{current_total_steps // 1000}K"
             model.save(model_name)
             
             print(f"💾 Saved: {model_name}.zip ({current_total_steps:,} total steps)")
             
-            # 每1M步显示进度摘要
             if (i + 1) * save_interval % 1_000_000 == 0:
                 millions = (current_total_steps) // 1_000_000
                 print(f"🎉 Milestone: Reached {millions}M total steps!")
         
-        # 保存最终模型
         final_steps = starting_step_count + total_additional_steps
         final_model_name = f"ppo_mujoco_car_{final_steps // 1000}K_final"
         model.save(final_model_name)
@@ -277,6 +352,7 @@ def approach_model_implementation(env):
 
 if __name__ == "__main__":
     approach_env = gym.make("SecondRobotMuJoCoEnv-v0")
+    # approach_model_training(approach_env, load_model_path=APPROACHING_MODEL_NAME)
     approach_model_training(approach_env)
     # continue_training_from_10000K()
     # approach_model_training_parallel()
