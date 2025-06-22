@@ -1,5 +1,5 @@
 <mujoco model="mirobot">
-  <compiler angle="radian" meshdir="Mirobot-STL-master" autolimits="true" />
+  <compiler angle="radian" meshdir="Mirobot-STL" autolimits="true" />
   <!-- <option cone="elliptic" impratio="10"/> -->
 
   <default class="main">

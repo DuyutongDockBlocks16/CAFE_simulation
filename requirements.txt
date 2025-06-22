@@ -22,8 +22,8 @@ MarkupSafe==3.0.2
 matplotlib==3.10.1
 ml_dtypes==0.5.1
 mpmath==1.3.0
-mujoco==3.3.2
-mujoco-mjx==3.3.2
+mujoco
+mujoco-mjx
 networkx==3.4.2
 numpy==2.2.5
 nvidia-cublas-cu12==12.6.4.1
