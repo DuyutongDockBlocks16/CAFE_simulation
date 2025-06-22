@@ -101,7 +101,7 @@ def approach_model_training(env, load_model_path=None):
         print(f"\n--- Training Progress: {i+1}/{num_iterations} ---")
         
         model.learn(total_timesteps=save_interval,      
-                   callback=RenderCallback(env),       # Render callback
+                   # callback=RenderCallback(env),       # Render callback
                    reset_num_timesteps=False)          # Don't reset timestep counter
         
         current_total_steps = loaded_steps + (i + 1) * save_interval
