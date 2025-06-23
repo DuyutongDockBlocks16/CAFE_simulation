@@ -4,9 +4,9 @@ import mujoco
 import mujoco.viewer
 from mirobot_controller import MirobotController 
 import threading
-from object_remover import remove_object_on_plane
-from object_placer import place_object_on_table
-from env_config import FiniteState
+from util_threads.object_remover import remove_object_on_plane
+from util_threads.object_placer import place_object_on_table
+from config.env_config import FiniteState
 
 ACTION_SPACE_REDUCTION = 13  # Number of actuators to be reduced from the action space
 

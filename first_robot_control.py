@@ -1,8 +1,8 @@
 import mujoco
 import mujoco.viewer
 from mirobot_controller import MirobotController, Direction, Layer
-from object_remover import remove_object_on_plane
-from object_placer import place_object_on_table
+from util_threads.object_remover import remove_object_on_plane
+from util_threads.object_placer import place_object_on_table
 import threading
 import time
 import numpy as np

@@ -3,69 +3,46 @@ import sec_robot_env
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor, DummyVecEnv
 from stable_baselines3.common.utils import set_random_seed
-from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common.callbacks import CallbackList
+from stable_baselines3.common.callbacks import BaseCallback, CallbackList
 from time import sleep
 import mujoco.viewer
 import time
 import os
 from datetime import datetime
+from config.env_config import Direction, Layer, FiniteState
+from config.training_config import APPROACHING_MODEL_NAME, SUCCESS_THRESHOLD
+from callbacks.episode_data_collector import EpisodeBatchCollector
+from callbacks.success_check_point_saver import SuccessCheckpointCallback
+from callbacks.training_renderer import RenderCallback
 
 gym.register(
     id="SecondRobotMuJoCoEnv-v0",
     entry_point="sec_robot_env:SecondRobotMuJoCoEnv",
-    kwargs={"xml_path": "scene_mirobot.xml"}
+    kwargs={"xml_path": "xml/scene_mirobot.xml"}
 )
 
-APPROACHING_MODEL_NAME = "success_model_1.zip"
+# def approach_model_training(env):
+#     # Create PPO model with training parameters
+#     model = PPO("MlpPolicy", env, verbose=1, 
+#                 learning_rate=3e-4,     # Learning rate
+#                 n_steps=2048,           # Collect 2048 steps of experience each time
+#                 batch_size=64,          # Process 64 samples per batch
+#                 tensorboard_log="./ppo_logs/")  # Log save path
+    
 
-SUCCESS_THRESHOLD = 200000
-
-class RenderCallback(BaseCallback):
-    def __init__(self, env, render_freq=10):
-        super().__init__()
-        self.env = env
-        self.render_freq = render_freq
-
-    def _on_step(self):
-        if self.n_calls % self.render_freq == 0:
-            self.env.render()
-        return True
-
-class SuccessCheckpointCallback(BaseCallback):
-    def __init__(self, save_path, verbose=0):
-        super().__init__(verbose)
-        self.save_path = save_path
+#     save_interval = 50_000 
+#     total_steps = 1_600_000_000
+    
+#     for i in range(total_steps // save_interval):  
+#         model.learn(total_timesteps=save_interval,      
+#                    callback=RenderCallback(env),       # Render callback
+#                    reset_num_timesteps=False)          # Don't reset timestep counter
         
-    def _on_step(self):
-        if self.locals.get("dones", False) and self.locals["rewards"] > SUCCESS_THRESHOLD:
-            self.model.save(f"{self.save_path}/success_model")
-            if self.verbose:
-                print(f"model has been saved, reward={self.locals['rewards']:.0f}")
-        return True
-
-def approach_model_training(env):
-    # Create PPO model with training parameters
-    model = PPO("MlpPolicy", env, verbose=1, 
-                learning_rate=3e-4,     # Learning rate
-                n_steps=2048,           # Collect 2048 steps of experience each time
-                batch_size=64,          # Process 64 samples per batch
-                tensorboard_log="./ppo_logs/")  # Log save path
+#         current_steps = (i + 1) * save_interval
+#         model.save(f"ppo_mujoco_car_{current_steps // 1000}K")
+#         print(f"Saved model at {current_steps:,} steps (ppo_mujoco_car_{current_steps // 1000}K.zip)")
     
-
-    save_interval = 50_000 
-    total_steps = 1_600_000_000
-    
-    for i in range(total_steps // save_interval):  
-        model.learn(total_timesteps=save_interval,      
-                   callback=RenderCallback(env),       # Render callback
-                   reset_num_timesteps=False)          # Don't reset timestep counter
-        
-        current_steps = (i + 1) * save_interval
-        model.save(f"ppo_mujoco_car_{current_steps // 1000}K")
-        print(f"Saved model at {current_steps:,} steps (ppo_mujoco_car_{current_steps // 1000}K.zip)")
-    
-    env.close()
+#     env.close()
 
 def approach_model_training(env, load_model_path=None):
 
@@ -370,9 +347,9 @@ def model_fine_tune(env, load_model_path=None):
 if __name__ == "__main__":
     approach_env = gym.make("SecondRobotMuJoCoEnv-v0")
     # approach_model_training(approach_env, load_model_path=APPROACHING_MODEL_NAME)
-    # approach_model_training(approach_env)
+    approach_model_training(approach_env)
     # continue_training_from_10000K()
     # approach_model_training_parallel()
     # continue_training_with_backup()
-    approach_model_implementation(approach_env)
+    # approach_model_implementation(approach_env)
     # fine_tuned_model = model_fine_tune(approach_env, APPROACHING_MODEL_NAME)

@@ -1,0 +1,3 @@
+APPROACHING_MODEL_NAME = "success_model_1.zip"
+
+SUCCESS_THRESHOLD = 200000

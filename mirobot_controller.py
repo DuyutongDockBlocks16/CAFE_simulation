@@ -3,9 +3,9 @@ import mujoco.viewer
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import random
-from object_remover import remove_object_on_plane
-from object_placer import place_object_on_table
-from env_config import Layer, FiniteState, Direction
+from util_threads.object_remover import remove_object_on_plane
+from util_threads.object_placer import place_object_on_table
+from config.env_config import Layer, FiniteState, Direction
 
 class MirobotController:
     def __init__(self, model, data, left_object_position, right_object_position):
