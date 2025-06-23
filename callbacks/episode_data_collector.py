@@ -54,9 +54,7 @@ class EpisodeBatchCollector(BaseCallback):
         metadata = {
             "metadata": {
                 "start_time": datetime.now().isoformat(),
-                "format": "JSONL - One episode per line",
                 "batch_size": self.batch_size,
-                "description": "Episode data collected during RL training"
             }
         }
         

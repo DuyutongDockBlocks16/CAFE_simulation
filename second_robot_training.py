@@ -46,9 +46,19 @@ gym.register(
 
 def approach_model_training(env, load_model_path=None):
 
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = f"./logs/episode_data_{timestamp}.jsonl"
+    
+    episode_collector = EpisodeBatchCollector(
+        output_file=output_file,
+        batch_size=5,
+        verbose=1
+    )
+    
     combined_callback = CallbackList([
         RenderCallback(env),
-        SuccessCheckpointCallback("./checkpoints")
+        SuccessCheckpointCallback("./checkpoints"),
+        episode_collector
     ])
     
     if load_model_path is not None:

@@ -121,7 +121,7 @@ class MirobotController:
     
     # dirction_flag = -1 is right, dirction_flag = 1 is left
     def origin_position_to_picking_position(self, direction_flag: Direction):
-        quat = [0.707, 0.0, 0.0, -0.707] 
+        quat = [0.707, 0.0, 0.0, -0.707]
         target_yaw = self.quat_to_yaw(quat)
         # print(f"target_yaw: {target_yaw}")
         if direction_flag == Direction.RIGHT:
