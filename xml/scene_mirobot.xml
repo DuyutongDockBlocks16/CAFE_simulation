@@ -16,7 +16,6 @@
   </asset>
 
   <worldbody>
-
     <geom type="plane" size="3 3 .01" material="grid" />
 
     <!-- left object -->

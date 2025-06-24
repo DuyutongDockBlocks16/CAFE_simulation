@@ -45,7 +45,8 @@ class SecondRobotMuJoCoEnv(gym.Env):
         self.robot_2_rover_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
         
         # self.target_area_geom_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "placingplace1:low_plane")
-        self.target_position_x_y = [2, -2] 
+        self.target_position_x_y = [-1, -1.7] 
+        # self.target_position_x_y = [2, -2] 
 
         obs = self._get_obs()
         # print("Observation shape:", obs.shape)
@@ -224,6 +225,11 @@ class SecondRobotMuJoCoEnv(gym.Env):
     def _get_obs(self):
         robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]  
         # robot2_vel = self.data.qvel[:2]  
+
+        robot2_quat = self.data.xquat[self.robot_2_rover_id]
+        robot2_orientation = self.quaternion_to_yaw(robot2_quat)
+
+        # print(robot2_orientation)
         
         target_pos = np.array(self.target_position_x_y) 
         target_rel = target_pos - robot2_pos  
@@ -265,8 +271,9 @@ class SecondRobotMuJoCoEnv(gym.Env):
         
         observation = np.concatenate([
             robot2_pos / max_position,                
-            # robot2_vel / max_speed,                   
-            
+            # robot2_vel / max_speed, 
+            [robot2_orientation / np.pi],
+
             target_pos / max_position,               
             [target_distance / max_distance,           
             target_angle / np.pi],                   
@@ -422,7 +429,10 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         arrival_bonus = 0
 
-        reached = dist_to_target < 0.1
+        robot2_quat = self.data.xquat[self.robot_2_rover_id]
+        robot2_orientation = self.quaternion_to_yaw(robot2_quat)
+
+        reached = (dist_to_target < 0.1) and (abs(robot2_orientation - (-1.5708)) < 0.05)
         if reached:
             arrival_bonus = 200000
 
@@ -493,3 +503,8 @@ class SecondRobotMuJoCoEnv(gym.Env):
         self.prev_position = current_pos.copy()
         
         return penalty
+
+    def quaternion_to_yaw(self, quat):
+        w, x, y, z = quat
+        yaw = np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+        return yaw

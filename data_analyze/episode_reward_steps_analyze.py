@@ -4,7 +4,7 @@ import numpy as np
 from datetime import datetime
 import os
 
-log_name = "episode_data_20250623_142748.jsonl"
+LOG_NAME = "episode_data_20250623_170659.jsonl"
 
 def read_episode_data(filename):
     """
@@ -190,7 +190,7 @@ def main():
     
     """Main function to run the episode analysis."""
     # File path - modify this to your actual file path
-    filename = f"../logs/{log_name}"
+    filename = f"../logs/{LOG_NAME}"
     
     # Alternative: Ask user for filename
     # filename = input("Enter the path to your episode data file: ").strip()

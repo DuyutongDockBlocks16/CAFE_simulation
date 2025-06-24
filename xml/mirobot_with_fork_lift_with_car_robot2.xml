@@ -1,6 +1,7 @@
 <mujoco model="mirobot">
   <worldbody>
     <body name="robot2:rover" pos="-2 2 0.2">
+    <!-- <body name="robot2:rover" pos="-1 -1.7 0.2"> -->
 
     <!-- <body name="robot2:rover" pos="-0. 0 0.2" quat="0 0 0 1"> -->
       <!-- <camera name="first-person" mode="fixed" pos=".22 0 .08" euler="180 -133 -90" fovy="90"/> -->

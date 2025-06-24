@@ -319,6 +319,10 @@ def continue_training_from_10000K():
 def approach_model_implementation(env):
     model = PPO.load(APPROACHING_MODEL_NAME, env=env)
     obs, info = env.reset()
+
+    env.render()
+    sleep(15)
+
     for _ in range(200000000000):
         env.render()  # Render at every step
         action, _ = model.predict(obs, deterministic=True)
@@ -328,8 +332,28 @@ def approach_model_implementation(env):
             env.unwrapped.data.ctrl[:] = 0
             mujoco.mj_step(env.unwrapped.model, env.unwrapped.data)  
             break
-    
-    # env.close()
+
+    model = env.unwrapped.model
+    data = env.unwrapped.data
+
+    env.close()
+
+    # sleep 1s 
+    # sleep(10)
+
+    # with mujoco.viewer.launch_passive(model, data) as viewer:
+    #     print("Press ESC to exit viewer...")
+    #     last_time = time.time()
+    #     frame_count = 0
+    #     while viewer.is_running():
+    #         mujoco.mj_step(model, data)
+    #         viewer.sync()
+    #         frame_count += 1
+    #         now = time.time()
+    #         if now - last_time >= 1.0:
+    #             # print(f"Simulated FPS: {frame_count}")
+    #             frame_count = 0
+    #             last_time = now
 
 def model_fine_tune(env, load_model_path=None):
     model = PPO.load(
@@ -339,9 +363,19 @@ def model_fine_tune(env, load_model_path=None):
         clip_range = 0.05
     )
 
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = f"./logs/episode_data_{timestamp}.jsonl"
+    
+    episode_collector = EpisodeBatchCollector(
+        output_file=output_file,
+        batch_size=5,
+        verbose=1
+    )
+
     combined_callback = CallbackList([
         RenderCallback(env),
-        SuccessCheckpointCallback("./fine_tune_checkpoints")
+        SuccessCheckpointCallback("./fine_tune_checkpoints"),
+        episode_collector
     ]) 
 
     model.learn(
