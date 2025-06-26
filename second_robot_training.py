@@ -56,7 +56,7 @@ def approach_model_training(env, load_model_path=None):
     )
     
     combined_callback = CallbackList([
-        RenderCallback(env),
+        # RenderCallback(env),
         SuccessCheckpointCallback("./checkpoints"),
         episode_collector
     ])
@@ -96,7 +96,7 @@ def approach_model_training(env, load_model_path=None):
 
     save_interval = 50_000 
     # total_additional_steps = 1_600_000_000
-    total_additional_steps = 10_000_000
+    total_additional_steps = 100_000_000
     
     print(f"🚀 Starting training...")
     print(f"   Additional steps: {total_additional_steps:,}")
@@ -373,7 +373,7 @@ def model_fine_tune(env, load_model_path=None):
     )
 
     combined_callback = CallbackList([
-        RenderCallback(env),
+        # RenderCallback(env),
         SuccessCheckpointCallback("./fine_tune_checkpoints"),
         episode_collector
     ]) 

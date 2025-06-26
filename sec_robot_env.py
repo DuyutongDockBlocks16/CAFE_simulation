@@ -136,6 +136,8 @@ class SecondRobotMuJoCoEnv(gym.Env):
         self.robot2_rover_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
         self.safe_distance = 0.8
         self.prev_dist = None
+        self.prev_orientation = None
+        self.target_orientation = -1.5708  # Target orientation in radians (90 degrees)
         self.init_dist = None
         self.static_counter = 0
         self.max_static_steps = 400 
@@ -381,6 +383,11 @@ class SecondRobotMuJoCoEnv(gym.Env):
         return distance < self.safe_distance
 
     def reward_function(self, robot_2_rover_pos):
+
+        robot2_quat = self.data.xquat[self.robot_2_rover_id]
+        robot2_orientation = self.quaternion_to_yaw(robot2_quat)
+
+
         dist_to_target = np.linalg.norm(robot_2_rover_pos - self.target_position_x_y)
         # target_reward = -(abs(robot_2_rover_pos[0] - self.target_position_x_y[0]) + abs(robot_2_rover_pos[1] - self.target_position_x_y[1]))
         # target_reward = (self.prev_dist - dist_to_target) * 100
@@ -389,6 +396,8 @@ class SecondRobotMuJoCoEnv(gym.Env):
         # else:
         #     target_reward += 0.01 * self.current_step / 1000
         
+        # orientation_progress_reward = self.calculate_orientation_progress_reward(robot2_orientation)
+        orientation_progress_reward = self.calculate_orientation_reward(robot2_orientation, dist_to_target)
 
         progress_reward = 0
         if self.prev_dist is not None:
@@ -429,14 +438,13 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         arrival_bonus = 0
 
-        robot2_quat = self.data.xquat[self.robot_2_rover_id]
-        robot2_orientation = self.quaternion_to_yaw(robot2_quat)
 
-        reached = (dist_to_target < 0.1) and (abs(robot2_orientation - (-1.5708)) < 0.05)
+
+        reached = (dist_to_target < 0.1) and (abs(robot2_orientation - (self.target_orientation)) < 0.05)
         if reached:
             arrival_bonus = 200000
 
-        total_reward = progress_reward + safety_reward + arrival_bonus + time_penalty
+        total_reward = progress_reward + safety_reward + arrival_bonus + time_penalty + orientation_progress_reward
         # total_reward = target_reward + time_penalty + arrival_bonus
 
         # print(f"Robot2 Position: {robot_2_rover_pos}, Distance to Target: {dist_to_target:.2f}, ")
@@ -508,3 +516,68 @@ class SecondRobotMuJoCoEnv(gym.Env):
         w, x, y, z = quat
         yaw = np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
         return yaw
+
+    def calculate_orientation_progress_reward(self, current_orientation):
+
+        if not hasattr(self, 'prev_orientation') or self.prev_orientation is None:
+            self.prev_orientation = current_orientation
+            return 0.0
+        
+        current_error = abs(current_orientation - self.target_orientation)
+        prev_error = abs(self.prev_orientation - self.target_orientation)
+
+
+        if current_error > np.pi:
+            current_error = 2 * np.pi - current_error
+        if prev_error > np.pi:
+            prev_error = 2 * np.pi - prev_error
+        
+        orientation_progress = (prev_error - current_error) * 10  
+        
+        self.prev_orientation = current_orientation
+        
+        return orientation_progress
+
+    def calculate_orientation_reward(self, current_orientation, distance_to_target):
+
+        orientation_reward = 0.0   
+        angle_error = abs(current_orientation - self.target_orientation)
+
+        if angle_error > np.pi:
+            angle_error = 2 * np.pi - angle_error
+        
+        if distance_to_target < 0.5:
+            if angle_error < 0.05:  
+                orientation_reward = 10.0  
+            elif angle_error < 0.1:  
+                orientation_reward = 5.0   
+            else:  
+                orientation_reward = 2.0   
+
+        elif distance_to_target < 1.0:
+            if angle_error < 0.1:
+                orientation_reward = 3.0
+            elif angle_error < 0.2:
+                orientation_reward = 1.0
+            else:
+                orientation_reward = 0.0
+
+        elif distance_to_target < 2.0:
+            if angle_error < 0.2:
+                orientation_reward = 1.0
+            else:
+                orientation_reward = 0.0
+
+        elif distance_to_target < 2.0:
+            if angle_error < 0.2:
+                orientation_reward = 1.0
+            else:
+                orientation_reward = 0.0
+
+        else:
+            if angle_error < 0.5:
+                orientation_reward = 0.5
+            else:
+                orientation_reward = 0.0
+        
+        return orientation_reward
