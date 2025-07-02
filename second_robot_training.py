@@ -14,6 +14,7 @@ from config.training_config import APPROACHING_MODEL_NAME, SUCCESS_THRESHOLD
 from callbacks.episode_data_collector import EpisodeBatchCollector
 from callbacks.success_check_point_saver import SuccessCheckpointCallback
 from callbacks.training_renderer import RenderCallback
+import numpy as np
 
 gym.register(
     id="SecondRobotMuJoCoEnv-v0",
@@ -56,7 +57,7 @@ def approach_model_training(env, load_model_path=None):
     )
     
     combined_callback = CallbackList([
-        # RenderCallback(env),
+        RenderCallback(env),
         SuccessCheckpointCallback("./checkpoints"),
         episode_collector
     ])
@@ -89,8 +90,13 @@ def approach_model_training(env, load_model_path=None):
         print("🆕 Creating new PPO model...")
         model = PPO("MlpPolicy", env, verbose=1, 
                     learning_rate=3e-4,     # Learning rate
-                    n_steps=2048,           # Collect 2048 steps of experience each time
-                    batch_size=64,          # Process 64 samples per batch
+                    n_steps=8192,           # Collect 8192 steps of experience each time
+                    batch_size=256,          # Process 256 samples per batch
+                    n_epochs=10,            
+                    ent_coef=0.02,          
+                    clip_range=0.2,          
+                    gae_lambda=0.95,         
+                    vf_coef=0.5,            
                     tensorboard_log="./ppo_logs/")  # Log save path
         loaded_steps = 0
 
@@ -388,6 +394,130 @@ def model_fine_tune(env, load_model_path=None):
 
     model.save("best_model.zip")
 
+def approach_model_training_generalization(env, load_model_path):
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = f"./logs/episode_data_{timestamp}.jsonl"
+    
+    episode_collector = EpisodeBatchCollector(
+        output_file=output_file,
+        batch_size=5,
+        verbose=1
+    )
+
+    combined_callback = CallbackList([
+        RenderCallback(env),
+        SuccessCheckpointCallback("./fine_tune_checkpoints"),
+        episode_collector
+    ]) 
+    
+    # Load existing model
+    model = PPO.load(load_model_path, env=env)
+    model.learning_rate = 2e-4  # 🎯 Lower learning rate to protect learned knowledge
+    model.ent_coef = 0.02       # 🎯 Increase exploration to adapt to new targets
+    
+    # Extract trained steps
+    import re
+    match = re.search(r'(\d+)K', load_model_path)
+    loaded_steps = int(match.group(1)) * 1000 if match else 0
+
+    # Target position list
+    target_positions = [
+        [2, -2],        # Original target
+        [2.2, -1.8],    # Slight offset
+        [1.8, -2.2],    # Slight offset
+        [2.5, -1.5],    # Medium offset
+        [1.5, -2.5],    # Medium offset
+        [2, -1.5],      # Y-axis offset
+        [1.5, -2],      # X-axis offset
+        [1.5, 1.5],     # Different quadrant
+        [2, 1],         # Upper target
+        [0, 0],         # Center target
+    ]
+    
+    save_interval = 50_000
+    total_additional_steps = 100_000_000  # 100M steps for generalization training
+    num_iterations = total_additional_steps // save_interval
+    
+    target_change_interval = 10  # Change target every 10 iterations
+    
+    print(f"  Starting generalization training...")
+    print(f"   Base model: {load_model_path}")
+    print(f"   Number of target positions: {len(target_positions)}")
+    print(f"   Training steps: {total_additional_steps:,}")
+    
+    for i in range(num_iterations):
+        #  Periodically change target position
+        if i % target_change_interval == 0:
+            current_target = target_positions[i // target_change_interval % len(target_positions)]
+            env.unwrapped.target_position_x_y = current_target
+            print(f"\n Switching target to: {current_target}")
+        
+        print(f"\n--- Generalization training progress: {i+1}/{num_iterations} ---")
+        print(f"   Current target: {env.unwrapped.target_position_x_y}")
+        
+        model.learn(total_timesteps=save_interval, 
+                   callback=combined_callback, 
+                   reset_num_timesteps=False)
+        
+        current_total_steps = loaded_steps + (i + 1) * save_interval
+        
+        #  Test generalization ability every 20 iterations
+        if i % 20 == 0 and i > 0:
+            print(f"\n🔍 Generalization ability test:")
+            generalization_results = test_multiple_targets(model, env, target_positions[:5])
+            avg_success = np.mean(list(generalization_results.values()))
+            print(f"   Average success rate: {avg_success:.1%}")
+            
+            if avg_success < 0.4:
+                print("⚠️ Generalization ability declining, adjusting training parameters...")
+                model.learning_rate *= 0.8
+                model.ent_coef = min(0.1, model.ent_coef * 1.5)
+        
+        # Save model
+        model_name = f"generalized_model_{current_total_steps // 1000}K"
+        model.save(model_name)
+        print(f"💾 Saved: {model_name}.zip")
+    
+    # Restore original target
+    env.unwrapped.target_position_x_y = [2, -2]
+    
+    return model
+
+def test_multiple_targets(model, env, test_targets, tests_per_target=3):
+    """Test performance on multiple target positions"""
+
+    results = {}
+    original_target = env.unwrapped.target_position_x_y.copy()
+    
+    for target in test_targets:
+        env.unwrapped.target_position_x_y = target
+        successes = 0
+        
+        for _ in range(tests_per_target):
+            obs, _ = env.reset()
+            
+            for step in range(5000):
+                action, _ = model.predict(obs, deterministic=True)
+                obs, reward, done, truncated, _ = env.step(action)
+                
+                if reward > 1000:
+                    successes += 1
+                    break
+                    
+                if done or truncated:
+                    break
+        
+        success_rate = successes / tests_per_target
+        results[str(target)] = success_rate
+        print(f"   Target {target}: {success_rate:.1%}")
+
+    # Restore original target
+    env.unwrapped.target_position_x_y = original_target
+    
+    return results
+
+
 if __name__ == "__main__":
     approach_env = gym.make("SecondRobotMuJoCoEnv-v0")
     # approach_model_training(approach_env, load_model_path=APPROACHING_MODEL_NAME)
@@ -397,3 +527,26 @@ if __name__ == "__main__":
     # continue_training_with_backup()
     # approach_model_implementation(approach_env)
     # fine_tuned_model = model_fine_tune(approach_env, APPROACHING_MODEL_NAME)
+
+# if __name__ == "__main__":
+#     approach_env = gym.make("SecondRobotMuJoCoEnv-v0")
+    
+#     #  Using trained model for generalization training
+#     existing_model_path = "original_place_to_another_corner.zip"  # Your trained model
+    
+#     if os.path.exists(existing_model_path):
+#         print(" Starting generalization training...")
+#         generalized_model = approach_model_training_generalization(
+#             approach_env, existing_model_path
+#         )
+        
+#         # Final test
+#         print("\n Final generalization ability test:")
+#         final_targets = [[2, -2], [2.2, -1.8], [1.5, 1.5], [0, 0], [2.5, -1.5]]
+#         final_results = test_multiple_targets(generalized_model, approach_env, final_targets, tests_per_target=10)
+        
+#         avg_final_success = np.mean(list(final_results.values()))
+#         print(f"🎊 Final average generalization success rate: {avg_final_success:.1%}")
+        
+#     else:
+#         print(f"❌ Model file not found: {existing_model_path}")

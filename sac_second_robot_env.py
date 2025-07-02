@@ -11,7 +11,7 @@ import random
 
 ACTION_SPACE_REDUCTION = 13  # Number of actuators to be reduced from the action space
 
-class SecondRobotMuJoCoEnv(gym.Env):
+class SacSecondRobotMuJoCoEnv(gym.Env):
     def __init__(self, xml_path):
         super().__init__()
         self.model = mujoco.MjModel.from_xml_path(xml_path)
@@ -47,14 +47,15 @@ class SecondRobotMuJoCoEnv(gym.Env):
         
         # self.target_area_geom_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "placingplace1:low_plane")
         # self.target_position_x_y = [-1, -1.7] 
-        self.target_positions = [[0, 2], [-0.3, 1], [-0.5, 0]]
+        # self.target_positions = [[0, 2], [-0.3, 1], [-0.5, 0]]
+        self.target_positions = [[2, -2], [-2, -2]]
         self.target_position_x_y = random.choice(self.target_positions)
 
-        obs = self._get_obs()
+        # obs = self._get_obs()
         # print("Observation shape:", obs.shape)
-        self.observation_space = gym.spaces.Box(
-            low=-np.inf, high=np.inf, shape=obs.shape, dtype=np.float32
-        )
+        # self.observation_space = gym.spaces.Box(
+        #     low=-np.inf, high=np.inf, shape=obs.shape, dtype=np.float32
+        # )
         num_actuators = self.model.nu
 
         self.low_bounds = np.array([-3.0, -0.9], dtype=np.float32)
@@ -143,6 +144,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
         self.init_dist = None
         self.static_counter = 0
         self.max_static_steps = 400 
+        self._setup_observation_space()
 
     def reset(self, seed=None, options=None):
 
@@ -178,7 +180,9 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         return self._get_obs(), {}
 
-    def step(self, action):  
+    def step(self, action):
+        """修改step函数以适配HER"""
+        
         normalized_action = np.clip(action, -1, 1)
         real_action = self.low_bounds + (normalized_action + 1) * (self.high_bounds - self.low_bounds) / 2
 
@@ -186,120 +190,172 @@ class SecondRobotMuJoCoEnv(gym.Env):
         self.first_robot_controller.step(self.shared_state["current_object_position"])
         self.data.ctrl[ACTION_SPACE_REDUCTION:ACTION_SPACE_REDUCTION+len(real_action)] = real_action
         status = self.first_robot_controller.get_status()
+        
         if self.shared_state["current_object_index"] >= len(self.object_joint_ids) and status == FiniteState.IDLE:
             print("All objects have been placed. Exit")
             terminated = True
 
         mujoco.mj_step(self.model, self.data)
 
+        # 🎯 获取Dict格式观察
         obs = self._get_obs()
-        robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]  # Get only the first two coordinates (x, y)
-        # print(robot_2_rover_pos)
-        reward, reached = self.reward_function(robot_2_rover_pos)
-        # reward, reached = self.simple_reward_function(robot_2_rover_pos)
-
-        static_penalty = self.calculate_static_penalty(action, robot_2_rover_pos)
-        reward += static_penalty
-
+        
+        # 🎯 使用HER的奖励函数
+        reward = self.compute_reward(
+            obs["achieved_goal"], 
+            obs["desired_goal"], 
+            {}
+        )
+        
+        # 🎯 检查是否成功（用于HER的success信息）
+        distance_to_target = np.linalg.norm(obs["achieved_goal"] - obs["desired_goal"])
+        success = distance_to_target < 0.2
+        
+        # 🎯 碰撞和其他检查
         truncated = False
+        
         if self.check_robot_forbidden_collision():
             print("Robot collision with forbidden area detected! Terminating episode.")
-            reward -= 20000
+            reward -= 10.0  # HER通常使用较小的惩罚
             truncated = True
 
         if self.check_robot_robot_collision():
             print("Robot-robot collision detected! Terminating episode.")
-            reward -= 20000
+            reward -= 10.0
             truncated = True
 
         if not np.all(np.isfinite(self.data.qacc)) or np.any(np.abs(self.data.qacc) > 1e7):
             print("QACC error detected! Simulation unstable, exiting loop.")
             truncated = True
 
-        if reached:
-            print("Robot2 has reached the target area! Terminating episode.")
+        if success:
+            print("Robot2 has reached the target area! Success!")
             terminated = True
 
         self.current_step += 1
 
         if self.current_step >= self.max_steps:
             truncated = True
-            reward -= 10000
         
-        info = {}
+        # 🎯 HER需要的info信息
+        info = {
+            "is_success": success,
+            "distance_to_target": distance_to_target
+        }
+        
         return obs, reward, terminated, truncated, info
 
-    def _get_obs(self):
-        robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]  
-        # robot2_vel = self.data.qvel[:2]  
+    def _setup_observation_space(self):
 
-        # robot2_quat = self.data.xquat[self.robot_2_rover_id]
-        # robot2_orientation = self.quaternion_to_yaw(robot2_quat)
-
-        # print(robot2_orientation)
+        obs_dim = 15 
         
-        target_pos = np.array(self.target_position_x_y) 
-        target_rel = target_pos - robot2_pos  
-        target_distance = np.linalg.norm(target_rel) 
-        target_angle = np.arctan2(target_rel[1], target_rel[0]) 
-
-        robot1_pos = self.data.xpos[self.robot_1_rover_id][:2]  
-        robot1_rel = robot1_pos - robot2_pos  
-        robot1_distance = np.linalg.norm(robot1_rel)  
-        robot1_angle = np.arctan2(robot1_rel[1], robot1_rel[0])  
-
-        walls = {
-            "left": -3.0,   
-            "right": 3.0,   
-            "front": 3.0,   
-            "back": -3.0    
-        }
-        wall_distances = np.array([
-            robot2_pos[0] - walls["left"],   
-            walls["right"] - robot2_pos[0],  
-            robot2_pos[1] - walls["back"],   
-            walls["front"] - robot2_pos[1]   
-        ])
-
-        placing_place_1_pos = np.array([2.8, 1.0])  
-        placing_1_rel = placing_place_1_pos - robot2_pos
-        placing_1_distance = np.linalg.norm(placing_1_rel)
-        # placing_1_angle = np.arctan2(placing_1_rel[1], placing_1_rel[0])
-
-        placing_place_2_pos = np.array([2.8, -1.0])
-        placing_2_rel = placing_place_2_pos - robot2_pos
-        placing_2_distance = np.linalg.norm(placing_2_rel)
-        # placing_2_angle = np.arctan2(placing_2_rel[1], placing_2_rel[0])
-
-        
-        max_position = 3.0     
-        max_speed = 2.0        
-        max_distance = 9     
-        
-        observation = np.concatenate([
-            robot2_pos / max_position,                
-            # robot2_vel / max_speed, 
-            # [robot2_orientation / np.pi],
-
-            target_pos / max_position,               
-            [target_distance / max_distance,           
-            target_angle / np.pi],                   
-            
-
-            robot1_pos / max_position,               
-            [robot1_distance / max_distance,          
-            robot1_angle / np.pi],                 
-            
-            wall_distances / max_distance,            
-
-            placing_place_1_pos / max_position,       
-            [placing_1_distance / max_distance],      
-            
-            placing_place_2_pos / max_position,       
-            [placing_2_distance / max_distance]       
+        obs_low = np.array([
+            -1.0, -1.0,     # robot2_pos (归一化后)
+            -2.0, -2.0,     # robot1_rel (可能超出归一化范围)
+            0.0,            # robot1_distance
+            -1.0, -1.0,     # robot1_angle_sin/cos
+            0.0, 0.0, 0.0, 0.0,  # wall_distances
+            -2.0, -2.0,     # nearest_place_rel
+            0.0,            # nearest_place_distance
         ], dtype=np.float32)
+        
+        obs_high = np.array([
+            1.0, 1.0,       # robot2_pos
+            2.0, 2.0,       # robot1_rel
+            1.0,            # robot1_distance
+            1.0, 1.0,       # robot1_angle_sin/cos
+            1.0, 1.0, 1.0, 1.0,  # wall_distances
+            2.0, 2.0,       # nearest_place_rel
+            1.0,            # nearest_place_distance
+        ], dtype=np.float32)
+        
+        observation_space = gym.spaces.Box(
+            low=obs_low, 
+            high=obs_high, 
+            dtype=np.float32
+        )
+        
+        # 🎯 目标空间（2D位置坐标）
+        goal_space = gym.spaces.Box(
+            low=np.array([-3.0, -3.0], dtype=np.float32),
+            high=np.array([3.0, 3.0], dtype=np.float32),
+            dtype=np.float32
+        )
+        
+        # 🎯 组合为Dict观察空间
+        self.observation_space = gym.spaces.Dict({
+            "observation": observation_space,
+            "achieved_goal": goal_space,
+            "desired_goal": goal_space
+        })
 
-        return observation
+    def _get_obs(self):
+        """HER兼容的Dict格式观察空间"""
+        
+        robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
+        target_pos = np.array(self.target_position_x_y)
+        robot1_pos = self.data.xpos[self.robot_1_rover_id][:2]
+        
+        # 🎯 计算环境观察（不包含目标相关信息）
+        robot1_rel = robot1_pos - robot2_pos
+        robot1_distance = np.linalg.norm(robot1_rel)
+        robot1_angle = np.arctan2(robot1_rel[1], robot1_rel[0])
+        robot1_angle_sin = np.sin(robot1_angle)
+        robot1_angle_cos = np.cos(robot1_angle)
+        
+        # 墙壁距离
+        walls = {"left": -3.0, "right": 3.0, "front": 3.0, "back": -3.0}
+        wall_distances = np.array([
+            robot2_pos[0] - walls["left"],
+            walls["right"] - robot2_pos[0],
+            robot2_pos[1] - walls["back"],
+            walls["front"] - robot2_pos[1]
+        ])
+        
+        # 放置点信息
+        placing_place_1_pos = np.array([2.8, 1.0])
+        placing_place_2_pos = np.array([2.8, -1.0])
+        
+        dist1 = np.linalg.norm(placing_place_1_pos - robot2_pos)
+        dist2 = np.linalg.norm(placing_place_2_pos - robot2_pos)
+        
+        if dist1 < dist2:
+            nearest_place_distance = dist1
+            nearest_place_rel = placing_place_1_pos - robot2_pos
+        else:
+            nearest_place_distance = dist2
+            nearest_place_rel = placing_place_2_pos - robot2_pos
+        
+
+        max_position = 3.0
+        max_distance = 8.5
+
+        observation = np.concatenate([
+            robot2_pos / max_position,                    # 机器人2位置 (2维)
+            robot1_rel / max_position,                    # 机器人1相对位置 (2维)
+            [robot1_distance / max_distance],             # 机器人1距离 (1维)
+            [robot1_angle_sin, robot1_angle_cos],         # 机器人1角度 (2维)
+            wall_distances / max_distance,                # 墙壁距离 (4维)
+            nearest_place_rel / max_position,             # 最近放置点相对位置 (2维)
+            [nearest_place_distance / max_distance],      # 最近放置点距离 (1维)
+        ], dtype=np.float32)
+        
+        obs_dict = {
+            "observation": observation,                    # 环境状态（15维）
+            "achieved_goal": robot2_pos.astype(np.float32),  # 当前位置作为已达成目标
+            "desired_goal": target_pos.astype(np.float32)    # 目标位置作为期望目标
+        }
+        
+        return obs_dict
+
+    def compute_reward(self, achieved_goal, desired_goal, info):
+        distance = np.linalg.norm(achieved_goal - desired_goal, axis=-1)
+
+        success_threshold = 0.2
+
+        reward = -(distance > success_threshold).astype(np.float32)
+        
+        return reward
 
     def render(self):
         if not hasattr(self, "viewer") or self.viewer is None:
@@ -394,38 +450,26 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
 
         dist_to_target = np.linalg.norm(robot_2_rover_pos - self.target_position_x_y)
-        # target_reward = -(abs(robot_2_rover_pos[0] - self.target_position_x_y[0]) + abs(robot_2_rover_pos[1] - self.target_position_x_y[1]))
-        # target_reward = (self.prev_dist - dist_to_target) * 100
-        # if target_reward < 0:
-        #     target_reward -= 0.01 * self.current_step / 1000 
-        # else:
-        #     target_reward += 0.01 * self.current_step / 1000
-        
-        # orientation_progress_reward = self.calculate_orientation_progress_reward(robot2_orientation)
-        # orientation_progress_reward = self.calculate_orientation_reward(robot2_orientation, dist_to_target)
 
         progress_reward = 0
         if self.prev_dist is not None:
             progress_amount = (self.prev_dist - dist_to_target) * 100
             
-            
-            # if dist_to_target > 4.0:
-            #     coefficient = 2.0      
-            # elif dist_to_target > 3.0:
-            #     coefficient = 3.0      
-            # elif dist_to_target > 2.0:
-            #     coefficient = 4.0     
-            # elif dist_to_target > 1.0:
-            #     coefficient = 5.0      
-            # elif dist_to_target > 0.5:
-            #     coefficient = 6.0      
-            # elif dist_to_target > 0.2:
-            #     coefficient = 8.0      
-            # else:
-            #     coefficient = 10.0     # 保持10.0
+            if dist_to_target > 4.0:
+                coefficient = 2.0      
+            elif dist_to_target > 3.0:
+                coefficient = 3.0      
+            elif dist_to_target > 2.0:
+                coefficient = 4.0     
+            elif dist_to_target > 1.0:
+                coefficient = 5.0      
+            elif dist_to_target > 0.5:
+                coefficient = 6.0      
+            elif dist_to_target > 0.2:
+                coefficient = 8.0      
+            else:
+                coefficient = 10.0    
 
-            coefficient = 1.0
-            
             progress = progress_amount * coefficient
             
             if progress > 0:
@@ -437,10 +481,6 @@ class SecondRobotMuJoCoEnv(gym.Env):
         robot_distance = self.get_robot_distance()
         safety_reward = self.calculate_safety_reward(robot_distance)
 
-        # crushed = False
-        # if safety_reward == -5000 :
-        #     crushed = True
-
         time_penalty = -0.3
 
         arrival_bonus = 0
@@ -450,9 +490,6 @@ class SecondRobotMuJoCoEnv(gym.Env):
             arrival_bonus = 30000
 
         total_reward = progress_reward + safety_reward + arrival_bonus + time_penalty
-        # total_reward = target_reward + time_penalty + arrival_bonus
-
-        # print(f"Robot2 Position: {robot_2_rover_pos}, Distance to Target: {dist_to_target:.2f}, ")
 
         self.prev_dist = dist_to_target
 
@@ -463,8 +500,6 @@ class SecondRobotMuJoCoEnv(gym.Env):
         reward = -(abs(robot_2_rover_pos[0] - self.target_position_x_y[0]) + abs(robot_2_rover_pos[1] - self.target_position_x_y[1])) * 0.1
 
         reached = (dist_to_target < 0.2)
-        # if reached:
-        #     reward += 1000
 
         return reward, reached
 
@@ -502,7 +537,6 @@ class SecondRobotMuJoCoEnv(gym.Env):
             if is_robot1_involved and is_robot2_involved:
                 geom1_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom1_id)
                 geom2_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom2_id)
-                # print(f"🚨 ROBOT-ROBOT COLLISION: {geom1_name} <-> {geom2_name}")
                 return True
         
         return False

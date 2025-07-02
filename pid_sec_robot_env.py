@@ -7,7 +7,6 @@ import threading
 from util_threads.object_remover import remove_object_on_plane
 from util_threads.object_placer import place_object_on_table
 from config.env_config import FiniteState
-import random
 
 ACTION_SPACE_REDUCTION = 13  # Number of actuators to be reduced from the action space
 
@@ -46,9 +45,8 @@ class SecondRobotMuJoCoEnv(gym.Env):
         self.robot_2_rover_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
         
         # self.target_area_geom_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "placingplace1:low_plane")
-        # self.target_position_x_y = [-1, -1.7] 
-        self.target_positions = [[0, 2], [-0.3, 1], [-0.5, 0]]
-        self.target_position_x_y = random.choice(self.target_positions)
+        self.target_position_x_y = [-1, -1.7] 
+        # self.target_position_x_y = [2, -2] 
 
         obs = self._get_obs()
         # print("Observation shape:", obs.shape)
@@ -67,7 +65,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
             dtype=np.float32
         )
 
-        self.max_steps = 5000
+        self.max_steps = 8000
         self.current_step = 0
         self.initial_qpos = np.copy(self.data.qpos)
         self.initial_qvel = np.copy(self.data.qvel)
@@ -146,8 +144,6 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
 
-        self.target_position_x_y = random.choice(self.target_positions)
-
         if self.shared_state["stop"] is False:
             self.shared_state["stop"] = True
             while self.shared_state["stopped"] is False:
@@ -196,10 +192,10 @@ class SecondRobotMuJoCoEnv(gym.Env):
         robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]  # Get only the first two coordinates (x, y)
         # print(robot_2_rover_pos)
         reward, reached = self.reward_function(robot_2_rover_pos)
-        # reward, reached = self.simple_reward_function(robot_2_rover_pos)
+        
 
-        static_penalty = self.calculate_static_penalty(action, robot_2_rover_pos)
-        reward += static_penalty
+        # static_penalty = self.calculate_static_penalty(action, robot_2_rover_pos)
+        # reward += static_penalty
 
         truncated = False
         if self.check_robot_forbidden_collision():
@@ -409,29 +405,27 @@ class SecondRobotMuJoCoEnv(gym.Env):
             progress_amount = (self.prev_dist - dist_to_target) * 100
             
             
-            # if dist_to_target > 4.0:
-            #     coefficient = 2.0      
-            # elif dist_to_target > 3.0:
-            #     coefficient = 3.0      
-            # elif dist_to_target > 2.0:
-            #     coefficient = 4.0     
-            # elif dist_to_target > 1.0:
-            #     coefficient = 5.0      
-            # elif dist_to_target > 0.5:
-            #     coefficient = 6.0      
-            # elif dist_to_target > 0.2:
-            #     coefficient = 8.0      
-            # else:
-            #     coefficient = 10.0     # 保持10.0
-
-            coefficient = 1.0
+            if dist_to_target > 4.0:
+                coefficient = 2.0      
+            elif dist_to_target > 3.0:
+                coefficient = 3.0      
+            elif dist_to_target > 2.0:
+                coefficient = 4.0     
+            elif dist_to_target > 1.0:
+                coefficient = 5.0      
+            elif dist_to_target > 0.5:
+                coefficient = 6.0      
+            elif dist_to_target > 0.2:
+                coefficient = 8.0      
+            else:
+                coefficient = 10.0     # 保持10.0
             
             progress = progress_amount * coefficient
             
             if progress > 0:
                 progress_reward = progress
             else:
-                progress_reward = progress * 1.0
+                progress_reward = progress * 0.5
 
 
         robot_distance = self.get_robot_distance()
@@ -445,9 +439,9 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         arrival_bonus = 0
 
-        reached = (dist_to_target < 0.2)
+        reached = (dist_to_target < 0.1)
         if reached:
-            arrival_bonus = 30000
+            arrival_bonus = 200000
 
         total_reward = progress_reward + safety_reward + arrival_bonus + time_penalty
         # total_reward = target_reward + time_penalty + arrival_bonus
@@ -460,11 +454,11 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
     def simple_reward_function(self, robot_2_rover_pos):
         dist_to_target = np.linalg.norm(robot_2_rover_pos - self.target_position_x_y)
-        reward = -(abs(robot_2_rover_pos[0] - self.target_position_x_y[0]) + abs(robot_2_rover_pos[1] - self.target_position_x_y[1])) * 0.1
+        reward = -(abs(robot_2_rover_pos[0] - self.target_position_x_y[0]) + abs(robot_2_rover_pos[1] - self.target_position_x_y[1]))
 
-        reached = (dist_to_target < 0.2)
-        # if reached:
-        #     reward += 1000
+        reached = (dist_to_target < 0.1)
+        if reached:
+            reward += 1000
 
         return reward, reached
 
@@ -479,11 +473,11 @@ class SecondRobotMuJoCoEnv(gym.Env):
         if robot_distance < 0.8:     # Collision
             return 0            # Large penalty
         elif robot_distance < 1.0:   # Danger zone
-            return 0.2             # Medium penalty  
+            return 0.5             # Medium penalty  
         # elif robot_distance < 2.0: 
         #     return 1               
         else:                        # Safe zone
-            return 0.3
+            return 1
 
     def check_robot_robot_collision(self):
         """Directly detect collisions between two robots"""
@@ -521,7 +515,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
                     penalty -= min((self.static_counter - 50) * 0.05, -5) 
             else:
                 self.static_counter = max(0, self.static_counter - 3)  
-                penalty += 0.05 
+                penalty += 0.5 
         
         self.prev_position = current_pos.copy()
         
