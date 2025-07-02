@@ -359,12 +359,13 @@ class SecondRobotMuJoCoEnv(gym.Env):
         real_action = self.low_bounds + (normalized_action + 1) * (self.high_bounds - self.low_bounds) / 2
 
         terminated = False
+        truncated = False
         self.first_robot_controller.step(self.shared_state["current_object_position"])
         self.data.ctrl[ACTION_SPACE_REDUCTION:ACTION_SPACE_REDUCTION+len(real_action)] = real_action
         status = self.first_robot_controller.get_status()
         if self.shared_state["current_object_index"] >= len(self.object_joint_ids) and status == FiniteState.IDLE:
             print("All objects have been placed. Exit")
-            terminated = True
+            truncated = True
             self.finished = True
 
         mujoco.mj_step(self.model, self.data)
@@ -398,7 +399,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
             terminated = True
             reward -= 10000
 
-        truncated = False
+        
         if not np.all(np.isfinite(self.data.qacc)) or np.any(np.abs(self.data.qacc) > 1e7):
             print("QACC error detected! Simulation unstable, exiting loop.")
             truncated = True

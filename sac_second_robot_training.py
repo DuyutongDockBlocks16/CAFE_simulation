@@ -43,7 +43,7 @@ def approach_model_training(env, load_model_path=None):
     )
     
     combined_callback = CallbackList([
-        RenderCallback(env),
+        # RenderCallback(env),
         SuccessCheckpointCallback("./checkpoints"),
         episode_collector
     ])
@@ -73,15 +73,15 @@ def approach_model_training(env, load_model_path=None):
             learning_rate=1e-3,
             gamma=0.95,
             batch_size=256,
-            learning_starts=6000,  # 🔄 确保大于max_episode_length
+            learning_starts=9000,  # 🔄 确保大于max_episode_length
             policy_kwargs=dict(net_arch=[256, 256, 256]),
             tensorboard_log="./her_sac_logs/"  # 🔄 添加tensorboard日志
         )
         loaded_steps = 0
 
     # 🎯 训练配置
-    save_interval = 50_000  # 每50K步保存一次
-    total_additional_steps = 100_000_000  # 总额外训练步数（100M步）
+    save_interval = 500_000  # 每50K步保存一次
+    total_additional_steps = 80_000_000  # 总额外训练步数（80M步）
 
     print(f"🚀 Starting HER-SAC training...")
     print(f"   Algorithm: HER + SAC")
