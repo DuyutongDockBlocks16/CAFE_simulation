@@ -9,7 +9,7 @@ import numpy as np
 import random
 
 def get_data_and_model():
-    model = mujoco.MjModel.from_xml_path("scene_mirobot.xml")
+    model = mujoco.MjModel.from_xml_path("xml/scene_mirobot.xml")
     data = mujoco.MjData(model)
     time_step = 0.005
     model.opt.timestep = time_step  
