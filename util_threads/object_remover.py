@@ -17,8 +17,24 @@ def remove_object_on_plane(model, data, plane_positions, plane_radius, plane_z, 
         delay = random.uniform(min_delay, max_delay)
         def remove():
             data.qpos[qpos_adr+2] = -100
+            data.qpos[qpos_adr+3:qpos_adr+7] = [1, 0, 0, 0]
             print(f"{joint_name} removed from plane after {delay:.2f}s")
         threading.Timer(delay, remove).start()
+
+    def schedule_removal(self, object_id, qpos_adr, joint_name, 
+                    min_delay_steps=150, max_delay_steps=300):
+        """安排物体移除"""
+        delay_steps = random.randint(min_delay_steps, max_delay_steps)
+        target_step = self.step_count + delay_steps
+        
+        self.pending_removals[object_id] = {
+            'target_step': target_step,
+            'qpos_adr': qpos_adr,
+            'joint_name': joint_name
+        }
+        
+        delay_time = delay_steps * self.model.opt.timestep
+        print(f"🕐 {joint_name} will be removed at step {target_step} (in {delay_steps} steps, ~{delay_time:.2f}s)")
 
     while True:
         for i, joint_id in object_joint_ids:
@@ -36,5 +52,6 @@ def remove_object_on_plane(model, data, plane_positions, plane_radius, plane_z, 
                 print(f"{joint_name} is on plane, removing...")
                 removed_ids.add(i)
                 delayed_remove(data, qpos_adr, joint_name)
+                # schedule_removal(i, qpos_adr, joint_name)
 
         time.sleep(check_interval)

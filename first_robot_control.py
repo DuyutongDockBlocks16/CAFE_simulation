@@ -90,9 +90,9 @@ def first_robot_controller(model_and_data:dict):
 
         while True:
             print(f"Current object index: {shared_state['current_object_index']}")
-            if shared_state["current_object_index"] >= len(object_joint_ids):
-                print("All objects have been placed. Exit")
-                break
+            # if shared_state["current_object_index"] >= len(object_joint_ids):
+            #     print("All objects have been placed. Exit")
+            #     break
 
             if np.allclose(shared_state["current_object_position"], left_object_position):
                 controller.origin_position_to_picking_position(direction_flag = Direction.LEFT, render_flag = True)

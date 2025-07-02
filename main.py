@@ -3,6 +3,7 @@ import mujoco.viewer
 from mirobot_controller import MirobotController, Direction, Layer, FiniteState
 from util_threads.object_remover import remove_object_on_plane
 from util_threads.object_placer import place_object_on_table
+from util_threads.object_remover_step_counter import remove_object_on_plane_with_step_counter
 import threading
 import time
 import numpy as np
@@ -34,8 +35,14 @@ def start_object_remover_threads(model, data, object_joint_ids):
     lower_plane_radius = 0.23
     lower_plane_z = 0.23
 
+    # threading.Thread(
+    #     target=remove_object_on_plane,
+    #     args=(model, data, lower_plane_positions, lower_plane_radius, lower_plane_z, object_joint_ids),
+    #     daemon=True
+    # ).start()
+
     threading.Thread(
-        target=remove_object_on_plane,
+        target=remove_object_on_plane_with_step_counter,
         args=(model, data, lower_plane_positions, lower_plane_radius, lower_plane_z, object_joint_ids),
         daemon=True
     ).start()
@@ -45,8 +52,14 @@ def start_object_remover_threads(model, data, object_joint_ids):
     upper_plane_radius = 0.15
     upper_plane_z = 0.43
 
+    # threading.Thread(
+    #     target=remove_object_on_plane,
+    #     args=(model, data, upper_plane_positions, upper_plane_radius, upper_plane_z, object_joint_ids),
+    #     daemon=True
+    # ).start()
+
     threading.Thread(
-        target=remove_object_on_plane,
+        target=remove_object_on_plane_with_step_counter,
         args=(model, data, upper_plane_positions, upper_plane_radius, upper_plane_z, object_joint_ids),
         daemon=True
     ).start()

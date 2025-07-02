@@ -57,7 +57,7 @@ def approach_model_training(env, load_model_path=None):
     )
     
     combined_callback = CallbackList([
-        RenderCallback(env),
+        # RenderCallback(env),
         SuccessCheckpointCallback("./checkpoints"),
         episode_collector
     ])
@@ -100,9 +100,9 @@ def approach_model_training(env, load_model_path=None):
                     tensorboard_log="./ppo_logs/")  # Log save path
         loaded_steps = 0
 
-    save_interval = 50_000 
+    save_interval = 500_000 
     # total_additional_steps = 1_600_000_000
-    total_additional_steps = 100_000_000
+    total_additional_steps = 80_000_000
     
     print(f"🚀 Starting training...")
     print(f"   Additional steps: {total_additional_steps:,}")

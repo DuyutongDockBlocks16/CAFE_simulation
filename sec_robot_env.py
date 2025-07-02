@@ -6,6 +6,7 @@ from mirobot_controller import MirobotController
 import threading
 from util_threads.object_remover import remove_object_on_plane
 from util_threads.object_placer import place_object_on_table
+from util_threads.object_remover_step_counter import remove_object_on_plane_with_step_counter
 from config.env_config import FiniteState
 import random
 
@@ -47,7 +48,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
         
         # self.target_area_geom_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "placingplace1:low_plane")
         # self.target_position_x_y = [-1, -1.7] 
-        self.target_positions = [[0, 2], [-0.3, 1], [-0.5, 0]]
+        self.target_positions = [[2, -2], [-2, -2]]
         self.target_position_x_y = random.choice(self.target_positions)
 
         obs = self._get_obs()
@@ -67,7 +68,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
             dtype=np.float32
         )
 
-        self.max_steps = 5000
+        self.max_steps = 8000
         self.current_step = 0
         self.initial_qpos = np.copy(self.data.qpos)
         self.initial_qvel = np.copy(self.data.qvel)
@@ -143,29 +144,204 @@ class SecondRobotMuJoCoEnv(gym.Env):
         self.init_dist = None
         self.static_counter = 0
         self.max_static_steps = 400 
+        self.finished = True
+        self.robot2_joint_indices = self._get_robot2_joint_indices()
+        self.robot2_initial_qpos = {}
+        self.robot2_initial_qvel = {}
+        self.robot2_initial_ctrl = {}
+        self._store_robot2_initial_states()
+
+
+    def _get_robot2_joint_indices(self):
+        """根据您的XML获取robot2相关的所有关节索引"""
+        
+        # 🤖 根据您的XML文件定义的robot2关节名称
+        robot2_joint_names = [
+            # 底盘主关节（自由关节）
+            "robot2:centroid",
+            
+            # 车轮驱动关节
+            "robot2:r-l-drive-hinge",        # 后左轮驱动
+            "robot2:r-r-drive-hinge",        # 后右轮驱动
+            "robot2:f-l-drive-hinge-1",      # 前左轮驱动1
+            "robot2:f-l-drive-hinge-2",      # 前左轮驱动2
+            "robot2:f-r-drive-hinge-1",      # 前右轮驱动1
+            "robot2:f-r-drive-hinge-2",      # 前右轮驱动2
+            
+            # 转向关节
+            "robot2:ghost-steer-hinge",      # 虚拟转向
+            "robot2:f-l-steer-hinge",        # 前左轮转向
+            "robot2:f-r-steer-hinge",        # 前右轮转向
+            
+            # 机械臂关节
+            "robot2:Joint1",                 # 机械臂关节1
+            "robot2:Joint2",                 # 机械臂关节2
+            "robot2:Joint3",                 # 机械臂关节3
+            "robot2:Joint4",                 # 机械臂关节4
+            "robot2:Joint5",                 # 机械臂关节5
+            # 注意：Joint6在XML中被注释掉了，所以不包含
+        ]
+        
+        joint_indices = {
+            'qpos': [],
+            'qvel': [],
+            'ctrl': []
+        }
+        
+        print("🔍 Identifying robot2 joint indices from XML...")
+        
+        for joint_name in robot2_joint_names:
+            try:
+                joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+                
+                # 获取qpos索引范围
+                qpos_adr = self.model.jnt_qposadr[joint_id]
+                joint_type = self.model.jnt_type[joint_id]
+                
+                if joint_type == mujoco.mjtJoint.mjJNT_FREE:
+                    # 自由关节：7个qpos (位置3 + 四元数4)
+                    qpos_indices = list(range(qpos_adr, qpos_adr + 7))
+                    qvel_indices = list(range(self.model.jnt_dofadr[joint_id], self.model.jnt_dofadr[joint_id] + 6))
+                    print(f"  ✅ {joint_name} (FREE): qpos[{qpos_adr}:{qpos_adr+7}], qvel[{self.model.jnt_dofadr[joint_id]}:{self.model.jnt_dofadr[joint_id]+6}]")
+                elif joint_type == mujoco.mjtJoint.mjJNT_HINGE:
+                    # 铰链关节：1个qpos
+                    qpos_indices = [qpos_adr]
+                    qvel_indices = [self.model.jnt_dofadr[joint_id]]
+                    print(f"  ✅ {joint_name} (HINGE): qpos[{qpos_adr}], qvel[{self.model.jnt_dofadr[joint_id]}]")
+                elif joint_type == mujoco.mjtJoint.mjJNT_SLIDE:
+                    # 滑动关节：1个qpos
+                    qpos_indices = [qpos_adr]
+                    qvel_indices = [self.model.jnt_dofadr[joint_id]]
+                    print(f"  ✅ {joint_name} (SLIDE): qpos[{qpos_adr}], qvel[{self.model.jnt_dofadr[joint_id]}]")
+                else:
+                    print(f"  ⚠️ {joint_name}: Unknown joint type {joint_type}")
+                    continue
+                
+                joint_indices['qpos'].extend(qpos_indices)
+                joint_indices['qvel'].extend(qvel_indices)
+                
+            except Exception as e:
+                print(f"  ❌ {joint_name}: Not found ({e})")
+                continue
+        
+        # 🎯 获取robot2的执行器索引（基于您的XML actuator定义）
+        robot2_actuator_names = [
+            "robot2:Joint1",              # 机械臂执行器
+            "robot2:Joint2",
+            "robot2:Joint3", 
+            "robot2:Joint4",
+            "robot2:Joint5",
+            "robot2:drive",               # 后轮差速驱动
+            "robot2:ghost-steer"          # 转向控制
+        ]
+        
+        print("\n🔍 Identifying robot2 actuator indices...")
+        for actuator_name in robot2_actuator_names:
+            try:
+                actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, actuator_name)
+                joint_indices['ctrl'].append(actuator_id)
+                print(f"  ✅ {actuator_name}: actuator_id={actuator_id}")
+            except Exception as e:
+                print(f"  ❌ {actuator_name}: Not found ({e})")
+                continue
+        
+        print(f"\n🎯 Robot2 joint mapping summary:")
+        print(f"   qpos indices: {len(joint_indices['qpos'])} elements - {joint_indices['qpos']}")
+        print(f"   qvel indices: {len(joint_indices['qvel'])} elements - {joint_indices['qvel']}")
+        print(f"   ctrl indices: {len(joint_indices['ctrl'])} elements - {joint_indices['ctrl']}")
+    
+        return joint_indices
+
+    def _store_robot2_initial_states(self):
+
+        mujoco.mj_forward(self.model, self.data)
+        
+        # 存储qpos
+        for idx in self.robot2_joint_indices['qpos']:
+            if idx < len(self.data.qpos):
+                self.robot2_initial_qpos[idx] = self.data.qpos[idx]
+            else:
+                print(f"  ⚠️ qpos index {idx} out of range")
+        
+        # 存储qvel
+        for idx in self.robot2_joint_indices['qvel']:
+            if idx < len(self.data.qvel):
+                self.robot2_initial_qvel[idx] = self.data.qvel[idx]
+            else:
+                print(f"  ⚠️ qvel index {idx} out of range")
+        
+        # 存储ctrl
+        for idx in self.robot2_joint_indices['ctrl']:
+            if idx < len(self.data.ctrl):
+                self.robot2_initial_ctrl[idx] = self.data.ctrl[idx]
+            else:
+                print(f"  ⚠️ ctrl index {idx} out of range")
+
+    def reset_robot2_only(self):
+        """只重置robot2的状态"""
+        
+        print("🔄 Resetting robot2 states only...")
+        
+        # 🎯 重置robot2的qpos
+        reset_count = 0
+        for idx, initial_value in self.robot2_initial_qpos.items():
+            if idx < len(self.data.qpos):
+                self.data.qpos[idx] = initial_value
+                reset_count += 1
+            else:
+                print(f"  ⚠️ qpos index {idx} out of range during reset")
+        print(f"   qpos: {reset_count} values reset")
+        
+        # 🎯 重置robot2的qvel
+        reset_count = 0
+        for idx, initial_value in self.robot2_initial_qvel.items():
+            if idx < len(self.data.qvel):
+                self.data.qvel[idx] = initial_value
+                reset_count += 1
+            else:
+                print(f"  ⚠️ qvel index {idx} out of range during reset")
+        print(f"   qvel: {reset_count} values reset")
+        
+        # 🎯 重置robot2的ctrl
+        reset_count = 0
+        for idx, initial_value in self.robot2_initial_ctrl.items():
+            if idx < len(self.data.ctrl):
+                self.data.ctrl[idx] = initial_value
+                reset_count += 1
+            else:
+                print(f"  ⚠️ ctrl index {idx} out of range during reset")
+        print(f"   ctrl: {reset_count} values reset")
+        
+        # 🎯 确保状态同步
+        mujoco.mj_forward(self.model, self.data)
+        
+        print("✅ Robot2 reset complete")
 
     def reset(self, seed=None, options=None):
 
         self.target_position_x_y = random.choice(self.target_positions)
 
-        if self.shared_state["stop"] is False:
-            self.shared_state["stop"] = True
-            while self.shared_state["stopped"] is False:
-                pass
-            self.shared_state = {"current_object_index": None, "current_object_position": None, "stop": False, "stopped": False}
+        if self.finished:       
+            if self.shared_state["stop"] is False:
+                self.shared_state["stop"] = True
+                # while self.shared_state["stopped"] is False:
+                #     pass
+                self.shared_state = {"current_object_index": None, "current_object_position": None, "stop": False, "stopped": False}
+ 
+            self.data.qpos[:] = self.initial_qpos
+            self.data.qvel[:] = self.initial_qvel
+            self.data.ctrl[:] = self.initial_ctrl
 
-        self.data.qpos[:] = self.initial_qpos
-        self.data.qvel[:] = self.initial_qvel
-        self.data.ctrl[:] = self.initial_ctrl
+            self.start_object_placer_thread(self.model, self.data, self.object_joint_ids, self.left_object_position, self.right_object_position, self.shared_state)
 
-        self.start_object_placer_thread(self.model, self.data, self.object_joint_ids, self.left_object_position, self.right_object_position, self.shared_state)
+            self.first_robot_controller.set_state(FiniteState.IDLE)
+            self.first_robot_controller.reset_all_joints()
 
-        self.first_robot_controller.set_state(FiniteState.IDLE)
-        self.first_robot_controller.reset_all_joints()
+            mujoco.mj_forward(self.model, self.data)
+            self.finished = False
 
-        mujoco.mj_forward(self.model, self.data)
-        # self.shared_state = {"current_object_index": None, "current_object_position": None, "stop": False}
-        # self.start_object_placer_thread(self.model, self.data, self.object_joint_ids, self.left_object_position, self.right_object_position, self.shared_state)
+        if not self.finished:
+            self.reset_robot2_only()
 
         self.current_step = 0
 
@@ -189,6 +365,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
         if self.shared_state["current_object_index"] >= len(self.object_joint_ids) and status == FiniteState.IDLE:
             print("All objects have been placed. Exit")
             terminated = True
+            self.finished = True
 
         mujoco.mj_step(self.model, self.data)
 
@@ -201,20 +378,15 @@ class SecondRobotMuJoCoEnv(gym.Env):
         static_penalty = self.calculate_static_penalty(action, robot_2_rover_pos)
         reward += static_penalty
 
-        truncated = False
         if self.check_robot_forbidden_collision():
             print("Robot collision with forbidden area detected! Terminating episode.")
             reward -= 20000
-            truncated = True
+            terminated = True
 
         if self.check_robot_robot_collision():
             print("Robot-robot collision detected! Terminating episode.")
             reward -= 20000
-            truncated = True
-
-        if not np.all(np.isfinite(self.data.qacc)) or np.any(np.abs(self.data.qacc) > 1e7):
-            print("QACC error detected! Simulation unstable, exiting loop.")
-            truncated = True
+            terminated = True
 
         if reached:
             print("Robot2 has reached the target area! Terminating episode.")
@@ -223,9 +395,15 @@ class SecondRobotMuJoCoEnv(gym.Env):
         self.current_step += 1
 
         if self.current_step >= self.max_steps:
-            truncated = True
+            terminated = True
             reward -= 10000
-        
+
+        truncated = False
+        if not np.all(np.isfinite(self.data.qacc)) or np.any(np.abs(self.data.qacc) > 1e7):
+            print("QACC error detected! Simulation unstable, exiting loop.")
+            truncated = True
+            self.finished = True
+            
         info = {}
         return obs, reward, terminated, truncated, info
 
@@ -326,8 +504,14 @@ class SecondRobotMuJoCoEnv(gym.Env):
         lower_plane_radius = 0.23
         lower_plane_z = 0.23
 
+        # threading.Thread(
+        #     target=remove_object_on_plane,
+        #     args=(model, data, lower_plane_positions, lower_plane_radius, lower_plane_z, object_joint_ids),
+        #     daemon=True
+        # ).start()
+
         threading.Thread(
-            target=remove_object_on_plane,
+            target=remove_object_on_plane_with_step_counter,
             args=(model, data, lower_plane_positions, lower_plane_radius, lower_plane_z, object_joint_ids),
             daemon=True
         ).start()
@@ -337,8 +521,14 @@ class SecondRobotMuJoCoEnv(gym.Env):
         upper_plane_radius = 0.15
         upper_plane_z = 0.43
 
+        # threading.Thread(
+        #     target=remove_object_on_plane,
+        #     args=(model, data, upper_plane_positions, upper_plane_radius, upper_plane_z, object_joint_ids),
+        #     daemon=True
+        # ).start()
+
         threading.Thread(
-            target=remove_object_on_plane,
+            target=remove_object_on_plane_with_step_counter,
             args=(model, data, upper_plane_positions, upper_plane_radius, upper_plane_z, object_joint_ids),
             daemon=True
         ).start()
@@ -409,22 +599,22 @@ class SecondRobotMuJoCoEnv(gym.Env):
             progress_amount = (self.prev_dist - dist_to_target) * 100
             
             
-            # if dist_to_target > 4.0:
-            #     coefficient = 2.0      
-            # elif dist_to_target > 3.0:
-            #     coefficient = 3.0      
-            # elif dist_to_target > 2.0:
-            #     coefficient = 4.0     
-            # elif dist_to_target > 1.0:
-            #     coefficient = 5.0      
-            # elif dist_to_target > 0.5:
-            #     coefficient = 6.0      
-            # elif dist_to_target > 0.2:
-            #     coefficient = 8.0      
-            # else:
-            #     coefficient = 10.0     # 保持10.0
+            if dist_to_target > 4.0:
+                coefficient = 2.0      
+            elif dist_to_target > 3.0:
+                coefficient = 3.0      
+            elif dist_to_target > 2.0:
+                coefficient = 4.0     
+            elif dist_to_target > 1.0:
+                coefficient = 5.0      
+            elif dist_to_target > 0.5:
+                coefficient = 6.0      
+            elif dist_to_target > 0.2:
+                coefficient = 8.0      
+            else:
+                coefficient = 10.0     # 保持10.0
 
-            coefficient = 1.0
+            # coefficient = 1.0
             
             progress = progress_amount * coefficient
             

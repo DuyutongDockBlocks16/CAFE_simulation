@@ -1,2 +1,3 @@
 from .object_placer import place_object_on_table
 from .object_remover import remove_object_on_plane
+from .object_remover_step_counter import remove_object_on_plane_with_step_counter

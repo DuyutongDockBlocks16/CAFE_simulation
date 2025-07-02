@@ -494,7 +494,7 @@ class MirobotController:
                 self.state = FiniteState.PLACING_AT_LAYER
                 self.placing_layer = random.choices(
                     [Layer.LOWER, Layer.UPPER],
-                    weights=[0.5, 0.5] 
+                    weights=[1.0, 0.0] 
                 )[0]
                 # self.placing_layer = Layer.UPPER
         elif self.state == FiniteState.PRE_PLACING_POSITION_TO_PLACING_POSITION and self.placing_position == Direction.RIGHT: 
@@ -503,7 +503,7 @@ class MirobotController:
                 self.state = FiniteState.PLACING_AT_LAYER
                 self.placing_layer = random.choices(
                     [Layer.LOWER, Layer.UPPER],
-                    weights=[0.5, 0.5] 
+                    weights=[1.0, 0.0] 
                 )[0]  
                 # self.placing_layer = Layer.UPPER
         elif self.state == FiniteState.PLACING_AT_LAYER and self.placing_layer == Layer.LOWER:

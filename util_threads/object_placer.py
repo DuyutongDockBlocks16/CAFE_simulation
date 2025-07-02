@@ -61,10 +61,15 @@ def place_object_on_table(model, data, left_object_position, right_object_positi
                 if i >= len(object_joint_ids):
                     print("All objects placed, THREAD EXIT")
                     return  
+                    # print("All objects placed, resetting index to 0")
+                    # i = 0
                 _, object_joint_id = object_joint_ids[i]
                 qpos_adr = model.jnt_qposadr[object_joint_id]
                 obj_pos = data.qpos[qpos_adr : qpos_adr+3]
                 placed_flag = False
+
+        # if i == len(object_joint_ids):
+        #     i = 0
 
         time.sleep(check_interval)
 
