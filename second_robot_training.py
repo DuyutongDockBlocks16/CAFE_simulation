@@ -19,7 +19,9 @@ import numpy as np
 gym.register(
     id="SecondRobotMuJoCoEnv-v0",
     entry_point="sec_robot_env:SecondRobotMuJoCoEnv",
-    kwargs={"xml_path": "xml/scene_mirobot.xml"}
+    kwargs={
+        "xml_path": "xml/scene_mirobot.xml",
+    }
 )
 
 # def approach_model_training(env):
@@ -157,7 +159,10 @@ def approach_model_training(env, load_model_path=None):
 def make_env(rank, seed=0):
     """Factory function to create environment"""
     def _init():
-        env = gym.make("SecondRobotMuJoCoEnv-v0")
+        env = gym.make(
+            "SecondRobotMuJoCoEnv-v0",
+            action_repeat=4
+            )
         env.reset(seed=seed + rank)
         return env
     set_random_seed(seed)
@@ -520,8 +525,8 @@ def test_multiple_targets(model, env, test_targets, tests_per_target=3):
 
 if __name__ == "__main__":
     approach_env = gym.make("SecondRobotMuJoCoEnv-v0")
-    # approach_model_training(approach_env, load_model_path=APPROACHING_MODEL_NAME)
-    approach_model_training(approach_env)
+    approach_model_training(approach_env, load_model_path=APPROACHING_MODEL_NAME)
+    # approach_model_training(approach_env)
     # continue_training_from_10000K()
     # approach_model_training_parallel()
     # continue_training_with_backup()
