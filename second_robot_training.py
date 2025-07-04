@@ -59,7 +59,7 @@ def approach_model_training(env, load_model_path=None):
     )
     
     combined_callback = CallbackList([
-        # RenderCallback(env),
+        RenderCallback(env),
         SuccessCheckpointCallback("./checkpoints"),
         episode_collector
     ])
@@ -168,43 +168,123 @@ def make_env(rank, seed=0):
     set_random_seed(seed)
     return _init
 
-def approach_model_training_parallel():
-    # Create 4 parallel environments
-    num_envs = 4
+def approach_model_training_parallel(load_model_path=None, num_envs=8):
+    """使用并行环境的训练函数"""
+    
+    # 🎯 创建并行环境
     env = SubprocVecEnv([make_env(i) for i in range(num_envs)])
     env = VecMonitor(env)
     
-    # Create a PPO model
-    model = PPO("MlpPolicy", env, verbose=1,
-                learning_rate=3e-4,
-                n_steps=512,        # 512 steps per environment
-                batch_size=64,      # Batch size
-                tensorboard_log="./ppo_logs/")
-
-    save_interval = 50_000     
-    total_steps = 20_000_000
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = f"./logs/episode_data_{timestamp}.jsonl"
     
-    # Training loop
-    num_iterations = total_steps // save_interval  
+    episode_collector = EpisodeBatchCollector(
+        output_file=output_file,
+        batch_size=5,
+        verbose=1
+    )
+    
+    combined_callback = CallbackList([
+        # SuccessCheckpointCallback("./checkpoints"),
+        episode_collector
+    ])
+    
+    if load_model_path is not None:
+        if not os.path.exists(load_model_path):
+            print(f"❌ Model {load_model_path} not found!")
+            return
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_name = f"backup_{timestamp}_{os.path.basename(load_model_path)}"
+        os.system(f"cp {load_model_path} {backup_name}")
+        print(f"📁 Created backup: {backup_name}")
+
+        # 🎯 加载模型到并行环境
+        model = PPO.load(load_model_path, env=env)
+        print(f"✅ Successfully loaded model from: {load_model_path}")
+        print(f"🔄 Using {num_envs} parallel environments")
+        
+        model.tensorboard_log = f"./ppo_logs/continued_parallel_{timestamp}/"
+        
+        import re
+        match = re.search(r'(\d+)K', load_model_path)
+        if match:
+            loaded_steps = int(match.group(1)) * 1000
+            print(f"   Continuing from approximately {loaded_steps:,} steps")
+        else:
+            loaded_steps = 0
+            
+    else:
+        print("🆕 Creating new PPO model with parallel environments...")
+        print(f"🔄 Using {num_envs} parallel environments")
+        
+        model = PPO("MlpPolicy", env, verbose=1, 
+                    learning_rate=3e-4,     
+                    n_steps=2048,           # 🎯 调整为并行环境合适的值
+                    batch_size=256,          
+                    n_epochs=10,            
+                    ent_coef=0.02,          
+                    clip_range=0.2,          
+                    gae_lambda=0.95,         
+                    vf_coef=0.5,            
+                    tensorboard_log="./ppo_logs/")
+        loaded_steps = 0
+
+    # 🎯 调整训练参数适应并行环境
+    save_interval = 100_000
+    total_additional_steps = 20_000_000
+    
+    print(f"🚀 Starting parallel training...")
+    print(f"   Parallel environments: {num_envs}")
+    print(f"   Steps per environment per interval: {save_interval // num_envs:,}")
+    print(f"   Total additional steps: {total_additional_steps:,}")
+    print(f"   Save interval: {save_interval:,} steps")
+    
+    num_iterations = total_additional_steps // save_interval
     
     for i in range(num_iterations):
         print(f"\n--- Parallel Training Progress: {i+1}/{num_iterations} ---")
         
-        # 50K steps will be distributed to 4 environments, 12.5K steps each
-        model.learn(total_timesteps=save_interval,
+        model.learn(total_timesteps=save_interval,      
+                   callback=combined_callback, 
                    reset_num_timesteps=False)
         
-        current_steps = (i + 1) * save_interval
-        model_name = f"ppo_mujoco_parallel_{current_steps // 1000}K"
-        model.save(model_name)
-        print(f"💾 Saved: {model_name}.zip ({current_steps:,} total steps)")
+        current_total_steps = loaded_steps + (i + 1) * save_interval
         
-        if current_steps % 1_000_000 == 0:
-            millions = current_steps // 1_000_000
-            print(f"🎉 Milestone: Reached {millions}M steps!")
-
+        if load_model_path:
+            model_name = f"ppo_mujoco_parallel_continued_{current_total_steps // 1000}K"
+        else:
+            model_name = f"ppo_mujoco_parallel_{current_total_steps // 1000}K"
+            
+        model.save(model_name)
+        print(f"💾 Saved: {model_name}.zip ({current_total_steps:,} total steps)")
+        
+        if (i + 1) * save_interval % 1_000_000 == 0:
+            millions = current_total_steps // 1_000_000
+            print(f"🎉 Milestone: Reached {millions}M total steps!")
+    
+    # Save final model (moved outside the loop and fixed indentation)
+    final_total_steps = loaded_steps + total_additional_steps
+    if load_model_path:
+        final_model_name = f"ppo_mujoco_parallel_continued_{final_total_steps // 1000}K_final"
+    else:
+        final_model_name = f"ppo_mujoco_parallel_{final_total_steps // 1000}K_final"
+    
+    model.save(final_model_name)
+    print(f"\n🎊 ============ PARALLEL TRAINING COMPLETED! ============")
+    print(f"📊 Training Summary:")
+    print(f"   Parallel environments: {num_envs}")
+    if load_model_path:
+        print(f"   Original model: {load_model_path}")
+        print(f"   Starting steps: {loaded_steps:,}")
+    else:
+        print(f"   Training type: New model from scratch")
+        print(f"   Starting steps: 0")
+    print(f"   Additional steps: {total_additional_steps:,}")
+    print(f"   Final total steps: {final_total_steps:,}")
+    print(f"   Final model: {final_model_name}.zip")
+    
     env.close()
-    print(f"\n🎊 Parallel training completed! Total steps: {total_steps:,}")
 
 def continue_training_with_backup():
     """Continue training with backup - using 4 parallel environments"""
@@ -526,32 +606,10 @@ def test_multiple_targets(model, env, test_targets, tests_per_target=3):
 if __name__ == "__main__":
     approach_env = gym.make("SecondRobotMuJoCoEnv-v0")
     # approach_model_training(approach_env, load_model_path=APPROACHING_MODEL_NAME)
-    approach_model_training(approach_env)
+    # approach_model_training(approach_env)
     # continue_training_from_10000K()
-    # approach_model_training_parallel()
+    approach_model_training_parallel()
+    # approach_model_training_parallel(load_model_path=APPROACHING_MODEL_NAME)
     # continue_training_with_backup()
     # approach_model_implementation(approach_env)
     # fine_tuned_model = model_fine_tune(approach_env, APPROACHING_MODEL_NAME)
-
-# if __name__ == "__main__":
-#     approach_env = gym.make("SecondRobotMuJoCoEnv-v0")
-    
-#     #  Using trained model for generalization training
-#     existing_model_path = "original_place_to_another_corner.zip"  # Your trained model
-    
-#     if os.path.exists(existing_model_path):
-#         print(" Starting generalization training...")
-#         generalized_model = approach_model_training_generalization(
-#             approach_env, existing_model_path
-#         )
-        
-#         # Final test
-#         print("\n Final generalization ability test:")
-#         final_targets = [[2, -2], [2.2, -1.8], [1.5, 1.5], [0, 0], [2.5, -1.5]]
-#         final_results = test_multiple_targets(generalized_model, approach_env, final_targets, tests_per_target=10)
-        
-#         avg_final_success = np.mean(list(final_results.values()))
-#         print(f"🎊 Final average generalization success rate: {avg_final_success:.1%}")
-        
-#     else:
-#         print(f"❌ Model file not found: {existing_model_path}")

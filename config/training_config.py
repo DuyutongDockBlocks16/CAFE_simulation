@@ -1,3 +1,3 @@
-APPROACHING_MODEL_NAME = "ppo_mujoco_car_8000K.zip"
+APPROACHING_MODEL_NAME = "ppo_mujoco_parallel_6500K.zip"
 
 SUCCESS_THRESHOLD = 10000

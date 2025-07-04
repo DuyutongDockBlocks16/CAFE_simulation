@@ -52,7 +52,7 @@ def place_object_on_table(model, data, left_object_position, right_object_positi
             # check if there is any another object at the near of next_object_position
             # if there is, then use continue to skip current loop
             if is_another_object_near(model, data, next_object_position[:2]):
-                print(f"Another object is near {next_object_position}, skipping placement")
+                # print(f"Another object is near {next_object_position}, skipping placement")
                 continue
             # if there is not, then update the next_object_position
             else:

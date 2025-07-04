@@ -391,7 +391,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         terminated = False
         truncated = False
-        self.first_robot_controller.step(self.shared_state["current_object_position"])
+        # self.first_robot_controller.step(self.shared_state["current_object_position"])
         self.data.ctrl[ACTION_SPACE_REDUCTION:ACTION_SPACE_REDUCTION+len(real_action)] = real_action
         status = self.first_robot_controller.get_status()
         if self.shared_state["current_object_index"] >= len(self.object_joint_ids) and status == FiniteState.IDLE:
