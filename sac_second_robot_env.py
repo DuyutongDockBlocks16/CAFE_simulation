@@ -13,8 +13,13 @@ import random
 ACTION_SPACE_REDUCTION = 13  # Number of actuators to be reduced from the action space
 
 class SacSecondRobotMuJoCoEnv(gym.Env):
-    def __init__(self, xml_path):
+    def __init__(self, xml_path, action_repeat=4):
         super().__init__()
+
+        self.action_repeat = action_repeat
+        if self.action_repeat > 1:
+            print(f"🔄 Action Repeat enabled: {self.action_repeat}")
+
         self.model = mujoco.MjModel.from_xml_path(xml_path)
         self.data = mujoco.MjData(self.model)
 

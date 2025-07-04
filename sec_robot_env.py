@@ -13,8 +13,13 @@ import random
 ACTION_SPACE_REDUCTION = 13  # Number of actuators to be reduced from the action space
 
 class SecondRobotMuJoCoEnv(gym.Env):
-    def __init__(self, xml_path):
+    def __init__(self, xml_path, action_repeat=4):
         super().__init__()
+
+        self.action_repeat = action_repeat
+        if self.action_repeat > 1:
+            print(f"🔄 Action Repeat enabled: {self.action_repeat}")
+
         self.model = mujoco.MjModel.from_xml_path(xml_path)
         self.data = mujoco.MjData(self.model)
 
@@ -334,7 +339,10 @@ class SecondRobotMuJoCoEnv(gym.Env):
             self.first_robot_controller.set_state(FiniteState.IDLE)
             self.first_robot_controller.reset_all_joints()
 
+            self.current_world_step = 0
+
             mujoco.mj_forward(self.model, self.data)
+            self.current_world_step = 0
             self.finished = False
 
         if not self.finished:
@@ -353,7 +361,31 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         return self._get_obs(), {}
 
-    def step(self, action):  
+    def step(self, action):
+        """带有action repeat的step方法"""
+        if self.action_repeat == 1:
+            # 如果action_repeat=1，使用原始step逻辑
+            return self._original_step(action)
+        else:
+            # 如果action_repeat>1，重复执行action
+            total_reward = 0
+            terminated = False
+            truncated = False
+            final_obs = None
+            final_info = {}
+            
+            for _ in range(self.action_repeat):
+                obs, reward, terminated, truncated, info = self._original_step(action)
+                total_reward += reward
+                final_obs = obs
+                final_info.update(info)
+                
+                if terminated or truncated:
+                    break
+            
+            return final_obs, total_reward, terminated, truncated, final_info
+
+    def _original_step(self, action):  
         normalized_action = np.clip(action, -1, 1)
         real_action = self.low_bounds + (normalized_action + 1) * (self.high_bounds - self.low_bounds) / 2
 
@@ -380,12 +412,12 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         if self.check_robot_forbidden_collision():
             print("Robot collision with forbidden area detected! Terminating episode.")
-            reward -= 4000
+            reward -= 2000
             terminated = True
 
         if self.check_robot_robot_collision():
             print("Robot-robot collision detected! Terminating episode.")
-            reward -= 5000
+            reward -= 2500
             terminated = True
 
         if reached:
@@ -393,6 +425,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
             terminated = True
 
         self.current_step += 1
+        self.current_world_step += 1
 
         if self.current_step >= self.max_steps:
             terminated = True
@@ -401,6 +434,11 @@ class SecondRobotMuJoCoEnv(gym.Env):
         
         if not np.all(np.isfinite(self.data.qacc)) or np.any(np.abs(self.data.qacc) > 1e7):
             print("QACC error detected! Simulation unstable, exiting loop.")
+            truncated = True
+            self.finished = True
+        
+        if self.current_world_step >= 500000:
+            print("Maximum world steps reached! Terminating episode.")
             truncated = True
             self.finished = True
             

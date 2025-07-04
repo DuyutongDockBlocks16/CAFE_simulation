@@ -525,8 +525,8 @@ def test_multiple_targets(model, env, test_targets, tests_per_target=3):
 
 if __name__ == "__main__":
     approach_env = gym.make("SecondRobotMuJoCoEnv-v0")
-    approach_model_training(approach_env, load_model_path=APPROACHING_MODEL_NAME)
-    # approach_model_training(approach_env)
+    # approach_model_training(approach_env, load_model_path=APPROACHING_MODEL_NAME)
+    approach_model_training(approach_env)
     # continue_training_from_10000K()
     # approach_model_training_parallel()
     # continue_training_with_backup()

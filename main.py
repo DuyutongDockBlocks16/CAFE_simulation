@@ -99,7 +99,7 @@ def main():
     with mujoco.viewer.launch_passive(model, data) as viewer:
         controller = MirobotController(model, data, left_object_position, right_object_position)
         
-
+        step = 0
         while True:
             status = controller.get_status()
             # print(f"Current object index: {shared_state['current_object_index']}")
@@ -110,11 +110,13 @@ def main():
             controller.step(shared_state["current_object_position"])
 
             mujoco.mj_step(model, data)
+            step += 1
 
             if not np.all(np.isfinite(data.qacc)) or np.any(np.abs(data.qacc) > 1e7):
                 print("QACC error detected! Simulation unstable, exiting loop.")
                 break
 
+            print(f"Step: {step}")
             viewer.sync()
 
         while viewer.is_running():
