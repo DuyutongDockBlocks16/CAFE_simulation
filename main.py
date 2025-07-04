@@ -1,6 +1,7 @@
 import mujoco
 import mujoco.viewer
-from mirobot_controller import MirobotController, Direction, Layer, FiniteState
+from test_controller import MirobotController, Direction, Layer, FiniteState
+# from mirobot_controller import MirobotController, Direction, Layer, FiniteState
 from util_threads.object_remover import remove_object_on_plane
 from util_threads.object_placer import place_object_on_table
 from util_threads.object_remover_step_counter import remove_object_on_plane_with_step_counter
@@ -115,8 +116,7 @@ def main():
             if not np.all(np.isfinite(data.qacc)) or np.any(np.abs(data.qacc) > 1e7):
                 print("QACC error detected! Simulation unstable, exiting loop.")
                 break
-
-            print(f"Step: {step}")
+                
             viewer.sync()
 
         while viewer.is_running():

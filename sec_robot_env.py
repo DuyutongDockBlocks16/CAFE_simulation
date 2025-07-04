@@ -70,7 +70,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
             dtype=np.float32
         )
 
-        self.max_steps = 8000
+        self.max_steps = 5000
         self.current_step = 0
         self.initial_qpos = np.copy(self.data.qpos)
         self.initial_qvel = np.copy(self.data.qvel)
@@ -412,12 +412,12 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         if self.check_robot_forbidden_collision():
             print("Robot collision with forbidden area detected! Terminating episode.")
-            reward -= 2000
+            reward -= 200
             terminated = True
 
         if self.check_robot_robot_collision():
             print("Robot-robot collision detected! Terminating episode.")
-            reward -= 2500
+            reward -= 250
             terminated = True
 
         if reached:
