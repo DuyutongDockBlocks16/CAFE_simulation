@@ -1,3 +1,5 @@
 from .episode_data_collector import EpisodeBatchCollector
 from .success_check_point_saver import SuccessCheckpointCallback
 from .training_renderer import RenderCallback
+from .ent_coefficient_scheduler import EntCoefficientScheduler
+from .learning_rate_scheduler import LearningRateScheduler

@@ -14,7 +14,13 @@ from config.training_config import APPROACHING_MODEL_NAME, SUCCESS_THRESHOLD
 from callbacks.episode_data_collector import EpisodeBatchCollector
 from callbacks.success_check_point_saver import SuccessCheckpointCallback
 from callbacks.training_renderer import RenderCallback
+from callbacks.ent_coefficient_scheduler import EntCoefficientScheduler
+from callbacks.learning_rate_scheduler import LearningRateScheduler
+from utils.mujoco_state_saver import save_mujoco_state_to_file
+from utils.mujoco_state_loader import load_mujoco_state_from_file
 import numpy as np
+import pickle
+import json
 
 gym.register(
     id="SecondRobotMuJoCoEnv-v0",
@@ -24,28 +30,18 @@ gym.register(
     }
 )
 
-# def approach_model_training(env):
-#     # Create PPO model with training parameters
-#     model = PPO("MlpPolicy", env, verbose=1, 
-#                 learning_rate=3e-4,     # Learning rate
-#                 n_steps=2048,           # Collect 2048 steps of experience each time
-#                 batch_size=64,          # Process 64 samples per batch
-#                 tensorboard_log="./ppo_logs/")  # Log save path
-    
+def make_env(rank, seed=0):
+    """Factory function to create environment"""
+    def _init():
+        env = gym.make(
+            "SecondRobotMuJoCoEnv-v0",
+            action_repeat=4
+            )
+        env.reset(seed=seed + rank)
+        return env
+    set_random_seed(seed)
+    return _init
 
-#     save_interval = 50_000 
-#     total_steps = 1_600_000_000
-    
-#     for i in range(total_steps // save_interval):  
-#         model.learn(total_timesteps=save_interval,      
-#                    callback=RenderCallback(env),       # Render callback
-#                    reset_num_timesteps=False)          # Don't reset timestep counter
-        
-#         current_steps = (i + 1) * save_interval
-#         model.save(f"ppo_mujoco_car_{current_steps // 1000}K")
-#         print(f"Saved model at {current_steps:,} steps (ppo_mujoco_car_{current_steps // 1000}K.zip)")
-    
-#     env.close()
 
 def approach_model_training(env, load_model_path=None):
 
@@ -156,22 +152,8 @@ def approach_model_training(env, load_model_path=None):
     
     env.close()
 
-def make_env(rank, seed=0):
-    """Factory function to create environment"""
-    def _init():
-        env = gym.make(
-            "SecondRobotMuJoCoEnv-v0",
-            action_repeat=4
-            )
-        env.reset(seed=seed + rank)
-        return env
-    set_random_seed(seed)
-    return _init
-
 def approach_model_training_parallel(load_model_path=None, num_envs=8):
-    """使用并行环境的训练函数"""
     
-    # 🎯 创建并行环境
     env = SubprocVecEnv([make_env(i) for i in range(num_envs)])
     env = VecMonitor(env)
     
@@ -184,11 +166,6 @@ def approach_model_training_parallel(load_model_path=None, num_envs=8):
         verbose=1
     )
     
-    combined_callback = CallbackList([
-        # SuccessCheckpointCallback("./checkpoints"),
-        episode_collector
-    ])
-    
     if load_model_path is not None:
         if not os.path.exists(load_model_path):
             print(f"❌ Model {load_model_path} not found!")
@@ -199,8 +176,11 @@ def approach_model_training_parallel(load_model_path=None, num_envs=8):
         os.system(f"cp {load_model_path} {backup_name}")
         print(f"📁 Created backup: {backup_name}")
 
-        # 🎯 加载模型到并行环境
         model = PPO.load(load_model_path, env=env)
+
+        model.ent_coef = 0.02
+        model.learning_rate = 1e-4
+
         print(f"✅ Successfully loaded model from: {load_model_path}")
         print(f"🔄 Using {num_envs} parallel environments")
         
@@ -219,59 +199,86 @@ def approach_model_training_parallel(load_model_path=None, num_envs=8):
         print(f"🔄 Using {num_envs} parallel environments")
         
         model = PPO("MlpPolicy", env, verbose=1, 
-                    learning_rate=3e-4,     
-                    n_steps=2048,           # 🎯 调整为并行环境合适的值
-                    batch_size=256,          
-                    n_epochs=10,            
+                    learning_rate=1e-4,     
+                    n_steps=1024,           # 调整为并行环境合适的值
+                    batch_size=128,          
+                    n_epochs=8,            
                     ent_coef=0.02,          
-                    clip_range=0.2,          
+                    clip_range=0.15,          
                     gae_lambda=0.95,         
-                    vf_coef=0.5,            
+                    vf_coef=1.0,            
+                    # max_grad_norm=0.3,
                     tensorboard_log="./ppo_logs/")
         loaded_steps = 0
 
-    # 🎯 调整训练参数适应并行环境
-    save_interval = 100_000
-    total_additional_steps = 20_000_000
+    total_additional_steps = 7_200_000
+
+    ent_scheduler = EntCoefficientScheduler(
+        initial_ent_coef=0.02,         
+        final_ent_coef=0.001,          
+        total_timesteps=total_additional_steps,
+        schedule_type='exponential',    
+        verbose=1
+    )
     
-    print(f"🚀 Starting parallel training...")
+    lr_scheduler = LearningRateScheduler(
+        initial_lr=5e-5,
+        final_lr=1e-5,
+        total_timesteps=total_additional_steps,
+        schedule_type='linear',
+        verbose=1
+    )
+
+    combined_callback = CallbackList([
+        # SuccessCheckpointCallback("./checkpoints"),
+        episode_collector,
+        ent_scheduler,
+    ])
+    
+    print(f"🚀 Starting optimized parallel training...")
     print(f"   Parallel environments: {num_envs}")
-    print(f"   Steps per environment per interval: {save_interval // num_envs:,}")
     print(f"   Total additional steps: {total_additional_steps:,}")
-    print(f"   Save interval: {save_interval:,} steps")
     
-    num_iterations = total_additional_steps // save_interval
+    try:
+        print(f"\n🎯 Starting continuous training for {total_additional_steps:,} steps...")
+        
+        model.learn(
+            total_timesteps=total_additional_steps,      
+            callback=combined_callback, 
+            reset_num_timesteps=False
+        )
+        
+        print(f"\n✅ Training completed successfully!")
+        
+    except KeyboardInterrupt:
+        print(f"\n Training interrupted by user")
+    except Exception as e:
+        print(f"\n Training error: {e}")
+        import traceback
+        traceback.print_exc()
     
-    for i in range(num_iterations):
-        print(f"\n--- Parallel Training Progress: {i+1}/{num_iterations} ---")
-        
-        model.learn(total_timesteps=save_interval,      
-                   callback=combined_callback, 
-                   reset_num_timesteps=False)
-        
-        current_total_steps = loaded_steps + (i + 1) * save_interval
-        
-        if load_model_path:
-            model_name = f"ppo_mujoco_parallel_continued_{current_total_steps // 1000}K"
-        else:
-            model_name = f"ppo_mujoco_parallel_{current_total_steps // 1000}K"
-            
-        model.save(model_name)
-        print(f"💾 Saved: {model_name}.zip ({current_total_steps:,} total steps)")
-        
-        if (i + 1) * save_interval % 1_000_000 == 0:
-            millions = current_total_steps // 1_000_000
-            print(f"🎉 Milestone: Reached {millions}M total steps!")
-    
-    # Save final model (moved outside the loop and fixed indentation)
     final_total_steps = loaded_steps + total_additional_steps
-    if load_model_path:
-        final_model_name = f"ppo_mujoco_parallel_continued_{final_total_steps // 1000}K_final"
-    else:
-        final_model_name = f"ppo_mujoco_parallel_{final_total_steps // 1000}K_final"
     
-    model.save(final_model_name)
-    print(f"\n🎊 ============ PARALLEL TRAINING COMPLETED! ============")
+    if load_model_path:
+        final_model_name = f"final_model_continued_{final_total_steps // 1000}K_{timestamp}"
+    else:
+        final_model_name = f"final_model_{final_total_steps // 1000}K_{timestamp}"
+    
+    try:
+        model.save(final_model_name)
+        print(f"\n💾 ============ MODEL SAVED ============")
+        print(f"📁 Final model: {final_model_name}.zip")
+        print(f"📊 Total training steps: {final_total_steps:,}")
+        print(f"🕒 Training completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        print(f"\n📈 Final training parameters:")
+        print(f"   Learning rate: {model.learning_rate:.2e}")
+        print(f"   Entropy coefficient: {model.ent_coef:.6f}")
+        
+    except Exception as e:
+        print(f"❌ Error saving final model: {e}")
+    
+    print(f"\n🎊 ============ TRAINING COMPLETED! ============")
     print(f"📊 Training Summary:")
     print(f"   Parallel environments: {num_envs}")
     if load_model_path:
@@ -282,334 +289,108 @@ def approach_model_training_parallel(load_model_path=None, num_envs=8):
         print(f"   Starting steps: 0")
     print(f"   Additional steps: {total_additional_steps:,}")
     print(f"   Final total steps: {final_total_steps:,}")
-    print(f"   Final model: {final_model_name}.zip")
+    print(f"   Models saved: 1 (final only)")
     
     env.close()
-
-def continue_training_with_backup():
-    """Continue training with backup - using 4 parallel environments"""
-    # Create 4 parallel environments (consistent with approach_model_training_parallel)
-    num_envs = 4
-    env = SubprocVecEnv([make_env(i) for i in range(num_envs)])
-    
-    try:
-        # Check model file
-        if not os.path.exists(APPROACHING_MODEL_NAME):
-            print(f"❌ Model {APPROACHING_MODEL_NAME} not found!")
-            return
-        
-        # Backup original model
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_name = f"backup_{timestamp}_{APPROACHING_MODEL_NAME}"
-        os.system(f"cp {APPROACHING_MODEL_NAME} {backup_name}")
-        print(f"📁 Created backup: {backup_name}")
-        
-        # Load model (using same environment configuration)
-        model = PPO.load(APPROACHING_MODEL_NAME, env=env)
-        print(f"✅ Loaded {APPROACHING_MODEL_NAME} with 4 parallel environments")
-        
-        # Reset tensorboard log
-        model.tensorboard_log = f"./ppo_logs/experiment_202506121741"
-        
-        # Continue training for 10M steps (10 iterations, 1M steps each)
-        print("🚀 Starting continued training for 10M steps with 4 parallel environments...")
-        
-        for i in range(10):
-            print(f"\n--- Training batch {i+1}/10 ---")
-            model.learn(total_timesteps=1_000_000,      # 1M steps per iteration distributed to 4 environments, 250k steps each
-                       reset_num_timesteps=False)       # Remove tensorboard_log parameter
-            
-            # Save intermediate model every 1M steps
-            intermediate_name = f"ppo_mujoco_parallel_{10+i+1}M"
-            model.save(intermediate_name)
-            print(f"✅ Saved intermediate model: {intermediate_name}.zip")
-        
-        # Display training statistics
-        print("\n📊 Training Summary:")
-        print(f"Parallel environments: {num_envs}")
-        print(f"Original model: {APPROACHING_MODEL_NAME}")
-        print(f"Additional steps: 10,000,000 (2.5M per environment)")
-        print(f"Final model: ppo_mujoco_parallel_20M.zip")
-        print(f"Total training: 20M steps")
-        
-    except Exception as e:
-        print(f"❌ Error: {e}")
-    finally:
-        env.close()
-
-def continue_training_from_10000K():
-    
-    model_to_load = "ppo_mujoco_car_10000K.zip"
-    
-    env = gym.make("SecondRobotMuJoCoEnv-v0")
-    
-    try:
-        if not os.path.exists(model_to_load):
-            print(f"❌ Model {model_to_load} not found!")
-            return
-        
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_name = f"backup_{timestamp}_{model_to_load}"
-        os.system(f"cp {model_to_load} {backup_name}")
-        print(f"📁 Created backup: {backup_name}")
-        
-        model = PPO.load(model_to_load, env=env)
-        print(f"✅ Successfully loaded {model_to_load}")
-        print(f"   Starting from 10,000K (10M) steps")
-        
-        model.tensorboard_log = f"./ppo_logs/continued_from_10000K_{timestamp}/"
-        
-        save_interval = 50_000      
-        total_additional_steps = 5_000_000  
-        starting_step_count = 10_000_000    
-        
-        print(f"🚀 Continuing training from 10M steps...")
-        print(f"   Additional steps: {total_additional_steps:,}")
-        print(f"   Save interval: {save_interval:,} steps")
-        print(f"   Final target: {starting_step_count + total_additional_steps:,} steps")
-        
-        num_iterations = total_additional_steps // save_interval  
-        
-        for i in range(num_iterations):
-            print(f"\n--- Continuing Training Progress: {i+1}/{num_iterations} ---")
-            
-            model.learn(total_timesteps=save_interval,
-                       callback=RenderCallback(env),
-                       reset_num_timesteps=False) 
-            
-            current_total_steps = starting_step_count + (i + 1) * save_interval
-            model_name = f"ppo_mujoco_car_{current_total_steps // 1000}K"
-            model.save(model_name)
-            
-            print(f"💾 Saved: {model_name}.zip ({current_total_steps:,} total steps)")
-            
-            if (i + 1) * save_interval % 1_000_000 == 0:
-                millions = (current_total_steps) // 1_000_000
-                print(f"🎉 Milestone: Reached {millions}M total steps!")
-        
-        final_steps = starting_step_count + total_additional_steps
-        final_model_name = f"ppo_mujoco_car_{final_steps // 1000}K_final"
-        model.save(final_model_name)
-        
-        print(f"\n🎊 ============ CONTINUED TRAINING COMPLETED! ============")
-        print(f"📊 Training Summary:")
-        print(f"   Original model: {model_to_load}")
-        print(f"   Starting steps: {starting_step_count:,}")
-        print(f"   Additional steps: {total_additional_steps:,}")
-        print(f"   Final total steps: {final_steps:,}")
-        print(f"   Final model: {final_model_name}.zip")
-        print(f"   Models saved: {num_iterations + 1}")
-        
-    except Exception as e:
-        print(f"❌ Error during continued training: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        env.close()
 
 def approach_model_implementation(env):
-    model = PPO.load(APPROACHING_MODEL_NAME, env=env)
+    """
+    加载训练好的模型并演示其性能
+    """
+    # 🎯 加载PPO模型
+    ppo_model = PPO.load(APPROACHING_MODEL_NAME, env=env)
+    print(f"✅ Loaded PPO model: {APPROACHING_MODEL_NAME}")
+    
     obs, info = env.reset()
-
+    print("🎬 Starting model demonstration...")
+    
+    # 🎯 渲染环境
     env.render()
-    sleep(15)
-
-    for _ in range(200000000000):
-        env.render()  # Render at every step
-        action, _ = model.predict(obs, deterministic=True)
-        obs, reward, terminated, truncated, info = env.step(action)
-        if terminated or truncated:
-            # obs, info = env.reset()
-            env.unwrapped.data.ctrl[:] = 0
-            mujoco.mj_step(env.unwrapped.model, env.unwrapped.data)  
-            break
-
-    model = env.unwrapped.model
-    data = env.unwrapped.data
-
+    sleep(2)  # 给观察者时间
+    
+    episode_count = 0
+    max_episodes = 1  # 限制演示回合数
+    
+    while episode_count < max_episodes:
+        print(f"\n🎯 Episode {episode_count + 1}/{max_episodes}")
+        
+        step_count = 0
+        max_steps_per_episode = 10000  # 每回合最大步数
+        
+        while step_count < max_steps_per_episode:
+            env.render()
+            
+            # 🎯 使用训练好的模型预测动作
+            action, _ = ppo_model.predict(obs, deterministic=True)
+            obs, reward, terminated, truncated, info = env.step(action)
+            
+            step_count += 1
+            
+            # 🎯 打印有用信息
+            if step_count % 500 == 0:
+                print(f"   Step {step_count}, Reward: {reward:.2f}")
+            
+            # 🎯 检查回合结束条件
+            if terminated or truncated:
+                print(f"   Episode ended after {step_count} steps")
+                print(f"   Final reward: {reward:.2f}")
+                print(f"   Terminated: {terminated}, Truncated: {truncated}")
+                env.unwrapped.data.ctrl[:] = 0
+                mujoco.mj_step(env.unwrapped.model, env.unwrapped.data)
+                save_mujoco_state_to_file(env.unwrapped.model, env.unwrapped.data)
+                # 重置环境开始新回合
+                # obs, info = env.reset()
+                break
+        
+        episode_count += 1
+        
+        if episode_count < max_episodes:
+            print("   🔄 Starting next episode in 3 seconds...")
+            sleep(3)
+    
+    print("🎬 Demonstration completed!")
+    
+    mujoco_model = env.unwrapped.model
+    mujoco_data = env.unwrapped.data
+    
+    if hasattr(env.unwrapped, "viewer") and env.unwrapped.viewer is not None:
+        env.unwrapped.viewer.close()
     env.close()
-
-    # sleep 1s 
-    # sleep(10)
-
-    # with mujoco.viewer.launch_passive(model, data) as viewer:
-    #     print("Press ESC to exit viewer...")
-    #     last_time = time.time()
-    #     frame_count = 0
-    #     while viewer.is_running():
-    #         mujoco.mj_step(model, data)
-    #         viewer.sync()
-    #         frame_count += 1
-    #         now = time.time()
-    #         if now - last_time >= 1.0:
-    #             # print(f"Simulated FPS: {frame_count}")
-    #             frame_count = 0
-    #             last_time = now
-
-def model_fine_tune(env, load_model_path=None):
-    model = PPO.load(
-        load_model_path,
-        env = env,
-        ent_coef = 0.0005,
-        clip_range = 0.05
-    )
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = f"./logs/episode_data_{timestamp}.jsonl"
     
-    episode_collector = EpisodeBatchCollector(
-        output_file=output_file,
-        batch_size=5,
-        verbose=1
-    )
-
-    combined_callback = CallbackList([
-        # RenderCallback(env),
-        SuccessCheckpointCallback("./fine_tune_checkpoints"),
-        episode_collector
-    ]) 
-
-    model.learn(
-        total_timesteps=20_000_000,
-        # total_timesteps=200_000,
-        reset_num_timesteps=False,  
-        tb_log_name="fine_tuning", 
-        callback=combined_callback
-    )
-
-    model.save("best_model.zip")
-
-def approach_model_training_generalization(env, load_model_path):
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = f"./logs/episode_data_{timestamp}.jsonl"
+    print("🔍 Launching passive viewer...")
+    sleep(2)
     
-    episode_collector = EpisodeBatchCollector(
-        output_file=output_file,
-        batch_size=5,
-        verbose=1
-    )
-
-    combined_callback = CallbackList([
-        RenderCallback(env),
-        SuccessCheckpointCallback("./fine_tune_checkpoints"),
-        episode_collector
-    ]) 
-    
-    # Load existing model
-    model = PPO.load(load_model_path, env=env)
-    model.learning_rate = 2e-4  # 🎯 Lower learning rate to protect learned knowledge
-    model.ent_coef = 0.02       # 🎯 Increase exploration to adapt to new targets
-    
-    # Extract trained steps
-    import re
-    match = re.search(r'(\d+)K', load_model_path)
-    loaded_steps = int(match.group(1)) * 1000 if match else 0
-
-    # Target position list
-    target_positions = [
-        [2, -2],        # Original target
-        [2.2, -1.8],    # Slight offset
-        [1.8, -2.2],    # Slight offset
-        [2.5, -1.5],    # Medium offset
-        [1.5, -2.5],    # Medium offset
-        [2, -1.5],      # Y-axis offset
-        [1.5, -2],      # X-axis offset
-        [1.5, 1.5],     # Different quadrant
-        [2, 1],         # Upper target
-        [0, 0],         # Center target
-    ]
-    
-    save_interval = 50_000
-    total_additional_steps = 100_000_000  # 100M steps for generalization training
-    num_iterations = total_additional_steps // save_interval
-    
-    target_change_interval = 10  # Change target every 10 iterations
-    
-    print(f"  Starting generalization training...")
-    print(f"   Base model: {load_model_path}")
-    print(f"   Number of target positions: {len(target_positions)}")
-    print(f"   Training steps: {total_additional_steps:,}")
-    
-    for i in range(num_iterations):
-        #  Periodically change target position
-        if i % target_change_interval == 0:
-            current_target = target_positions[i // target_change_interval % len(target_positions)]
-            env.unwrapped.target_position_x_y = current_target
-            print(f"\n Switching target to: {current_target}")
+    # 🎯 启动被动查看器
+    with mujoco.viewer.launch_passive(mujoco_model, mujoco_data) as viewer:
+        print("🎮 Passive viewer launched!")
+        print("   - Press ESC to exit viewer")
+        print("   - Use mouse to rotate view")
+        print("   - Use scroll to zoom")
         
-        print(f"\n--- Generalization training progress: {i+1}/{num_iterations} ---")
-        print(f"   Current target: {env.unwrapped.target_position_x_y}")
+        last_time = time.time()
+        frame_count = 0
         
-        model.learn(total_timesteps=save_interval, 
-                   callback=combined_callback, 
-                   reset_num_timesteps=False)
-        
-        current_total_steps = loaded_steps + (i + 1) * save_interval
-        
-        #  Test generalization ability every 20 iterations
-        if i % 20 == 0 and i > 0:
-            print(f"\n🔍 Generalization ability test:")
-            generalization_results = test_multiple_targets(model, env, target_positions[:5])
-            avg_success = np.mean(list(generalization_results.values()))
-            print(f"   Average success rate: {avg_success:.1%}")
+        while viewer.is_running():
+            # 🎯 运行物理仿真
+            mujoco.mj_step(mujoco_model, mujoco_data)
+            viewer.sync()
             
-            if avg_success < 0.4:
-                print("⚠️ Generalization ability declining, adjusting training parameters...")
-                model.learning_rate *= 0.8
-                model.ent_coef = min(0.1, model.ent_coef * 1.5)
-        
-        # Save model
-        model_name = f"generalized_model_{current_total_steps // 1000}K"
-        model.save(model_name)
-        print(f"💾 Saved: {model_name}.zip")
-    
-    # Restore original target
-    env.unwrapped.target_position_x_y = [2, -2]
-    
-    return model
-
-def test_multiple_targets(model, env, test_targets, tests_per_target=3):
-    """Test performance on multiple target positions"""
-
-    results = {}
-    original_target = env.unwrapped.target_position_x_y.copy()
-    
-    for target in test_targets:
-        env.unwrapped.target_position_x_y = target
-        successes = 0
-        
-        for _ in range(tests_per_target):
-            obs, _ = env.reset()
+            frame_count += 1
+            current_time = time.time()
             
-            for step in range(5000):
-                action, _ = model.predict(obs, deterministic=True)
-                obs, reward, done, truncated, _ = env.step(action)
-                
-                if reward > 1000:
-                    successes += 1
-                    break
-                    
-                if done or truncated:
-                    break
-        
-        success_rate = successes / tests_per_target
-        results[str(target)] = success_rate
-        print(f"   Target {target}: {success_rate:.1%}")
-
-    # Restore original target
-    env.unwrapped.target_position_x_y = original_target
+            # 🎯 每秒显示一次FPS
+            if current_time - last_time >= 5.0:  # 每5秒显示一次
+                fps = frame_count / (current_time - last_time)
+                print(f"📊 Simulation FPS: {fps:.1f}")
+                frame_count = 0
+                last_time = current_time
     
-    return results
-
+    print("✅ Viewer closed. Implementation demo finished!")
 
 if __name__ == "__main__":
     approach_env = gym.make("SecondRobotMuJoCoEnv-v0")
     # approach_model_training(approach_env, load_model_path=APPROACHING_MODEL_NAME)
     # approach_model_training(approach_env)
-    # continue_training_from_10000K()
-    approach_model_training_parallel()
+    # approach_model_training_parallel()
     # approach_model_training_parallel(load_model_path=APPROACHING_MODEL_NAME)
-    # continue_training_with_backup()
-    # approach_model_implementation(approach_env)
-    # fine_tuned_model = model_fine_tune(approach_env, APPROACHING_MODEL_NAME)
+    approach_model_implementation(approach_env)

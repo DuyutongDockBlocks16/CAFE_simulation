@@ -10,7 +10,7 @@ from util_threads.object_remover_step_counter import remove_object_on_plane_with
 from config.env_config import FiniteState
 import random
 
-ACTION_SPACE_REDUCTION = 13  # Number of actuators to be reduced from the action space
+ACTION_SPACE_REDUCTION = 14  # Number of actuators to be reduced from the action space
 
 class SecondRobotMuJoCoEnv(gym.Env):
     def __init__(self, xml_path, action_repeat=4):
@@ -26,7 +26,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
         time_step = 0.005
         self.model.opt.timestep = time_step
 
-        object_ids = self.get_object_ids(self.model)
+        object_ids = self._get_object_ids(self.model)
         self.object_joint_ids = []
         for i in object_ids:
             joint_name = f"object{i}:joint"
@@ -50,8 +50,22 @@ class SecondRobotMuJoCoEnv(gym.Env):
         
         # self.target_area_geom_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "placingplace1:low_plane")
         # self.target_position_x_y = [-1, -1.7] 
-        self.target_positions = [[2, -2], [0, -2]]
+        self.target_positions = [
+                # [2, 2], 
+                # [2, 0],
+                # [2, -2],
+                # [2, 1],
+                # [2, -1],
+                # [0, 2],
+                # [0, 1],
+                [-1, -2.3],
+                # [1, -2.3],
+            ]
         self.target_position_x_y = random.choice(self.target_positions)
+
+        self.robot1_recent_positions = []
+        self.robot2_recent_positions = []
+        self.prediction_steps = 5
 
         obs = self._get_obs()
         # print("Observation shape:", obs.shape)
@@ -100,7 +114,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
             "robot1:link4",         # arm joint 4
             "robot1:link5",         # arm joint 5
             "robot1:link6",         # arm end effector
-            "vacuum_sphere"         # vacuum gripper
+            "robot1:vacuum_sphere"  # vacuum gripper
         ]
 
         self.robot2_bodies = [
@@ -118,7 +132,8 @@ class SecondRobotMuJoCoEnv(gym.Env):
             "robot2:link3",         # arm joint 3
             "robot2:link4",         # arm joint 4
             "robot2:link5",         # arm joint 5
-            "robot2:link6"          # arm end effector
+            "robot2:link6",          # arm end effector
+            "robot2:vacuum_sphere"
         ]
 
         self.robot1_body_ids = []
@@ -141,8 +156,6 @@ class SecondRobotMuJoCoEnv(gym.Env):
         self.robot2_rover_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
         self.safe_distance = 0.8
         self.prev_dist = None
-        self.prev_orientation = None
-        self.target_orientation = -1.5708  # Target orientation in radians (90 degrees)
         self.init_dist = None
         self.static_counter = 0
         self.max_static_steps = 400 
@@ -152,6 +165,502 @@ class SecondRobotMuJoCoEnv(gym.Env):
         self.robot2_initial_qvel = {}
         self.robot2_initial_ctrl = {}
         self._store_robot2_initial_states()
+
+
+
+    def reset_robot2_only(self):
+        """只重置robot2的状态"""
+        
+        print("🔄 Resetting robot2 states only...")
+        
+        # 🎯 重置robot2的qpos
+        reset_count = 0
+        for idx, initial_value in self.robot2_initial_qpos.items():
+            if idx < len(self.data.qpos):
+                self.data.qpos[idx] = initial_value
+                reset_count += 1
+            else:
+                print(f"  ⚠️ qpos index {idx} out of range during reset")
+        print(f"   qpos: {reset_count} values reset")
+        
+        # 🎯 重置robot2的qvel
+        reset_count = 0
+        for idx, initial_value in self.robot2_initial_qvel.items():
+            if idx < len(self.data.qvel):
+                self.data.qvel[idx] = initial_value
+                reset_count += 1
+            else:
+                print(f"  ⚠️ qvel index {idx} out of range during reset")
+        print(f"   qvel: {reset_count} values reset")
+        
+        # 🎯 重置robot2的ctrl
+        reset_count = 0
+        for idx, initial_value in self.robot2_initial_ctrl.items():
+            if idx < len(self.data.ctrl):
+                self.data.ctrl[idx] = initial_value
+                reset_count += 1
+            else:
+                print(f"  ⚠️ ctrl index {idx} out of range during reset")
+        print(f"   ctrl: {reset_count} values reset")
+        
+        # 🎯 确保状态同步
+        mujoco.mj_forward(self.model, self.data)
+        
+        print("✅ Robot2 reset complete")
+
+    def reset(self, seed=None, options=None):
+        self.target_position_x_y = random.choice(self.target_positions)
+        self.robot1_recent_positions = []
+        self.robot2_recent_positions = []  
+
+        if self.finished:     
+            if self.shared_state["stop"] is False:
+                self.shared_state["stop"] = True
+                # while self.shared_state["stopped"] is False:
+                #     pass
+                self.shared_state = {"current_object_index": None, "current_object_position": None, "stop": False, "stopped": False}
+ 
+            self.data.qpos[:] = self.initial_qpos
+            self.data.qvel[:] = self.initial_qvel
+            self.data.ctrl[:] = self.initial_ctrl
+
+            self._start_object_placer_thread(self.model, self.data, self.object_joint_ids, self.left_object_position, self.right_object_position, self.shared_state)
+            self._start_object_remover_threads(self.model, self.data, self.object_joint_ids)
+            self.first_robot_controller.set_state(FiniteState.IDLE)
+            self.first_robot_controller.reset_all_joints()
+
+            self.current_world_step = 0
+
+            mujoco.mj_forward(self.model, self.data)
+            self.current_world_step = 0
+            self.finished = False
+
+        if not self.finished:
+            self.reset_robot2_only()
+
+        self.current_step = 0
+
+        robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id]
+        self.prev_dist = np.linalg.norm(robot_2_rover_pos[0:2] - self.target_position_x_y)
+        self.init_dist = self.prev_dist
+
+        self.prev_position = None
+        self.static_counter = 0
+
+        return self._get_obs(), {}
+
+    def step(self, action):
+        self._update_robot_tracking()
+        """带有action repeat的step方法"""
+        if self.action_repeat == 1:
+            # 如果action_repeat=1，使用原始step逻辑
+            return self._original_step(action)
+        else:
+            # 如果action_repeat>1，重复执行action
+            total_reward = 0
+            terminated = False
+            truncated = False
+            final_obs = None
+            final_info = {}
+            
+            for _ in range(self.action_repeat):
+                obs, reward, terminated, truncated, info = self._original_step(action)
+                total_reward += reward
+                final_obs = obs
+                final_info.update(info)
+                
+                if terminated or truncated:
+                    break
+            
+            return final_obs, total_reward, terminated, truncated, final_info
+
+    def _original_step(self, action):  
+        normalized_action = np.clip(action, -1, 1)
+        real_action = self.low_bounds + (normalized_action + 1) * (self.high_bounds - self.low_bounds) / 2
+
+        terminated = False
+        truncated = False
+        self.first_robot_controller.step(self.shared_state["current_object_position"])
+        self.data.ctrl[ACTION_SPACE_REDUCTION:ACTION_SPACE_REDUCTION+len(real_action)] = real_action
+        status = self.first_robot_controller.get_status()
+        if self.shared_state["current_object_index"] >= len(self.object_joint_ids) and status == FiniteState.IDLE:
+            print("All objects have been placed. Exit")
+            truncated = True
+            self.finished = True
+
+        mujoco.mj_step(self.model, self.data)
+
+        obs = self._get_obs()
+        robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]  # Get only the first two coordinates (x, y)
+
+        reward, reached = self._reward_function(robot_2_rover_pos)
+
+        if self._check_robot_forbidden_collision():
+            print("Robot collision with forbidden area detected! Terminating episode.")
+            reward -= 200
+            terminated = True
+
+        if self._check_robot_robot_collision():
+            print("Robot-robot collision detected! Terminating episode.")
+            reward -= 250
+            terminated = True
+
+        if reached:
+            print("Robot2 has reached the target area! Terminating episode.")
+            terminated = True
+
+        self.current_step += 1
+        self.current_world_step += 1
+
+        if self.current_step >= self.max_steps:
+            terminated = True
+        
+        if not np.all(np.isfinite(self.data.qacc)) or np.any(np.abs(self.data.qacc) > 1e7):
+            print("QACC error detected! Simulation unstable, exiting loop.")
+            truncated = True
+            self.finished = True
+        
+        if self.current_world_step >= 500000:
+            print("Maximum world steps reached! Terminating episode.")
+            truncated = True
+            self.finished = True
+            
+        info = {}
+        return obs, reward, terminated, truncated, info
+
+    def _get_obs(self):
+        max_position = 3.0     
+        max_speed = 2.0        
+        max_distance = 8.0
+        robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]  
+        
+        try:
+            robot2_body_id = self.robot_2_rover_id
+            robot2_vel = self.data.cvel[robot2_body_id][:2]  
+        except:
+            robot2_vel = np.zeros(2)
+        
+        robot2_quat = self.data.xquat[self.robot_2_rover_id]
+        robot2_orientation = self._quaternion_to_yaw(robot2_quat)
+
+        robot1_predicted_trajectory = self._predict_robot1_trajectory()
+        collision_risks, min_distances = self._calculate_collision_risk_timeline(robot2_pos, robot1_predicted_trajectory)
+        
+        trajectory_features = self._extract_trajectory_features(robot1_predicted_trajectory, robot2_pos)
+
+        target_pos = np.array(self.target_position_x_y) 
+        target_rel = target_pos - robot2_pos  
+        target_distance = np.linalg.norm(target_rel) 
+        target_angle = np.arctan2(target_rel[1], target_rel[0])  
+        
+        target_relative_angle = target_angle - robot2_orientation
+        target_relative_angle = np.arctan2(np.sin(target_relative_angle), np.cos(target_relative_angle))  # 标准化到[-π,π]
+        
+        target_rel_normalized = target_rel / max_distance  
+
+        robot1_pos = self.data.xpos[self.robot_1_rover_id][:2]  
+        robot1_rel = robot1_pos - robot2_pos  
+        robot1_distance = np.linalg.norm(robot1_rel)  
+        robot1_angle = np.arctan2(robot1_rel[1], robot1_rel[0])
+        robot1_relative_angle = robot1_angle - robot2_orientation
+        robot1_relative_angle = np.arctan2(np.sin(robot1_relative_angle), np.cos(robot1_relative_angle))
+        robot1_rel_normalized = robot1_rel / max_distance
+
+        # 🎯 墙壁相对位置
+        walls = {"left": -3.0, "right": 3.0, "front": 3.0, "back": -3.0}
+        wall_distances = np.array([
+            robot2_pos[0] - walls["left"],   
+            walls["right"] - robot2_pos[0],  
+            robot2_pos[1] - walls["back"],   
+            walls["front"] - robot2_pos[1]   
+        ])
+
+        # 🎯 放置点相对位置
+        placing_place_1_pos = np.array([2.8, 1.0])  
+        placing_1_rel = placing_place_1_pos - robot2_pos
+        placing_1_distance = np.linalg.norm(placing_1_rel)
+        placing_1_angle = np.arctan2(placing_1_rel[1], placing_1_rel[0]) - robot2_orientation
+        placing_1_angle = np.arctan2(np.sin(placing_1_angle), np.cos(placing_1_angle))
+        placing_1_rel_normalized = placing_1_rel / max_distance
+
+        placing_place_2_pos = np.array([2.8, -1.0])
+        placing_2_rel = placing_place_2_pos - robot2_pos
+        placing_2_distance = np.linalg.norm(placing_2_rel)
+        placing_2_angle = np.arctan2(placing_2_rel[1], placing_2_rel[0]) - robot2_orientation
+        placing_2_angle = np.arctan2(np.sin(placing_2_angle), np.cos(placing_2_angle))
+        placing_2_rel_normalized = placing_2_rel / max_distance
+        
+        observation = np.concatenate([
+            # 🎯 机器人自身状态
+            robot2_pos / max_position,                    # [2] 绝对位置
+            robot2_vel / max_speed,                       # [2] 速度 
+            [robot2_orientation / np.pi],                 # [1] 朝向 
+
+            # 🎯 目标相对信息（增强版）
+            target_rel_normalized,                        # [2] 目标相对位置向量 
+            [target_distance / max_distance],             # [1] 目标距离
+            [target_angle / np.pi],                       # [1] 目标世界角度
+            [target_relative_angle / np.pi],              # [1] 目标相对角度 
+
+            # 🎯 机器人1相对信息（增强版）
+            robot1_rel_normalized,                        # [2] 机器人1相对位置 
+            [robot1_distance / max_distance],             # [1] 机器人1距离
+            [robot1_relative_angle / np.pi],              # [1] 机器人1相对角度 
+
+            trajectory_features,
+
+            [np.max(collision_risks),                     # 最大风险
+             np.mean(collision_risks),                    # 平均风险
+             np.min(min_distances),                       # 最小距离
+             np.argmax(collision_risks) / self.prediction_steps],  # 最危险时刻(归一化)
+            
+            # 🎯 环境相对信息
+            wall_distances / max_distance,                # [4] 墙壁距离
+
+            # 🎯 放置点相对信息（增强版）
+            placing_1_rel_normalized,                     # [2] 放置点1相对位置 
+            [placing_1_distance / max_distance],          # [1] 放置点1距离
+            [placing_1_angle / np.pi],                    # [1] 放置点1相对角度 
+            
+            placing_2_rel_normalized,                     # [2] 放置点2相对位置 
+            [placing_2_distance / max_distance],          # [1] 放置点2距离
+            [placing_2_angle / np.pi],                    # [1] 放置点2相对角度 
+        ], dtype=np.float32)
+
+        return observation
+
+    def _reward_function(self, robot_2_rover_pos):
+
+        robot2_quat = self.data.xquat[self.robot_2_rover_id]
+
+        dist_to_target = np.linalg.norm(robot_2_rover_pos - self.target_position_x_y)
+     
+        progress_reward = 0
+        if self.prev_dist is not None:
+            progress_amount = (self.prev_dist - dist_to_target) * 2000
+
+            coefficient = 1.0
+            
+            progress = progress_amount * coefficient
+            
+            progress_reward = progress
+
+
+        time_penalty = -0.3
+
+        arrival_bonus = 0
+
+        reached = (dist_to_target < 0.15)
+        if reached:
+            arrival_bonus = 2000
+
+        total_reward = progress_reward + time_penalty + arrival_bonus
+
+        self.prev_dist = dist_to_target
+
+        return total_reward, reached
+
+    def _check_robot_forbidden_collision(self):
+        # Check all contact points
+        for i in range(self.data.ncon):
+            contact = self.data.contact[i]
+            geom1_id = contact.geom1
+            geom2_id = contact.geom2
+            
+            # Get body corresponding to geom
+            body1_id = self.model.geom_bodyid[geom1_id]
+            body2_id = self.model.geom_bodyid[geom2_id]
+            
+            # Get geom names
+            geom1_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom1_id)
+            geom2_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom2_id)
+            
+            # Check if robot body collides with forbidden geom
+            if ((body1_id in self.robot2_body_ids and geom2_name in self.forbidden_geoms) or
+                (body2_id in self.robot2_body_ids and geom1_name in self.forbidden_geoms)):
+                return True
+        
+        return False
+
+    def _check_robot_robot_collision(self):
+        """Directly detect collisions between two robots"""
+        for i in range(self.data.ncon):
+            contact = self.data.contact[i]
+            geom1_id = contact.geom1
+            geom2_id = contact.geom2
+            
+            body1_id = self.model.geom_bodyid[geom1_id]
+            body2_id = self.model.geom_bodyid[geom2_id]
+            
+            # Detection logic
+            is_robot1_involved = body1_id in self.robot1_body_ids or body2_id in self.robot1_body_ids
+            is_robot2_involved = body1_id in self.robot2_body_ids or body2_id in self.robot2_body_ids
+            
+            if is_robot1_involved and is_robot2_involved:
+                geom1_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom1_id)
+                geom2_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom2_id)
+                # print(f"🚨 ROBOT-ROBOT COLLISION: {geom1_name} <-> {geom2_name}")
+                return True
+        
+        return False
+
+    def _quaternion_to_yaw(self, quat):
+        w, x, y, z = quat
+        yaw = np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+        return yaw
+
+    def _predict_robot1_trajectory(self):
+        current_pos = self.data.xpos[self.robot_1_rover_id][:2]
+        
+        if len(self.robot1_recent_positions) < 2:
+            # 没有历史数据 -> 静止预测
+            return np.tile(current_pos, (self.prediction_steps, 1))
+        
+        # 🎯 计算速度和加速度
+        velocity = self.robot1_recent_positions[-1] - self.robot1_recent_positions[-2]
+        
+        if len(self.robot1_recent_positions) >= 3:
+            prev_velocity = self.robot1_recent_positions[-2] - self.robot1_recent_positions[-3]
+            acceleration = velocity - prev_velocity
+        else:
+            acceleration = np.zeros(2)
+        
+        # 🎯 运动学预测（适用于所有情况）
+        predicted_positions = []
+        dt = 0.005 * 4
+        
+        for t in range(1, self.prediction_steps + 1):
+            predicted_pos = (current_pos + 
+                            velocity * t * dt + 
+                            0.5 * acceleration * (t * dt) ** 2)
+            predicted_positions.append(predicted_pos)
+        
+        return np.array(predicted_positions)
+
+    def _calculate_collision_risk_timeline(self, robot2_pos, predicted_trajectory):
+        robot2_future_positions = self._predict_robot2_trajectory(robot2_pos)
+        
+        collision_risks = []
+        min_distances = []
+        
+        for t in range(len(predicted_trajectory)):
+            if t < len(robot2_future_positions):
+                distance = np.linalg.norm(predicted_trajectory[t] - robot2_future_positions[t])
+            else:
+                distance = np.linalg.norm(predicted_trajectory[t] - robot2_pos)
+            
+            min_distances.append(distance)
+            
+            if distance < 0.5:  
+                risk = 1.0 - (distance / 0.5)
+            elif distance < 1.0: 
+                risk = 0.5 * (1.0 - (distance - 0.5) / 0.5)
+            else:
+                risk = 0.0
+                
+            collision_risks.append(risk)
+        
+        return np.array(collision_risks), np.array(min_distances)
+
+    def _predict_robot2_trajectory(self, current_pos):
+        if len(self.robot2_recent_positions) >= 2:
+            velocity = self.robot2_recent_positions[-1] - self.robot2_recent_positions[-2]
+        
+            if len(self.robot2_recent_positions) >= 3:
+                prev_velocity = self.robot2_recent_positions[-2] - self.robot2_recent_positions[-3]
+                acceleration = velocity - prev_velocity
+            else:
+                acceleration = np.zeros(2)
+                
+            predicted_positions = []
+            dt = 0.005 * 4
+            
+            for t in range(1, self.prediction_steps + 1):
+                predicted_pos = (current_pos + 
+                            velocity * t * dt + 
+                            0.5 * acceleration * (t * dt) ** 2)
+                predicted_positions.append(predicted_pos)
+            
+            return np.array(predicted_positions)
+
+        return np.tile(current_pos, (self.prediction_steps, 1))
+
+    def _calculate_collision_risk_timeline(self, robot2_pos, predicted_trajectory):
+        robot2_future_positions = self._predict_robot2_trajectory(robot2_pos)
+        
+        collision_risks = []
+        min_distances = []
+        
+        for t in range(len(predicted_trajectory)):
+            if t < len(robot2_future_positions):
+                distance = np.linalg.norm(predicted_trajectory[t] - robot2_future_positions[t])
+            else:
+                distance = np.linalg.norm(predicted_trajectory[t] - robot2_pos)
+            
+            min_distances.append(distance)
+            
+            if distance < 0.5:  # 危险距离
+                risk = 1.0 - (distance / 0.5)
+            elif distance < 1.0:  # 警告距离
+                risk = 0.5 * (1.0 - (distance - 0.5) / 0.5)
+            else:
+                risk = 0.0
+                
+            collision_risks.append(risk)
+        
+        return np.array(collision_risks), np.array(min_distances)
+
+
+    def _extract_trajectory_features(self, predicted_trajectory, robot2_pos):
+        if len(predicted_trajectory) == 0:
+            return np.zeros(8)
+        
+        # 相对于Robot2的轨迹
+        relative_trajectory = predicted_trajectory - robot2_pos
+        
+        # 特征提取
+        start_pos = relative_trajectory[0]                    # 起始相对位置
+        end_pos = relative_trajectory[-1]                     # 结束相对位置
+        
+        # 轨迹方向和长度
+        trajectory_vector = end_pos - start_pos
+        trajectory_length = np.linalg.norm(trajectory_vector)
+        trajectory_direction = trajectory_vector / (trajectory_length + 1e-8)
+        
+        # 轨迹曲率（方向变化）
+        if len(relative_trajectory) > 2:
+            vectors = np.diff(relative_trajectory, axis=0)
+            direction_changes = np.diff(vectors, axis=0)
+            curvature = np.mean(np.linalg.norm(direction_changes, axis=1))
+        else:
+            curvature = 0.0
+        
+        # 最近接近点
+        distances = np.linalg.norm(relative_trajectory, axis=1)
+        min_distance = np.min(distances)
+        closest_time = np.argmin(distances) / len(distances)  # 归一化时间
+        
+        features = np.concatenate([
+            start_pos / 8.0,                    # [2] 起始相对位置
+            trajectory_direction,               # [2] 轨迹主方向
+            [trajectory_length / 8.0],          # [1] 轨迹长度
+            [curvature],                        # [1] 轨迹曲率
+            [min_distance / 8.0],               # [1] 最近距离
+            [closest_time],                     # [1] 最近时刻
+        ])
+        
+        return features
+
+    def _update_robot_tracking(self):
+        robot1_pos = self.data.xpos[self.robot_1_rover_id][:2]
+        self.robot1_recent_positions.append(robot1_pos.copy())
+        if len(self.robot1_recent_positions) > 3:
+            self.robot1_recent_positions.pop(0)
+        
+        robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
+        self.robot2_recent_positions.append(robot2_pos.copy())
+        if len(self.robot2_recent_positions) > 3:
+            self.robot2_recent_positions.pop(0)
 
 
     def _get_robot2_joint_indices(self):
@@ -225,16 +734,15 @@ class SecondRobotMuJoCoEnv(gym.Env):
             except Exception as e:
                 print(f"  ❌ {joint_name}: Not found ({e})")
                 continue
-        
-        # 🎯 获取robot2的执行器索引（基于您的XML actuator定义）
+
         robot2_actuator_names = [
-            "robot2:Joint1",              # 机械臂执行器
+            "robot2:Joint1",              
             "robot2:Joint2",
             "robot2:Joint3", 
             "robot2:Joint4",
             "robot2:Joint5",
-            "robot2:drive",               # 后轮差速驱动
-            "robot2:ghost-steer"          # 转向控制
+            "robot2:drive",               
+            "robot2:ghost-steer"          
         ]
         
         print("\n🔍 Identifying robot2 actuator indices...")
@@ -279,278 +787,8 @@ class SecondRobotMuJoCoEnv(gym.Env):
             else:
                 print(f"  ⚠️ ctrl index {idx} out of range")
 
-    def reset_robot2_only(self):
-        """只重置robot2的状态"""
-        
-        print("🔄 Resetting robot2 states only...")
-        
-        # 🎯 重置robot2的qpos
-        reset_count = 0
-        for idx, initial_value in self.robot2_initial_qpos.items():
-            if idx < len(self.data.qpos):
-                self.data.qpos[idx] = initial_value
-                reset_count += 1
-            else:
-                print(f"  ⚠️ qpos index {idx} out of range during reset")
-        print(f"   qpos: {reset_count} values reset")
-        
-        # 🎯 重置robot2的qvel
-        reset_count = 0
-        for idx, initial_value in self.robot2_initial_qvel.items():
-            if idx < len(self.data.qvel):
-                self.data.qvel[idx] = initial_value
-                reset_count += 1
-            else:
-                print(f"  ⚠️ qvel index {idx} out of range during reset")
-        print(f"   qvel: {reset_count} values reset")
-        
-        # 🎯 重置robot2的ctrl
-        reset_count = 0
-        for idx, initial_value in self.robot2_initial_ctrl.items():
-            if idx < len(self.data.ctrl):
-                self.data.ctrl[idx] = initial_value
-                reset_count += 1
-            else:
-                print(f"  ⚠️ ctrl index {idx} out of range during reset")
-        print(f"   ctrl: {reset_count} values reset")
-        
-        # 🎯 确保状态同步
-        mujoco.mj_forward(self.model, self.data)
-        
-        print("✅ Robot2 reset complete")
 
-    def reset(self, seed=None, options=None):
-
-        self.target_position_x_y = random.choice(self.target_positions)
-
-        if self.finished:       
-            if self.shared_state["stop"] is False:
-                self.shared_state["stop"] = True
-                # while self.shared_state["stopped"] is False:
-                #     pass
-                self.shared_state = {"current_object_index": None, "current_object_position": None, "stop": False, "stopped": False}
- 
-            self.data.qpos[:] = self.initial_qpos
-            self.data.qvel[:] = self.initial_qvel
-            self.data.ctrl[:] = self.initial_ctrl
-
-            self.start_object_placer_thread(self.model, self.data, self.object_joint_ids, self.left_object_position, self.right_object_position, self.shared_state)
-            self.start_object_remover_threads(self.model, self.data, self.object_joint_ids)
-            self.first_robot_controller.set_state(FiniteState.IDLE)
-            self.first_robot_controller.reset_all_joints()
-
-            self.current_world_step = 0
-
-            mujoco.mj_forward(self.model, self.data)
-            self.current_world_step = 0
-            self.finished = False
-
-        if not self.finished:
-            self.reset_robot2_only()
-
-        # Start the asynchronous thread
-
-        self.current_step = 0
-
-        robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id]
-        self.prev_dist = np.linalg.norm(robot_2_rover_pos[0:2] - self.target_position_x_y)
-        self.init_dist = self.prev_dist
-
-        self.prev_position = None
-        self.static_counter = 0
-
-        return self._get_obs(), {}
-
-    def step(self, action):
-        """带有action repeat的step方法"""
-        if self.action_repeat == 1:
-            # 如果action_repeat=1，使用原始step逻辑
-            return self._original_step(action)
-        else:
-            # 如果action_repeat>1，重复执行action
-            total_reward = 0
-            terminated = False
-            truncated = False
-            final_obs = None
-            final_info = {}
-            
-            for _ in range(self.action_repeat):
-                obs, reward, terminated, truncated, info = self._original_step(action)
-                total_reward += reward
-                final_obs = obs
-                final_info.update(info)
-                
-                if terminated or truncated:
-                    break
-            
-            return final_obs, total_reward, terminated, truncated, final_info
-
-    def _original_step(self, action):  
-        normalized_action = np.clip(action, -1, 1)
-        real_action = self.low_bounds + (normalized_action + 1) * (self.high_bounds - self.low_bounds) / 2
-
-        terminated = False
-        truncated = False
-        # self.first_robot_controller.step(self.shared_state["current_object_position"])
-        self.data.ctrl[ACTION_SPACE_REDUCTION:ACTION_SPACE_REDUCTION+len(real_action)] = real_action
-        status = self.first_robot_controller.get_status()
-        if self.shared_state["current_object_index"] >= len(self.object_joint_ids) and status == FiniteState.IDLE:
-            print("All objects have been placed. Exit")
-            truncated = True
-            self.finished = True
-
-        mujoco.mj_step(self.model, self.data)
-
-        obs = self._get_obs()
-        robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]  # Get only the first two coordinates (x, y)
-        # print(robot_2_rover_pos)
-        reward, reached = self.reward_function(robot_2_rover_pos)
-        # reward, reached = self.simple_reward_function(robot_2_rover_pos)
-
-        # static_penalty = self.calculate_static_penalty(action, robot_2_rover_pos)
-        # reward += static_penalty
-
-        if self.check_robot_forbidden_collision():
-            print("Robot collision with forbidden area detected! Terminating episode.")
-            reward -= 200
-            terminated = True
-
-        if self.check_robot_robot_collision():
-            print("Robot-robot collision detected! Terminating episode.")
-            reward -= 250
-            terminated = True
-
-        if reached:
-            print("Robot2 has reached the target area! Terminating episode.")
-            terminated = True
-
-        self.current_step += 1
-        self.current_world_step += 1
-
-        if self.current_step >= self.max_steps:
-            terminated = True
-            # reward -= 10000
-
-        
-        if not np.all(np.isfinite(self.data.qacc)) or np.any(np.abs(self.data.qacc) > 1e7):
-            print("QACC error detected! Simulation unstable, exiting loop.")
-            truncated = True
-            self.finished = True
-        
-        if self.current_world_step >= 500000:
-            print("Maximum world steps reached! Terminating episode.")
-            truncated = True
-            self.finished = True
-            
-        info = {}
-        return obs, reward, terminated, truncated, info
-
-    def _get_obs(self):
-        # 🎯 归一化参数
-        max_position = 3.0     
-        max_speed = 2.0        
-        max_distance = 8.0
-        robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]  
-        
-        # 🎯 添加机器人状态信息
-        try:
-            # 获取速度
-            robot2_body_id = self.robot_2_rover_id
-            robot2_vel = self.data.cvel[robot2_body_id][:2]  
-        except:
-            robot2_vel = np.zeros(2)
-        
-        # 🎯 添加朝向信息
-        robot2_quat = self.data.xquat[self.robot_2_rover_id]
-        robot2_orientation = self.quaternion_to_yaw(robot2_quat)
-        
-        # 🎯 目标相对位置信息（增强版）
-        target_pos = np.array(self.target_position_x_y) 
-        target_rel = target_pos - robot2_pos  # 相对位置向量
-        target_distance = np.linalg.norm(target_rel) 
-        target_angle = np.arctan2(target_rel[1], target_rel[0])  # 世界坐标系角度
-        
-        # 🎯 相对于机器人朝向的目标角度（非常重要！）
-        target_relative_angle = target_angle - robot2_orientation
-        target_relative_angle = np.arctan2(np.sin(target_relative_angle), np.cos(target_relative_angle))  # 标准化到[-π,π]
-        
-        # 🎯 归一化的相对位置（直接向量）
-        target_rel_normalized = target_rel / max_distance  # 假设最大距离为6米
-        
-        # 🎯 机器人1相对位置信息
-        robot1_pos = self.data.xpos[self.robot_1_rover_id][:2]  
-        robot1_rel = robot1_pos - robot2_pos  
-        robot1_distance = np.linalg.norm(robot1_rel)  
-        robot1_angle = np.arctan2(robot1_rel[1], robot1_rel[0])
-        robot1_relative_angle = robot1_angle - robot2_orientation
-        robot1_relative_angle = np.arctan2(np.sin(robot1_relative_angle), np.cos(robot1_relative_angle))
-        robot1_rel_normalized = robot1_rel / max_distance
-
-        # 🎯 墙壁相对位置
-        walls = {"left": -3.0, "right": 3.0, "front": 3.0, "back": -3.0}
-        wall_distances = np.array([
-            robot2_pos[0] - walls["left"],   
-            walls["right"] - robot2_pos[0],  
-            robot2_pos[1] - walls["back"],   
-            walls["front"] - robot2_pos[1]   
-        ])
-
-        # 🎯 放置点相对位置
-        placing_place_1_pos = np.array([2.8, 1.0])  
-        placing_1_rel = placing_place_1_pos - robot2_pos
-        placing_1_distance = np.linalg.norm(placing_1_rel)
-        placing_1_angle = np.arctan2(placing_1_rel[1], placing_1_rel[0]) - robot2_orientation
-        placing_1_angle = np.arctan2(np.sin(placing_1_angle), np.cos(placing_1_angle))
-        placing_1_rel_normalized = placing_1_rel / max_distance
-
-        placing_place_2_pos = np.array([2.8, -1.0])
-        placing_2_rel = placing_place_2_pos - robot2_pos
-        placing_2_distance = np.linalg.norm(placing_2_rel)
-        placing_2_angle = np.arctan2(placing_2_rel[1], placing_2_rel[0]) - robot2_orientation
-        placing_2_angle = np.arctan2(np.sin(placing_2_angle), np.cos(placing_2_angle))
-        placing_2_rel_normalized = placing_2_rel / max_distance
-        
-
-        
-        observation = np.concatenate([
-            # 🎯 机器人自身状态
-            robot2_pos / max_position,                    # [2] 绝对位置
-            robot2_vel / max_speed,                       # [2] 速度 
-            [robot2_orientation / np.pi],                 # [1] 朝向 
-
-            # 🎯 目标相对信息（增强版）
-            target_rel_normalized,                        # [2] 目标相对位置向量 
-            [target_distance / max_distance],             # [1] 目标距离
-            [target_angle / np.pi],                       # [1] 目标世界角度
-            [target_relative_angle / np.pi],              # [1] 目标相对角度 
-
-            # 🎯 机器人1相对信息（增强版）
-            robot1_rel_normalized,                        # [2] 机器人1相对位置 
-            [robot1_distance / max_distance],             # [1] 机器人1距离
-            [robot1_relative_angle / np.pi],              # [1] 机器人1相对角度 
-            
-            # 🎯 环境相对信息
-            wall_distances / max_distance,                # [4] 墙壁距离
-
-            # 🎯 放置点相对信息（增强版）
-            placing_1_rel_normalized,                     # [2] 放置点1相对位置 
-            [placing_1_distance / max_distance],          # [1] 放置点1距离
-            [placing_1_angle / np.pi],                    # [1] 放置点1相对角度 
-            
-            placing_2_rel_normalized,                     # [2] 放置点2相对位置 
-            [placing_2_distance / max_distance],          # [1] 放置点2距离
-            [placing_2_angle / np.pi],                    # [1] 放置点2相对角度 
-        ], dtype=np.float32)
-
-        return observation
-
-    def render(self):
-        if not hasattr(self, "viewer") or self.viewer is None:
-            self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
-        if self.viewer.is_running():
-            self.viewer.sync()
-
-    def get_object_ids(self, model):
+    def _get_object_ids(self, model):
         object_ids = []
         for i in range(model.njnt):
             name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
@@ -563,17 +801,11 @@ class SecondRobotMuJoCoEnv(gym.Env):
                     continue
         return sorted(object_ids)
 
-    def start_object_remover_threads(self, model, data, object_joint_ids):
+    def _start_object_remover_threads(self, model, data, object_joint_ids):
         # lower plane parameters
         lower_plane_positions = [[2.8, 1.0],[2.8, -1.0]]
         lower_plane_radius = 0.23
         lower_plane_z = 0.23
-
-        # threading.Thread(
-        #     target=remove_object_on_plane,
-        #     args=(model, data, lower_plane_positions, lower_plane_radius, lower_plane_z, object_joint_ids),
-        #     daemon=True
-        # ).start()
 
         threading.Thread(
             target=remove_object_on_plane_with_step_counter,
@@ -586,12 +818,6 @@ class SecondRobotMuJoCoEnv(gym.Env):
         upper_plane_radius = 0.15
         upper_plane_z = 0.43
 
-        # threading.Thread(
-        #     target=remove_object_on_plane,
-        #     args=(model, data, upper_plane_positions, upper_plane_radius, upper_plane_z, object_joint_ids),
-        #     daemon=True
-        # ).start()
-
         threading.Thread(
             target=remove_object_on_plane_with_step_counter,
             args=(model, data, upper_plane_positions, upper_plane_radius, upper_plane_z, object_joint_ids),
@@ -599,8 +825,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
         ).start()
 
 
-    def start_object_placer_thread(self, model, data, object_joint_ids, left_object_position, right_object_position, shared_state):
-        # object positions parameters
+    def _start_object_placer_thread(self, model, data, object_joint_ids, left_object_position, right_object_position, shared_state):
         threading.Thread(
             target=place_object_on_table,
             args=(model, data, left_object_position, right_object_position, object_joint_ids),
@@ -608,246 +833,8 @@ class SecondRobotMuJoCoEnv(gym.Env):
             daemon=True
         ).start()
 
-    def check_robot_forbidden_collision(self):
-        # Check all contact points
-        for i in range(self.data.ncon):
-            contact = self.data.contact[i]
-            geom1_id = contact.geom1
-            geom2_id = contact.geom2
-            
-            # Get body corresponding to geom
-            body1_id = self.model.geom_bodyid[geom1_id]
-            body2_id = self.model.geom_bodyid[geom2_id]
-            
-            # Get geom names
-            geom1_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom1_id)
-            geom2_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom2_id)
-            
-            # Check if robot body collides with forbidden geom
-            if ((body1_id in self.robot2_body_ids and geom2_name in self.forbidden_geoms) or
-                (body2_id in self.robot2_body_ids and geom1_name in self.forbidden_geoms)):
-                return True
-        
-        return False
-
-    def check_robot_distance_violation(self):
-        """Check if the distance between two robot chassis is less than the safe distance"""
-        
-        # Get positions of both robot chassis
-        robot1_pos = self.data.xpos[self.robot1_rover_id]
-        robot2_pos = self.data.xpos[self.robot2_rover_id]
-        
-        # Calculate Euclidean distance
-        distance = np.linalg.norm(robot1_pos - robot2_pos)
-        
-        return distance < self.safe_distance
-
-    def reward_function(self, robot_2_rover_pos):
-
-        robot2_quat = self.data.xquat[self.robot_2_rover_id]
-        robot2_orientation = self.quaternion_to_yaw(robot2_quat)
-
-
-        dist_to_target = np.linalg.norm(robot_2_rover_pos - self.target_position_x_y)
-        # target_reward = -(abs(robot_2_rover_pos[0] - self.target_position_x_y[0]) + abs(robot_2_rover_pos[1] - self.target_position_x_y[1]))
-        # target_reward = (self.prev_dist - dist_to_target) * 100
-        # if target_reward < 0:
-        #     target_reward -= 0.01 * self.current_step / 1000 
-        # else:
-        #     target_reward += 0.01 * self.current_step / 1000
-        
-        # orientation_progress_reward = self.calculate_orientation_progress_reward(robot2_orientation)
-        # orientation_progress_reward = self.calculate_orientation_reward(robot2_orientation, dist_to_target)
-
-        progress_reward = 0
-        if self.prev_dist is not None:
-            progress_amount = (self.prev_dist - dist_to_target) * 2000
-            
-            
-            # if dist_to_target > 4.0:
-            #     coefficient = 2.0      
-            # elif dist_to_target > 3.0:
-            #     coefficient = 3.0      
-            # elif dist_to_target > 2.0:
-            #     coefficient = 4.0     
-            # elif dist_to_target > 1.0:
-            #     coefficient = 5.0      
-            # elif dist_to_target > 0.5:
-            #     coefficient = 6.0      
-            # elif dist_to_target > 0.2:
-            #     coefficient = 8.0      
-            # else:
-            #     coefficient = 10.0     # 保持10.0
-
-            coefficient = 1.0
-            
-            progress = progress_amount * coefficient
-            
-            if progress > 0:
-                progress_reward = progress
-            else:
-                progress_reward = progress * 1.0
-
-
-        robot_distance = self.get_robot_distance()
-        safety_reward = self.calculate_safety_reward(robot_distance)
-
-        # crushed = False
-        # if safety_reward == -5000 :
-        #     crushed = True
-
-        time_penalty = -0.3
-
-        arrival_bonus = 0
-
-        reached = (dist_to_target < 0.1)
-        if reached:
-            arrival_bonus = 2000
-
-        total_reward = progress_reward + safety_reward + arrival_bonus + time_penalty
-        # total_reward = target_reward + time_penalty + arrival_bonus
-
-        # print(f"Robot2 Position: {robot_2_rover_pos}, Distance to Target: {dist_to_target:.2f}, ")
-
-        self.prev_dist = dist_to_target
-
-        return total_reward, reached
-
-    def simple_reward_function(self, robot_2_rover_pos):
-        dist_to_target = np.linalg.norm(robot_2_rover_pos - self.target_position_x_y)
-        reward = -(abs(robot_2_rover_pos[0] - self.target_position_x_y[0]) + abs(robot_2_rover_pos[1] - self.target_position_x_y[1])) * 0.1
-
-        reached = (dist_to_target < 0.2)
-        # if reached:
-        #     reward += 1000
-
-        return reward, reached
-
-    def get_robot_distance(self):
-        """Calculate the distance between the two robots"""
-        robot1_pos = self.data.xpos[self.robot1_rover_id]
-        robot2_pos = self.data.xpos[self.robot2_rover_id]
-        return np.linalg.norm(robot1_pos - robot2_pos)
-
-    def calculate_safety_reward(self, robot_distance):
-        """Safety distance reward design"""
-        if robot_distance < 0.8:     # Collision
-            return 0.1            # Large penalty
-        elif robot_distance < 1.0:   # Danger zone
-            return 0.01             # Medium penalty  
-        # elif robot_distance < 2.0: 
-        #     return 1               
-        else:                        # Safe zone
-            return 0.0
-
-    def check_robot_robot_collision(self):
-        """Directly detect collisions between two robots"""
-        for i in range(self.data.ncon):
-            contact = self.data.contact[i]
-            geom1_id = contact.geom1
-            geom2_id = contact.geom2
-            
-            body1_id = self.model.geom_bodyid[geom1_id]
-            body2_id = self.model.geom_bodyid[geom2_id]
-            
-            # Detection logic
-            is_robot1_involved = body1_id in self.robot1_body_ids or body2_id in self.robot1_body_ids
-            is_robot2_involved = body1_id in self.robot2_body_ids or body2_id in self.robot2_body_ids
-            
-            if is_robot1_involved and is_robot2_involved:
-                geom1_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom1_id)
-                geom2_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom2_id)
-                # print(f"🚨 ROBOT-ROBOT COLLISION: {geom1_name} <-> {geom2_name}")
-                return True
-        
-        return False
-
-    def calculate_static_penalty(self, action, current_pos):
-        penalty = 0
-        
-
-        if self.prev_position is not None:
-            position_change = np.linalg.norm(current_pos - self.prev_position)
-            
-            if position_change < 0.05:  
-                self.static_counter += 1
-                if self.static_counter > 50:  
-                    
-                    penalty -= min((self.static_counter - 50) * 0.05, 1) 
-            else:
-                self.static_counter = max(0, self.static_counter - 3)  
-                penalty += 0.05 
-        
-        self.prev_position = current_pos.copy()
-        
-        return penalty
-
-    def quaternion_to_yaw(self, quat):
-        w, x, y, z = quat
-        yaw = np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
-        return yaw
-
-    def calculate_orientation_progress_reward(self, current_orientation):
-
-        if not hasattr(self, 'prev_orientation') or self.prev_orientation is None:
-            self.prev_orientation = current_orientation
-            return 0.0
-        
-        current_error = abs(current_orientation - self.target_orientation)
-        prev_error = abs(self.prev_orientation - self.target_orientation)
-
-
-        if current_error > np.pi:
-            current_error = 2 * np.pi - current_error
-        if prev_error > np.pi:
-            prev_error = 2 * np.pi - prev_error
-        
-        orientation_progress = (prev_error - current_error) * 10  
-        
-        self.prev_orientation = current_orientation
-        
-        return orientation_progress
-
-    def calculate_orientation_reward(self, current_orientation, distance_to_target):
-
-        orientation_reward = 0.0   
-        angle_error = abs(current_orientation - self.target_orientation)
-
-        if angle_error > np.pi:
-            angle_error = 2 * np.pi - angle_error
-        
-        if distance_to_target < 0.5:
-            if angle_error < 0.05:  
-                orientation_reward = 10.0  
-            elif angle_error < 0.1:  
-                orientation_reward = 5.0   
-            else:  
-                orientation_reward = 2.0   
-
-        elif distance_to_target < 1.0:
-            if angle_error < 0.1:
-                orientation_reward = 3.0
-            elif angle_error < 0.2:
-                orientation_reward = 1.0
-            else:
-                orientation_reward = 0.0
-
-        elif distance_to_target < 2.0:
-            if angle_error < 0.2:
-                orientation_reward = 1.0
-            else:
-                orientation_reward = 0.0
-
-        elif distance_to_target < 2.0:
-            if angle_error < 0.2:
-                orientation_reward = 1.0
-            else:
-                orientation_reward = 0.0
-
-        else:
-            if angle_error < 0.5:
-                orientation_reward = 0.5
-            else:
-                orientation_reward = 0.0
-        
-        return orientation_reward
+    def render(self):
+        if not hasattr(self, "viewer") or self.viewer is None:
+            self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
+        if self.viewer.is_running():
+            self.viewer.sync()

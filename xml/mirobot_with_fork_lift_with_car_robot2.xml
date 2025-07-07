@@ -1,6 +1,6 @@
 <mujoco model="mirobot">
   <worldbody>
-    <body name="robot2:rover" pos="-2 2 0.2">
+    <body name="robot2:rover" pos="-2 1 0.2">
     <!-- <body name="robot2:rover" pos="-1 -1.7 0.2"> -->
 
     <!-- <body name="robot2:rover" pos="-0. 0 0.2" quat="0 0 0 1"> -->
@@ -137,13 +137,20 @@
                     <geom class="collision" mesh="link5" solimp="0.99 0.99 0.001" solref="0.02 1"/>
 
 
-                    <body name="robot2:link6" pos="0.0 -0.007 0.0005" quat="0 -0.707 0 -0.707">
-                      <!-- <joint name="Joint6" class="Joint6" /> -->
-                      <geom class="visual" type="mesh" size="0.001 0.001" mass="0.001"
-                        mesh="ForkLift" />
-                      <geom class="collision" mesh="ForkLift" friction="5 5 5"
-                        solimp="0.99 0.99 0.001" solref="0.02 1" />
-
+                    <body name="robot2:link6" pos="0 -0.0165 0.0105" quat="0.707 -0.707 0 0" gravcomp="1">
+                      <geom type="mesh" size="0.001 0.002" mass="0.0001" mesh="link6" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                      <geom class="collision" mesh="link6" />
+                      <body name="robot2:vacuum_sphere" pos="0 0 -0.028" childclass="active_adhesion">
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="0.0027 0.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="0.0027 -.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="-.0027 0.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="-.0027 -.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="-.003 0 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos=".003 0 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="0 -.003 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="0 .003 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                      </body>
                     </body>
                   </body>
                 </body>
@@ -232,6 +239,7 @@
     <position class="Joint3" name="robot2:Joint3" joint="robot2:Joint3" gear="0.1"/>
     <position class="Joint4" name="robot2:Joint4" joint="robot2:Joint4" gear="0.1"/>
     <position class="Joint5" name="robot2:Joint5" joint="robot2:Joint5" gear="0.1"/>
+    <adhesion name="robot2:adhere_winch" body="robot2:vacuum_sphere" ctrlrange="0 1" gain="4"/>
     <motor name="robot2:drive" tendon="robot2:rear-differential" ctrllimited="true" ctrlrange="-3 3"
     gear="1.5" />
     <position name="robot2:ghost-steer" joint="robot2:ghost-steer-hinge" ctrllimited="true" ctrlrange="-.9 .9"
