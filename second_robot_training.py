@@ -17,7 +17,7 @@ from callbacks.training_renderer import RenderCallback
 from callbacks.ent_coefficient_scheduler import EntCoefficientScheduler
 from callbacks.learning_rate_scheduler import LearningRateScheduler
 from utils.mujoco_state_saver import save_mujoco_state_to_file
-from utils.mujoco_state_loader import load_mujoco_state_from_file
+from utils.mujoco_state_loader import load_mujoco_state_from_file, restore_mujoco_state, view_saved_state
 import numpy as np
 import pickle
 import json
@@ -393,4 +393,8 @@ if __name__ == "__main__":
     # approach_model_training(approach_env)
     # approach_model_training_parallel()
     # approach_model_training_parallel(load_model_path=APPROACHING_MODEL_NAME)
-    approach_model_implementation(approach_env)
+    
+    # approach_model_implementation(approach_env)
+
+    state_file = "saved_states/robot_state_20250707_195709.pkl"
+    view_saved_state(state_file)
