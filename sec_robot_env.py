@@ -10,7 +10,7 @@ from util_threads.object_remover_step_counter import remove_object_on_plane_with
 from config.env_config import FiniteState
 import random
 
-ACTION_SPACE_REDUCTION = 14  # Number of actuators to be reduced from the action space
+ACTION_SPACE_REDUCTION = 14  # Number of actuators to be reduced from the action space for moving
 
 class SecondRobotMuJoCoEnv(gym.Env):
     def __init__(self, xml_path, action_repeat=4):
@@ -58,10 +58,16 @@ class SecondRobotMuJoCoEnv(gym.Env):
                 # [2, -1],
                 # [0, 2],
                 # [0, 1],
-                [-1, -2.3],
-                # [1, -2.3],
+                [-1, -2.45],
+                # [1, -2.45],
             ]
-        self.target_position_x_y = random.choice(self.target_positions)
+        
+        self.picking_positions = [
+                # [1, -2.45],
+                [-1, -2.45],
+        ]
+
+        self.target_position_x_y = random.choice(self.picking_positions)
 
         self.robot1_recent_positions = []
         self.robot2_recent_positions = []
@@ -166,8 +172,6 @@ class SecondRobotMuJoCoEnv(gym.Env):
         self.robot2_initial_ctrl = {}
         self._store_robot2_initial_states()
 
-
-
     def reset_robot2_only(self):
         """只重置robot2的状态"""
         
@@ -234,6 +238,21 @@ class SecondRobotMuJoCoEnv(gym.Env):
             mujoco.mj_forward(self.model, self.data)
             self.current_world_step = 0
             self.finished = False
+
+            inactive_status = [
+                FiniteState.IDLE,
+                FiniteState.ORIGIN_POSITION_TO_PICKING_POSITION,
+                FiniteState.DECREASING_JOINT3_AND_JOINT5,
+                FiniteState.WAITING_DECREASING_JOINT3_AND_JOINT5,
+                FiniteState.JOINT1_TURNING,
+                FiniteState.WAITING_JOINT1_TURNING,
+                FiniteState.LIFTING_JOINT3,
+                FiniteState.WAITING_LIFTING_JOINT3
+            ]
+            while self.first_robot_controller.get_status() in inactive_status:
+                mujoco.mj_step(self.model, self.data)
+                self.first_robot_controller.step(self.shared_state["current_object_position"])
+                mujoco.mj_forward(self.model, self.data)
 
         if not self.finished:
             self.reset_robot2_only()

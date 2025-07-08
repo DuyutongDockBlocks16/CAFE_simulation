@@ -9,6 +9,7 @@ def place_object_on_table(model, data, left_object_position, right_object_positi
     placed_flag = False
     # next_object_position = random.choice([left_object_position, right_object_position])
     next_object_position = left_object_position
+    # next_object_position = right_object_position
     current_object_position = [0, 0, 0]
     i = 0
     _, object_joint_id = object_joint_ids[i]
