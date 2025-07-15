@@ -4,7 +4,7 @@ import numpy as np
 from datetime import datetime
 import os
 
-LOG_NAME = "episode_data_20250714_211309.jsonl"
+LOG_NAME = "picking_episode_data_20250715_093047.jsonl"
 
 def read_episode_data(filename):
     """

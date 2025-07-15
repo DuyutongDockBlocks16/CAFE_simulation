@@ -35,7 +35,7 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
         self.data.cvel[rover_body_id] = 0.0
 
-        self._check_robot2_rover_velocity()
+        # self._check_robot2_rover_velocity()
 
         # rover_joints = ["robot2:ghost-steer-hinge", "robot2:drive"]
         # for joint_name in rover_joints:
@@ -85,10 +85,8 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
 
         self.forbidden_geoms = [
             "wall_front", "wall_back", "wall_left", "wall_right",
-            "pickingplace:table0", "pickingplace:table1", 
-            "pickingplace:table2", "pickingplace:table3",
-            "object0_geom" , "object1_geom", "object2_geom", "object3_geom", "object4_geom", 
-            "object5_geom", "object6_geom", "object7_geom", "object8_geom", "object9_geom"
+            "pickingplace:table0",
+            "pickingplace:table2"
         ]
 
         self.robot_arm_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name) for name in self.robot2_arm_bodies]
@@ -247,12 +245,10 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
             if np.allclose(position, self.left_object_position, atol=0.1):
                 left_joint_id = joint_id
                 left_position = position.copy()
-                # print(f"✅ 左侧放置对象: object{object_id}, joint_id={joint_id}")
 
             elif np.allclose(position, self.right_object_position, atol=0.1):
                 right_joint_id = joint_id
                 right_position = position.copy()
-                # print(f"✅ 右侧放置对象: object{object_id}, joint_id={joint_id}")
         
         return left_joint_id, left_position, right_joint_id, right_position
 
@@ -356,8 +352,6 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
             return final_obs, total_reward, terminated, truncated, final_info
 
     def _original_step(self, action):
-        # if self.current_step % 50 == 0:  # 每50步监控一次
-        #     self._monitor_arm_car_interaction()
 
         normalized_action = np.clip(action, -1, 1)
         real_action = self.low_bounds + (normalized_action + 1) * (self.high_bounds - self.low_bounds) / 2
@@ -438,16 +432,13 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
             
             total_reward = distance_reward + precision_reward
         
-        rover_velocity_penalty = self._calculate_rover_velocity_penalty()
-        total_reward += rover_velocity_penalty
-        
-        # 🎯 额外奖励
         if is_in_target:
-            # 在目标范围内给予额外奖励
-            stay_reward = 40  # 保持越久奖励越多
+            stay_reward = 20 
             total_reward += stay_reward
         
         if reached:
+            reached_reward = 100 
+            total_reward += reached_reward
             print(f"🎉 任务成功完成! 最终距离: {current_center_distance:.6f}m")
         
         # 🎯 更新上一帧的状态
@@ -456,60 +447,6 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         self.previous_avg_deviation = current_avg_deviation
         
         return total_reward, reached
-
-    def _check_task_completion(self):
-        try:
-            # 🎯 获取目标位置
-            left_joint_id, left_position, right_joint_id, right_position = self._get_placed_object_info()
-            
-            if left_joint_id is not None:
-                active_position = left_position
-            elif right_joint_id is not None:
-                active_position = right_position
-            else:
-                return False
-            
-            target_position = active_position.copy()
-            target_position[1] += 0.0085
-            
-            # 🎯 检查是否达到目标
-            sphere_info = self._get_sphere_center_to_target_info(target_position)
-            center_distance = sphere_info['center_to_target_distance']
-            
-            # 🎯 任务完成条件
-            completion_threshold = 0.005  # 5mm内认为完成
-            return center_distance < completion_threshold
-            
-        except Exception as e:
-            print(f"❌ 检查任务完成时发生错误: {e}")
-            return False
-
-    def _check_collision(self):
-        """检查是否有碰撞"""
-        # 🎯 这里可以实现具体的碰撞检测逻辑
-        # 例如检查与禁止区域的碰撞
-        
-        # 检查所有接触点
-        for i in range(self.data.ncon):
-            contact = self.data.contact[i]
-            geom1_id = contact.geom1
-            geom2_id = contact.geom2
-            
-            # 获取几何体对应的body
-            body1_id = self.model.geom_bodyid[geom1_id]
-            body2_id = self.model.geom_bodyid[geom2_id]
-            
-            # 获取几何体名称
-            geom1_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom1_id)
-            geom2_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom2_id)
-            
-            # 检查robot2是否与禁止区域碰撞
-            if hasattr(self, 'robot2_body_ids') and hasattr(self, 'forbidden_geoms'):
-                if ((body1_id in self.robot2_body_ids and geom2_name in self.forbidden_geoms) or
-                    (body2_id in self.robot2_body_ids and geom1_name in self.forbidden_geoms)):
-                    return True
-        
-        return False
 
     def _check_robot_forbidden_collision(self):
         # Check all contact points
@@ -538,116 +475,3 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
             self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
         if self.viewer.is_running():
             self.viewer.sync()
-
-    def _check_robot2_rover_velocity(self):
-        """检查robot2:rover的速度信息"""
-        try:
-            # 获取robot2:rover的body ID
-            rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
-            
-            # 获取速度信息
-            rover_vel = self.data.cvel[rover_body_id]  # 6D速度 [vx, vy, vz, wx, wy, wz]
-            linear_vel = rover_vel[:3]  # 线速度
-            angular_vel = rover_vel[3:]  # 角速度
-            
-            # 获取位置信息
-            rover_pos = self.data.xpos[rover_body_id]
-            rover_quat = self.data.xquat[rover_body_id]
-            
-            print("\n🚗 Robot2:rover 初始状态检查:")
-            print("=" * 50)
-            print(f"位置: [{rover_pos[0]:8.5f}, {rover_pos[1]:8.5f}, {rover_pos[2]:8.5f}]")
-            print(f"四元数: [{rover_quat[0]:6.3f}, {rover_quat[1]:6.3f}, {rover_quat[2]:6.3f}, {rover_quat[3]:6.3f}]")
-            print(f"线速度: [{linear_vel[0]:8.5f}, {linear_vel[1]:8.5f}, {linear_vel[2]:8.5f}]")
-            print(f"角速度: [{angular_vel[0]:8.5f}, {angular_vel[1]:8.5f}, {angular_vel[2]:8.5f}]")
-            
-            # 计算速度大小
-            linear_speed = np.linalg.norm(linear_vel)
-            angular_speed = np.linalg.norm(angular_vel)
-            
-            print(f"线速度大小: {linear_speed:.6f} m/s")
-            print(f"角速度大小: {angular_speed:.6f} rad/s")
-            
-            # 判断是否静止
-            if linear_speed < 1e-6 and angular_speed < 1e-6:
-                print("✅ Robot2:rover 处于静止状态")
-            else:
-                print("⚠️ Robot2:rover 存在初始速度!")
-                if linear_speed > 1e-6:
-                    print(f"   线速度不为零: {linear_speed:.6f} m/s")
-                if angular_speed > 1e-6:
-                    print(f"   角速度不为零: {angular_speed:.6f} rad/s")
-            
-            print("=" * 50)
-            
-        except Exception as e:
-            print(f"❌ 检查robot2:rover速度时出错: {e}")
-
-
-    def _monitor_arm_car_interaction(self):
-        """监控机械手臂和小车的相互作用"""
-        # 获取小车速度
-        rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
-        rover_vel = self.data.cvel[rover_body_id]
-        rover_linear_vel = rover_vel[:3]
-        rover_angular_vel = rover_vel[3:]
-        
-        # 获取机械手臂末端速度
-        vacuum_sphere_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:vacuum_sphere")
-        arm_vel = self.data.cvel[vacuum_sphere_body_id]
-        arm_linear_vel = arm_vel[:3]
-        
-        # 计算速度大小
-        rover_speed = np.linalg.norm(rover_linear_vel)
-        arm_speed = np.linalg.norm(arm_linear_vel)
-        
-        # 如果机械手臂在运动，检查小车是否也在运动
-        if arm_speed > 1e-4:  # 机械手臂在运动
-            if rover_speed > 1e-6:  # 小车也在运动
-                print(f"🔗 手臂-小车相互作用:")
-                print(f"   手臂速度: {arm_speed:.6f} m/s")
-                print(f"   小车速度: {rover_speed:.6f} m/s")
-                print(f"   速度比: {rover_speed/arm_speed:.4f}")
-                
-                # 检查动量方向是否相反
-                arm_momentum = arm_linear_vel
-                rover_momentum = rover_linear_vel
-                
-                # 计算动量的点积（负值表示方向相反）
-                momentum_dot = np.dot(arm_momentum, rover_momentum)
-                if momentum_dot < 0:
-                    print("   ✅ 动量方向相反（符合物理定律）")
-                else:
-                    print("   ⚠️ 动量方向相同（可能有其他力作用）")
-
-    def _calculate_rover_velocity_penalty(self):
-        """计算小车速度惩罚"""
-        try:
-            rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
-            rover_vel = self.data.cvel[rover_body_id]
-            
-            linear_vel = rover_vel[:3]
-            angular_vel = rover_vel[3:]
-            
-            linear_speed = np.linalg.norm(linear_vel)
-            angular_speed = np.linalg.norm(angular_vel)
-            
-            # 🎯 设置惩罚系数
-            linear_penalty_scale = -0.5  # 线速度惩罚系数
-            angular_penalty_scale = -0.1  # 角速度惩罚系数
-            
-            # 🎯 计算惩罚
-            linear_penalty = linear_speed * linear_penalty_scale
-            angular_penalty = angular_speed * angular_penalty_scale
-            
-            total_penalty = linear_penalty + angular_penalty
-            
-            # 🎯 只在有显著速度时打印
-            # if linear_speed > 1e-4 or angular_speed > 1e-4:
-            #     print(f"🚗 小车速度惩罚: 线速度={linear_speed:.6f}m/s, 角速度={angular_speed:.6f}rad/s, 惩罚={total_penalty:.3f}")
-            
-            return total_penalty
-            
-        except Exception as e:
-            print(f"❌ 计算小车速度惩罚时出错: {e}")
-            return 0.0

@@ -9,7 +9,7 @@ import time
 import os
 from datetime import datetime
 from config.env_config import Direction, Layer, FiniteState
-from config.training_config import APPROACHING_MODEL_NAME, SUCCESS_THRESHOLD
+from config.training_config import PICKING_MODEL_NAME, SUCCESS_THRESHOLD
 from callbacks.episode_data_collector import EpisodeBatchCollector
 from callbacks.success_check_point_saver import SuccessCheckpointCallback
 from callbacks.training_renderer import RenderCallback
@@ -152,7 +152,6 @@ def picking_model_training(env, load_model_path=None):
 
 
 def picking_model_training_parallel(load_model_path=None, num_envs=8):
-    
     env = SubprocVecEnv([make_env(i) for i in range(num_envs)])
     env = VecMonitor(env)
     
@@ -214,7 +213,7 @@ def picking_model_training_parallel(load_model_path=None, num_envs=8):
 
     ent_scheduler = EntCoefficientScheduler(
         initial_ent_coef=0.02,         
-        final_ent_coef=0.001,          
+        final_ent_coef=0.02,          
         total_timesteps=total_additional_steps,
         schedule_type='exponential',    
         verbose=1
@@ -292,7 +291,46 @@ def picking_model_training_parallel(load_model_path=None, num_envs=8):
     
     env.close()
 
+def picking_model_implementation(env):
+    model = PPO.load(PICKING_MODEL_NAME, env=env)
+    obs, info = env.reset()
+
+    env.render()
+    sleep(15)
+
+    for _ in range(200000000000):
+        env.render()  # Render at every step
+        action, _ = model.predict(obs, deterministic=True)
+        obs, reward, terminated, truncated, info = env.step(action)
+        if terminated or truncated:
+            # obs, info = env.reset()
+            env.unwrapped.data.ctrl[:] = 0
+            mujoco.mj_step(env.unwrapped.model, env.unwrapped.data)  
+            break
+
+    model = env.unwrapped.model
+    data = env.unwrapped.data
+
+    env.close()
+
+    sleep(20)
+
+    with mujoco.viewer.launch_passive(model, data) as viewer:
+        print("Press ESC to exit viewer...")
+        last_time = time.time()
+        frame_count = 0
+        while viewer.is_running():
+            mujoco.mj_step(model, data)
+            viewer.sync()
+            frame_count += 1
+            now = time.time()
+            if now - last_time >= 1.0:
+                # print(f"Simulated FPS: {frame_count}")
+                frame_count = 0
+                last_time = now
+
 if __name__ == "__main__":
-    approach_env = gym.make("SecondRobotPickingMuJoCoEnv-v0")
-    # picking_model_training(approach_env, load_model_path=PICKING_MODEL_NAME)
+    picking_env = gym.make("SecondRobotPickingMuJoCoEnv-v0")
+    # picking_model_training(picking_env, load_model_path=PICKING_MODEL_NAME)
     picking_model_training_parallel()
+    # picking_model_implementation(picking_env)
