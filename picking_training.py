@@ -332,5 +332,6 @@ def picking_model_implementation(env):
 if __name__ == "__main__":
     picking_env = gym.make("SecondRobotPickingMuJoCoEnv-v0")
     # picking_model_training(picking_env, load_model_path=PICKING_MODEL_NAME)
-    picking_model_training_parallel()
+    picking_model_training(picking_env)
+    # picking_model_training_parallel()
     # picking_model_implementation(picking_env)

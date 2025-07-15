@@ -436,6 +436,13 @@ class MirobotController:
         return False
 
     def step(self, current_object_position):
+        # try:
+        #     robot1_vacuum_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:vacuum_sphere")
+        #     robot1_vacuum_quat = self.data.xquat[robot1_vacuum_body_id]
+        #     print(f"🔍 Robot1 Vacuum Quat: [{robot1_vacuum_quat[0]:7.4f}, {robot1_vacuum_quat[1]:7.4f}, {robot1_vacuum_quat[2]:7.4f}, {robot1_vacuum_quat[3]:7.4f}] (State: {self.state})")
+        # except Exception as e:
+        #     print(f"❌ 无法获取robot1真空吸嘴四元数: {e}")
+
         if self.state == FiniteState.IDLE:
             self.pick_position = current_object_position
             self.state = FiniteState.ORIGIN_POSITION_TO_PICKING_POSITION
