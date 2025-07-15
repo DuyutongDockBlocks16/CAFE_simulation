@@ -142,7 +142,6 @@ class HybridController:
                     
                 self._apply_navigation_action(action)
             
-
         return break_flag
 
     def run_simulation(self):
@@ -453,16 +452,16 @@ class HybridController:
         return self.first_robot_controller.get_status()
 
 if __name__ == "__main__":
-    hybrid_controller = HybridController(
-            sec_robot_navigation_model_path="final_model_continued_21600K_20250707_165449.zip",
-            sec_robot_picking_model_path=None,
-            sec_robot_placing_model_path=None
-        )
-    hybrid_controller.run_simulation()
+    # hybrid_controller = HybridController(
+    #         sec_robot_navigation_model_path="final_model_continued_21600K_20250707_165449.zip",
+    #         sec_robot_picking_model_path=None,
+    #         sec_robot_placing_model_path=None
+    #     )
+    # hybrid_controller.run_simulation()
 
 
-    # state_file = "saved_states/robot_state_20250708_151607.pkl"
-    # view_saved_state(state_file)
+    state_file = "saved_states/robot_state_20250710_162826.pkl"
+    view_saved_state(state_file)
 
 
 
