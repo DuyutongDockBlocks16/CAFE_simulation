@@ -443,6 +443,8 @@ class MirobotController:
         # except Exception as e:
         #     print(f"❌ 无法获取robot1真空吸嘴四元数: {e}")
 
+        self._check_vacuum_touch_sensor()
+
         if self.state == FiniteState.IDLE:
             self.pick_position = current_object_position
             self.state = FiniteState.ORIGIN_POSITION_TO_PICKING_POSITION
@@ -556,3 +558,20 @@ class MirobotController:
     
     def set_state(self, state: FiniteState):
         self.state = state
+
+    def _check_vacuum_touch_sensor(self):
+        # print(f"🔍 当前状态: {self.state.name}")
+        """使用接触传感器检查接触"""
+        try:
+            sensor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "robot1:vacuum_touch")
+            sensor_data = self.data.sensordata[sensor_id]
+            # print(f"🔍 接触传感器数据: {sensor_data:.6f} (State: {self.state})")
+            
+            # sensor_data > 0 表示有接触
+            if sensor_data > 0:
+                print(f"🔍 接触传感器检测到接触: {sensor_data:.6f}")
+                return True
+            return False
+        except Exception as e:
+            print(f"❌ 读取接触传感器失败: {e}")
+            return False

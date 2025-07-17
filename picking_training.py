@@ -209,7 +209,7 @@ def picking_model_training_parallel(load_model_path=None, num_envs=8):
                     tensorboard_log="./ppo_logs/")
         loaded_steps = 0
 
-    total_additional_steps = 7_200_000
+    total_additional_steps = 72_000_000
 
     ent_scheduler = EntCoefficientScheduler(
         initial_ent_coef=0.02,         
@@ -300,6 +300,7 @@ def picking_model_implementation(env):
 
     for _ in range(200000000000):
         env.render()  # Render at every step
+        sleep(1)
         action, _ = model.predict(obs, deterministic=True)
         obs, reward, terminated, truncated, info = env.step(action)
         if terminated or truncated:
@@ -332,6 +333,6 @@ def picking_model_implementation(env):
 if __name__ == "__main__":
     picking_env = gym.make("SecondRobotPickingMuJoCoEnv-v0")
     # picking_model_training(picking_env, load_model_path=PICKING_MODEL_NAME)
-    picking_model_training(picking_env)
-    # picking_model_training_parallel()
+    # picking_model_training(picking_env)
+    picking_model_training_parallel()
     # picking_model_implementation(picking_env)

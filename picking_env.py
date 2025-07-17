@@ -57,7 +57,7 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
 
         self.object_joints.sort(key=lambda x: x[0])
 
-        self.max_steps = 5000
+        self.max_steps = 1000
         self.current_step = 0
         self.initial_qpos = np.copy(self.data.qpos)
         self.initial_qvel = np.copy(self.data.qvel)
@@ -93,8 +93,8 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         
         self.robot2_rover_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
 
-        self.left_object_position = [1, -2.5, 0.29198]
-        self.right_object_position = [-1, -2.5, 0.29198]
+        self.left_object_position = [1, -2.5, 0.29696562]
+        self.right_object_position = [-1, -2.5, 0.29696562]
 
         left_joint_id, left_position, right_joint_id, right_position = self._get_placed_object_info()
 
@@ -108,6 +108,8 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
             self.active_position = right_position
             self.active_joint_id = right_joint_id
             self.side = "right"
+
+        self.initial_position = None
 
         obs = self._get_obs()
         # print("Observation shape:", obs.shape)
@@ -142,9 +144,10 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         
         self.approach_threshold = 0.0185      # 4cm内进入对齐阶段
         self.alignment_threshold = 0.015      # 2cm内进入吸附阶段
-        self.suction_threshold = 0.012      # 1.5cm内可以激活吸附
         self.grasp_threshold = 0.009        # 9mm内认为抓取成功
-        self.lift_height = 0.02             # 提升2cm认为完成
+        self.suction_threshold = 0.005      # 1.5cm内可以激活吸附
+        self.lift_height_low_bound = 0.04             # 提升4cm认为完成
+        self.lift_height_high_bound = 0.08             # 提升8cm认为完成
         
         # 🎯 奖励权重
         self.reward_weights = {
@@ -166,7 +169,7 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         self.required_grasp_steps = 10
 
         self.lift_stable_steps = 0
-        self.required_lift_steps = 10
+        self.required_lift_steps = 20
 
     def reset(self, seed=None, options=None):
         self.data.qpos[:] = self.initial_qpos
@@ -197,10 +200,13 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         
         if left_joint_id is not None:
             self.initial_object_height = left_position[2]
+            self.initial_position = left_position.copy()
         elif right_joint_id is not None:
             self.initial_object_height = right_position[2]
+            self.initial_position = right_position.copy()
         else:
             self.initial_object_height = None
+            self.initial_position = None
 
     def _get_obs(self):
         robot_2_arm_positions = np.array([self.data.xpos[body_id] for body_id in self.robot_arm_ids])  # [9, 3]
@@ -212,6 +218,7 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
             active_position = self.data.xpos[body_id]
 
         target_position = active_position.copy()
+        target_position[2] += 0.0085
 
         sphere_info = self._get_sphere_center_to_target_info(target_position)
         
@@ -275,6 +282,8 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         joint5_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint5")
         joint5_control_raw = self.data.ctrl[joint5_actuator_id]
         joint5_control = (joint5_control_raw - (-1.8)) / (2.2 - (-1.8)) * 2 - 1  # 归一化到 [-1, 1]
+
+        # self._record_initial_object_height()
         
         observation = np.concatenate([
             robot2_pos / max_position,                    # [3] - 机器人位置
@@ -395,6 +404,8 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         
         center_to_target_rel = target_position - sphere_center
         center_to_target_distance = np.linalg.norm(center_to_target_rel)
+        # print(f"Center to target distance: {center_to_target_distance:.4f}")
+        # print(f"Center to target relative position: {target_position} - {sphere_center} = {center_to_target_rel}")
         
         center_to_target_angle_xy = np.arctan2(center_to_target_rel[1], center_to_target_rel[0])
         center_to_target_angle_z = np.arctan2(center_to_target_rel[2], np.linalg.norm(center_to_target_rel[:2]))
@@ -520,9 +531,10 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
 
     def _calculate_reward(self):
         body_id = self.model.jnt_bodyid[self.active_joint_id]
-        active_position = self.data.xpos[body_id]
+        object_position = self.data.xpos[body_id]
 
-        target_position = active_position.copy()
+        target_position = object_position.copy()
+        target_position[2] += 0.0085
 
         # 🎯 获取当前状态信息
         sphere_info = self._get_sphere_center_to_target_info(target_position)
@@ -534,25 +546,26 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         total_reward = 0.0
         task_completed = False
 
+        # print(f"Active position: {object_position}, Initial height: {self.initial_position}")
+
         dropped = False
-        # if target dropped, (height < initial_object_height), give penalty
-        if self.initial_object_height is not None and active_position[2] < self.initial_object_height - 0.01:
-            print("⚠️ Object dropped below initial height, applying penalty.")
-            print(f"Active position: {active_position}, Initial height: {self.initial_object_height}")
-            total_reward += -self.reward_weights["dropped_penalty"]
-            dropped = True
         
         # 🎯 阶段管理
-        self._update_task_stage(current_center_distance, active_position)
-        
-        # 🎯 基础距离奖励（所有阶段都有）
-        distance_reward = self._calculate_distance_reward(current_center_distance)
-        total_reward += distance_reward
+        self._update_task_stage(current_center_distance, object_position)
         
         # 🎯 阶段特定奖励
         if self.task_stage == "approach":
-            approach_reward = self._calculate_approach_reward(current_center_distance)
-            total_reward += approach_reward
+            position_diff = object_position - self.initial_position
+            if not np.allclose(self.initial_position, object_position, atol=0.1):
+                print("⚠️ Object moved, applying penalty.")
+                # print(f"Active position: {active_position}, Initial height: {self.initial_object_height}")
+                total_reward += -self.reward_weights["dropped_penalty"]
+                dropped = True
+
+            distance_reward = self._calculate_distance_reward(current_center_distance)
+            total_reward += distance_reward
+            # approach_reward = self._calculate_approach_reward(current_center_distance)
+            # total_reward += approach_reward
             
         # elif self.task_stage == "alignment":
         #     alignment_reward = self._calculate_alignment_reward(sphere_info)
@@ -571,7 +584,14 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         #         self.stage_start_step = self.current_step
                 
         elif self.task_stage == "lift":
-            lift_reward, task_completed = self._calculate_lift_reward(active_position)
+            
+            if self.initial_object_height is not None and object_position[2] < 0.29696562:
+                print("⚠️ Object dropped below initial height, applying penalty.")
+                # print(f"Active position: {active_position}, Initial height: {self.initial_object_height}")
+                total_reward += -self.reward_weights["dropped_penalty"]
+                dropped = True
+
+            lift_reward, task_completed = self._calculate_lift_reward(object_position)
             total_reward += lift_reward
         
         # 🎯 全局惩罚
@@ -609,7 +629,7 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         if self.task_stage == "approach" and distance < self.suction_threshold:
             self.task_stage = "lift"
             self.stage_start_step = self.current_step
-            print(f"🎯 进入提升阶段 (距离: {distance:.6f}m)")
+            print(f"进入提升阶段 (距离: {distance:.6f}m)")
 
     def _calculate_distance_reward(self, distance):
         """基础距离奖励 - 所有阶段都适用"""
@@ -689,6 +709,9 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         if distance < self.grasp_threshold:
             self.grasp_stable_steps += 1
             grasp_reward += 20.0  # 每步保持奖励
+
+            if adhere_control > 0.6:  # 吸附激活
+                suction_reward += 50.0
             
             # 🎯 连续稳定奖励
             if self.grasp_stable_steps >= self.required_grasp_steps:
@@ -709,35 +732,59 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         return grasp_reward, grasp_stable
 
     def _calculate_lift_reward(self, object_position):
-        """提升阶段奖励"""
+
+        task_completed = False
+        completion_reward = 0.0
+        lift_reward = 0.0
+        suction_reward = 0.0
+
+        adhere_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:adhere_winch")
+        adhere_control = self.data.ctrl[adhere_actuator_id]
+
+        if adhere_control == 1.0:  # 吸附激活
+            suction_reward += 1.0
+            print(f"🔗 真空吸附激活: {adhere_control:.3f}")
+
+            current_height = object_position[2]
+            lift_height = current_height - 0.29696562
         
-        current_height = object_position[2]
-        lift_height = current_height - self.initial_object_height
-        
-        # 🎯 提升高度奖励
-        lift_reward = max(lift_height * 1000.0, 20.0)
-        
-        # 🎯 检查是否保持在提升高度
-        if lift_height > self.lift_height:
-            self.lift_stable_steps += 1
-            lift_reward += 20.0  # 每步保持提升奖励
-            
-            # 🎯 连续稳定提升奖励
-            if self.lift_stable_steps >= self.required_lift_steps:
-                completion_reward = self.reward_weights["final_completion"]
-                task_completed = True
-                print(f"🎉 任务完成! 提升高度: {lift_height:.6f}m, 稳定步数: {self.lift_stable_steps}")
-            else:
+            lift_reward = min(lift_height * 100.0, 8.0)
+            print(f"提升高度: {lift_height:.6f}m, 奖励: {lift_reward:.2f}")
+            if lift_reward > 0.0:
+                suction_reward += 1.0
+                print(f"🔗 真空吸附激活,且物体提升: {adhere_control:.3f}")
+
+            # 检查是否保持在提升高度
+            if self.lift_height_low_bound > lift_height and lift_height > self.lift_height_high_bound:
+                self.lift_stable_steps += 1
+                lift_reward += 2.0  # 每步保持提升奖励
+                
+                # 连续稳定提升奖励
+                if self.lift_stable_steps >= self.required_lift_steps:
+                    completion_reward = self.reward_weights["final_completion"]
+                    task_completed = True
+                    print(f"任务完成! 提升高度: {lift_height:.6f}m, 稳定步数: {self.lift_stable_steps}")
+                else:
+                    completion_reward = 0.0
+                    task_completed = False
+                    print(f"提升稳定: {self.lift_stable_steps}/{self.required_lift_steps} (高度: {lift_height:.6f}m)")
+            elif lift_height > self.lift_height_high_bound:
+                print(f"提升高度超出范围 (高度: {lift_height:.6f}m)")
+                lift_reward = 0.0
+                self.lift_stable_steps = 0
                 completion_reward = 0.0
                 task_completed = False
-                print(f"📈 提升稳定: {self.lift_stable_steps}/{self.required_lift_steps} (高度: {lift_height:.6f}m)")
+            else:
+                # 高度不足，重置计数器
+                if self.lift_stable_steps > 0:
+                    print(f"提升高度不足或者超出，重置计数器 (高度: {lift_height:.6f}m)")
+                self.lift_stable_steps = 0
+                completion_reward = 0.0
+                task_completed = False
+
         else:
-            # 🎯 高度不足，重置计数器
-            if self.lift_stable_steps > 0:
-                print(f"❌ 提升高度不足，重置计数器 (高度: {lift_height:.6f}m)")
-            self.lift_stable_steps = 0
-            completion_reward = 0.0
-            task_completed = False
+            suction_reward -= 1.0
+            print(f"⚠️ 真空吸附未激活: {adhere_control:.3f}")
         
         return lift_reward + completion_reward, task_completed
 

@@ -141,6 +141,9 @@
                       <geom type="mesh" size="0.001 0.002" mass="0.0001" mesh="link6" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
                       <geom class="collision" mesh="link6" />
                       <body name="robot2:vacuum_sphere" pos="0 0 -0.028" childclass="active_adhesion">
+
+                        <site name="robot2:vacuum_contact_site" pos="0 0 0" size="0.01"/>
+
                         <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
                         <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="0.0027 0.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
                         <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="0.0027 -.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
@@ -239,11 +242,11 @@
     <position name="robot2:ghost-steer" joint="robot2:ghost-steer-hinge" ctrllimited="true" ctrlrange="-.9 .9"
       gear="4.0" />
     <adhesion name="robot2:adhere_winch" body="robot2:vacuum_sphere" ctrlrange="0 1" gain="4"/>
-    <position class="Joint1" name="robot2:Joint1" joint="robot2:Joint1" gear="0.1"/>
-    <position class="Joint2" name="robot2:Joint2" joint="robot2:Joint2" gear="0.1"/>
-    <position class="Joint3" name="robot2:Joint3" joint="robot2:Joint3" gear="0.1"/>
-    <position class="Joint4" name="robot2:Joint4" joint="robot2:Joint4" gear="0.1"/>
-    <position class="Joint5" name="robot2:Joint5" joint="robot2:Joint5" gear="0.1"/>
+    <position class="Robot2:Joint1" name="robot2:Joint1" joint="robot2:Joint1" gear="0.01"/>
+    <position class="Robot2:Joint2" name="robot2:Joint2" joint="robot2:Joint2" gear="0.01"/>
+    <position class="Robot2:Joint3" name="robot2:Joint3" joint="robot2:Joint3" gear="0.01"/>
+    <position class="Robot2:Joint4" name="robot2:Joint4" joint="robot2:Joint4" gear="0.01"/>
+    <position class="Robot2:Joint5" name="robot2:Joint5" joint="robot2:Joint5" gear="0.01"/>
   </actuator>
 
   <equality>
@@ -254,5 +257,9 @@
       polycoef="-0.00017013070152971507 2.0039379507086514 -1.4684576386267671 -1.0901354124362155 3.1974185558159771"
       class="acker_solver_param" />
   </equality>
+
+  <sensor>
+    <touch name="robot2:vacuum_touch" site="robot2:vacuum_contact_site"/>
+  </sensor>
 
 </mujoco>

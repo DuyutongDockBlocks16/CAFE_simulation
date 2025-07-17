@@ -47,6 +47,29 @@
         <joint pos="0 0 0" axis="0 0 -1" range="-1.8 2.2" damping="1.286" />
         <position ctrlrange="-1.8 2.2" kp="10" />
       </default>
+      <default class="Robot2:Joint1">
+        <joint pos="0 0 0" axis="0 0 1" range="-1.919 2.792" damping="25.0" />
+        <position ctrlrange="-1.919 2.792" kp="30" />
+      </default>
+      <default class="Robot2:Joint2">
+        <joint pos="0 0 0" axis="0 0 1" range="-0.611 1.222" damping="25.0" />
+        <!-- <joint pos="0 0 0" axis="0 0 1" range="-0.031 1.802" damping="2.86"/> -->
+        <position ctrlrange="-0.611 1.222" kp="10" />
+      </default>
+      <default class="Robot2:Joint3">
+        <!-- <joint pos="0 0 0" axis="0 0 1 " range="-2.094 1.047" damping="2.86"/> -->
+        <joint pos="0 0 0" axis="0 0 1 " range="-1.565 1.40" damping="25.0" />
+        <position ctrlrange="-1.565 1.40" kp="10" />
+      </default>
+      <default class="Robot2:Joint4">
+        <joint pos="0 0 0" axis="0 0 1" range="-3.142 3.142" damping="10.0" />
+        <position ctrlrange="-3.142 3.142" kp="10" />
+      </default>
+      <default class="Robot2:Joint5">
+        <!-- <joint pos="0 0 0" axis="0 0 -1" range="-3.49 0.523" damping="2.86"/> -->
+        <joint pos="0 0 0" axis="0 0 -1" range="-1.8 2.2" damping="10.0" />
+        <position ctrlrange="-1.8 2.2" kp="5" />
+      </default>
       <!-- <default class="Joint6">
         <joint pos="0 0 0" axis="0 0 1" range="-6.283 6.283" damping="0.286" />
         <position ctrlrange="-6.283 6.283" kp="1" />
@@ -274,6 +297,9 @@
                       <geom type="mesh" size="0.001 0.002" mass="0.0001" mesh="link6" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
                       <geom class="collision" mesh="link6" />
                       <body name="robot1:vacuum_sphere" pos="0 0 -0.028" childclass="active_adhesion">
+
+                        <site name="robot1:vacuum_contact_site" pos="0 0 0" size="0.01"/>
+
                         <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
                         <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="0.0027 0.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
                         <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="0.0027 -.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
@@ -401,5 +427,9 @@
       polycoef="-0.00017013070152971507 2.0039379507086514 -1.4684576386267671 -1.0901354124362155 3.1974185558159771"
       class="acker_solver_param" />
   </equality>
+
+  <sensor>
+    <touch name="robot1:vacuum_touch" site="robot1:vacuum_contact_site"/>
+  </sensor>
 
 </mujoco>
