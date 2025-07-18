@@ -300,7 +300,7 @@ def picking_model_implementation(env):
 
     for _ in range(200000000000):
         env.render()  # Render at every step
-        sleep(1)
+        # sleep(0.01)
         action, _ = model.predict(obs, deterministic=True)
         obs, reward, terminated, truncated, info = env.step(action)
         if terminated or truncated:
@@ -334,5 +334,6 @@ if __name__ == "__main__":
     picking_env = gym.make("SecondRobotPickingMuJoCoEnv-v0")
     # picking_model_training(picking_env, load_model_path=PICKING_MODEL_NAME)
     # picking_model_training(picking_env)
-    picking_model_training_parallel()
-    # picking_model_implementation(picking_env)
+    # picking_model_training_parallel()
+    # picking_model_training_parallel(load_model_path=PICKING_MODEL_NAME)
+    picking_model_implementation(picking_env)

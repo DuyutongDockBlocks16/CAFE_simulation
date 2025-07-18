@@ -57,7 +57,7 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
 
         self.object_joints.sort(key=lambda x: x[0])
 
-        self.max_steps = 1000
+        self.max_steps = 5000
         self.current_step = 0
         self.initial_qpos = np.copy(self.data.qpos)
         self.initial_qvel = np.copy(self.data.qvel)
@@ -111,6 +111,46 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
 
         self.initial_position = None
 
+        self.previous_center_distance = None
+
+        self.progress_reward_scale = 1000.0  
+        self.distance_threshold = 0.005 
+
+        self.success_counter = 0
+        self.success_required_steps = 5
+
+        self.task_stage = "approach"  # approach -> alignment -> suction -> grasp -> lift
+        self.stage_start_step = 0
+        
+        self.approach_threshold = 0.0185      # 4cm内进入对齐阶段
+        self.alignment_threshold = 0.01      # 1cm内进入吸附阶段
+        self.grasp_threshold = 0.01        # 1cm内认为抓取成功
+        # self.suction_threshold = 0.002      # 2mm内可以激活吸附
+        # self.suction_height_threshold = 0.002  # 高度2mm内可以激活吸附
+        self.suction_height_threshold = 0.01  # 高度2mm内可以激活吸附
+        # self.suction_radius_threshold = 0.005  # 半径5mm内可以激活吸附
+        self.suction_radius_threshold = 0.015  # 半径15cm内可以激活吸附
+        self.lift_height_low_bound = 0.04             # 提升4cm认为完成
+        self.lift_height_high_bound = 0.08             # 提升8cm认为完成
+
+        self.is_approaching_reward_given = False
+        self.is_alignment_reward_given = False
+        
+        # 🎯 奖励权重
+        self.reward_weights = {
+            "time_penalty": 0.1,
+            "distance": 1000.0,
+            "alignment": 10.0,
+            "suction": 200.0,
+            "stability": 100.0,
+            "rover_penalty": 200.0,
+            "collision_penalty": 20.0,
+            "moved_penalty": 300.0,
+            "dropped_penalty": 20.0,
+            "stage_completion": 2000.0,
+            "final_completion": 2000.0
+        }
+
         obs = self._get_obs()
         # print("Observation shape:", obs.shape)
         self.observation_space = gym.spaces.Box(
@@ -128,39 +168,6 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
             shape=(num_actuators - ACTION_SPACE_REDUCTION,), 
             dtype=np.float32
         )
-
-        self.previous_center_distance = None
-        self.previous_max_deviation = None
-        self.previous_avg_deviation = None
-
-        self.progress_reward_scale = 1000.0  
-        self.distance_threshold = 0.005 
-
-        self.success_counter = 0
-        self.success_required_steps = 5
-
-        self.task_stage = "approach"  # approach -> alignment -> suction -> grasp -> lift
-        self.stage_start_step = 0
-        
-        self.approach_threshold = 0.0185      # 4cm内进入对齐阶段
-        self.alignment_threshold = 0.015      # 2cm内进入吸附阶段
-        self.grasp_threshold = 0.009        # 9mm内认为抓取成功
-        self.suction_threshold = 0.005      # 1.5cm内可以激活吸附
-        self.lift_height_low_bound = 0.04             # 提升4cm认为完成
-        self.lift_height_high_bound = 0.08             # 提升8cm认为完成
-        
-        # 🎯 奖励权重
-        self.reward_weights = {
-            "distance": 1000.0,
-            "alignment": 5.0,
-            "suction": 200.0,
-            "stability": 100.0,
-            "rover_penalty": 200.0,
-            "collision_penalty": 20.0,
-            "dropped_penalty": 20.0,
-            "stage_completion": 100.0,
-            "final_completion": 500.0
-        }
         
         # 🎯 状态记录
         self.initial_object_height = None
@@ -169,7 +176,7 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         self.required_grasp_steps = 10
 
         self.lift_stable_steps = 0
-        self.required_lift_steps = 20
+        self.required_lift_steps = 5
 
     def reset(self, seed=None, options=None):
         self.data.qpos[:] = self.initial_qpos
@@ -178,6 +185,8 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         self.current_step = 0
 
         self.task_stage = "approach"
+        self.is_approaching_reward_given = False
+        self.is_alignment_reward_given = False
         self.stage_start_step = 0
         self.suction_activated = False
         self.grasp_stable_steps = 0
@@ -186,8 +195,6 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         self.lift_stable_steps = 0
         
         self.previous_center_distance = None
-        self.previous_max_deviation = None
-        self.previous_avg_deviation = None
         mujoco.mj_forward(self.model, self.data)
 
         self._record_initial_object_height()
@@ -217,16 +224,41 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
             body_id = self.model.jnt_bodyid[self.active_joint_id]
             active_position = self.data.xpos[body_id]
 
-        target_position = active_position.copy()
-        target_position[2] += 0.0085
+        object_position = active_position.copy()
 
-        sphere_info = self._get_sphere_center_to_target_info(target_position)
+        target_position = object_position.copy()
+        approaching_target_position = target_position.copy()
+        approaching_target_position[2] += 0.0385
+
+        alignment_target_position = target_position.copy()
+        alignment_target_position[2] += 0.0085
+
+        # 🎯 获取当前状态信息
+        approaching_sphere_info = self._get_sphere_center_to_target_info(approaching_target_position)
+        approaching_current_center_distance = approaching_sphere_info['center_to_target_distance']
+        approaching_center_to_target_rel = approaching_sphere_info['center_to_target_rel']
+
+        alignment_sphere_info = self._get_sphere_center_to_target_info(alignment_target_position)
+        alignment_current_center_distance = alignment_sphere_info['center_to_target_distance']
+        alignment_center_to_target_rel = alignment_sphere_info['center_to_target_rel']
         
-        sphere_center = sphere_info['sphere_center']
-        center_to_target_rel = sphere_info['center_to_target_rel']
-        center_to_target_distance = sphere_info['center_to_target_distance']
-        center_to_target_angle_xy = sphere_info['center_to_target_angle_xy']
-        center_to_target_angle_z = sphere_info['center_to_target_angle_z']
+        # 🎯 计算角度信息
+        approaching_center_to_target_angle_xy = np.arctan2(approaching_center_to_target_rel[1], approaching_center_to_target_rel[0])
+        approaching_center_to_target_angle_z = np.arctan2(approaching_center_to_target_rel[2], np.linalg.norm(approaching_center_to_target_rel[:2]))
+        
+        alignment_center_to_target_angle_xy = np.arctan2(alignment_center_to_target_rel[1], alignment_center_to_target_rel[0])
+        alignment_center_to_target_angle_z = np.arctan2(alignment_center_to_target_rel[2], np.linalg.norm(alignment_center_to_target_rel[:2]))
+        
+        # 🎯 添加圆柱体检测信息
+        sphere_center = approaching_sphere_info['sphere_center']
+        
+        height_diff = abs(sphere_center[2] - alignment_target_position[2])
+        xy_distance = np.sqrt((sphere_center[0] - alignment_target_position[0])**2 + 
+                            (sphere_center[1] - alignment_target_position[1])**2)
+        
+        height_ok = height_diff <= self.suction_height_threshold
+        radius_ok = xy_distance <= self.suction_radius_threshold
+        cylinder_ready = float(height_ok and radius_ok)
         
         robot_2_arm_positions = np.array([self.data.xpos[body_id] for body_id in self.robot_arm_ids])
         robot_2_arm_velocities = np.array([self.data.cvel[body_id] for body_id in self.robot_arm_ids])
@@ -243,6 +275,9 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         vacuum_sphere_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:vacuum_sphere")
         vacuum_sphere_pos = self.data.xpos[vacuum_sphere_body_id]
         vacuum_sphere_vel = self.data.cvel[vacuum_sphere_body_id]
+        
+        # 🎯 获取真空吸嘴朝向
+        robot2_vacuum_quat = self.data.xquat[vacuum_sphere_body_id]
 
         linear_velocity = vacuum_sphere_vel[:3]
         current_max_velocity = np.linalg.norm(linear_velocity)
@@ -261,61 +296,74 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         max_speed = 15.0
 
         adhere_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:adhere_winch")
-        adhere_control = self.data.ctrl[adhere_actuator_id]  # 已经在 [0, 1] 范围内
+        adhere_control = self.data.ctrl[adhere_actuator_id]
         
         joint1_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint1")
         joint1_control_raw = self.data.ctrl[joint1_actuator_id]
-        joint1_control = (joint1_control_raw - (-1.919)) / (2.792 - (-1.919)) * 2 - 1  # 归一化到 [-1, 1]
+        joint1_control = (joint1_control_raw - (-1.919)) / (2.792 - (-1.919)) * 2 - 1
         
         joint2_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint2")
         joint2_control_raw = self.data.ctrl[joint2_actuator_id]
-        joint2_control = (joint2_control_raw - (-0.611)) / (1.222 - (-0.611)) * 2 - 1  # 归一化到 [-1, 1]
+        joint2_control = (joint2_control_raw - (-0.611)) / (1.222 - (-0.611)) * 2 - 1
         
         joint3_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint3")
         joint3_control_raw = self.data.ctrl[joint3_actuator_id]
-        joint3_control = (joint3_control_raw - (-1.565)) / (1.40 - (-1.565)) * 2 - 1  # 归一化到 [-1, 1]
+        joint3_control = (joint3_control_raw - (-1.565)) / (1.40 - (-1.565)) * 2 - 1
         
         joint4_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint4")
         joint4_control_raw = self.data.ctrl[joint4_actuator_id]
-        joint4_control = joint4_control_raw / 3.142  # 归一化到 [-1, 1]
+        joint4_control = joint4_control_raw / 3.142
         
         joint5_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint5")
         joint5_control_raw = self.data.ctrl[joint5_actuator_id]
-        joint5_control = (joint5_control_raw - (-1.8)) / (2.2 - (-1.8)) * 2 - 1  # 归一化到 [-1, 1]
+        joint5_control = (joint5_control_raw - (-1.8)) / (2.2 - (-1.8)) * 2 - 1
 
-        # self._record_initial_object_height()
-        
         observation = np.concatenate([
-            robot2_pos / max_position,                    # [3] - 机器人位置
-            [robot2_orientation / np.pi],                 # [1] - 机器人朝向
+            robot2_pos / max_position,                                # [3] - 机器人位置
+            [robot2_orientation / np.pi],                             # [1] - 机器人朝向
             
-            vacuum_sphere_pos / max_position,             # [3] - vacuum sphere位置
-            vacuum_sphere_vel[:3] / max_speed,            # [3] - vacuum sphere线速度
+            vacuum_sphere_pos / max_position,                         # [3] - vacuum sphere位置
+            vacuum_sphere_vel[:3] / max_speed,                        # [3] - vacuum sphere线速度
             
-            [adhere_control],                             
-            [joint1_control],                             
-            [joint2_control],                             
-            [joint3_control],                             
-            [joint4_control],                             
-            [joint5_control],  
+            [adhere_control],                                         # [1] - 吸附控制
+            [joint1_control],                                         # [1] - 关节1控制
+            [joint2_control],                                         # [1] - 关节2控制
+            [joint3_control],                                         # [1] - 关节3控制
+            [joint4_control],                                         # [1] - 关节4控制
+            [joint5_control],                                         # [1] - 关节5控制
 
-            center_to_target_rel / max_distance,          # [3] - 圆心到目标相对位置
-            [center_to_target_distance / max_distance],   # [1] - 圆心到目标距离
-            [center_to_target_angle_xy / np.pi],          # [1] - 水平角度
-            [center_to_target_angle_z / np.pi],           # [1] - 垂直角度
+            # 🎯 接近阶段信息
+            approaching_center_to_target_rel / max_distance,          # [3] - 接近目标相对位置
+            [approaching_current_center_distance / max_distance],     # [1] - 接近目标距离
+            [approaching_center_to_target_angle_xy / np.pi],          # [1] - 接近水平角度
+            [approaching_center_to_target_angle_z / np.pi],           # [1] - 接近垂直角度
+
+            # 🎯 对齐阶段信息
+            alignment_center_to_target_rel / max_distance,            # [3] - 对齐目标相对位置
+            [alignment_current_center_distance / max_distance],       # [1] - 对齐目标距离
+            [alignment_center_to_target_angle_xy / np.pi],            # [1] - 对齐水平角度
+            [alignment_center_to_target_angle_z / np.pi],             # [1] - 对齐垂直角度
+
+            # 🎯 圆柱体检测信息
+            [height_diff / max_distance],                             # [1] - 高度差
+            [xy_distance / max_distance],                             # [1] - XY平面距离
+            [cylinder_ready],                                         # [1] - 是否在圆柱体内
+
+            # 🎯 任务阶段信息
+            [1.0 if self.task_stage == "approach" else 0.0],         # [1] - 接近阶段
+            [1.0 if self.task_stage == "alignment" else 0.0],        # [1] - 对齐阶段
+            [1.0 if self.task_stage == "lift" else 0.0],             # [1] - 提升阶段
+
+            # 🎯 真空吸嘴朝向信息
+            robot2_vacuum_quat,                                       # [4] - 真空吸嘴四元数
             
-            [sphere_info['max_sphere_distance'] / max_distance],  # [1] - 最大偏差
-            [sphere_info['avg_sphere_distance'] / max_distance],  # [1] - 平均偏差
-            [sphere_info['min_sphere_distance'] / max_distance],  # [1] - 最小偏差
-            
-            vacuum_to_target_rel / max_distance,          # [3] - vacuum body到目标相对位置
-            [vacuum_to_target_distance / max_distance],   # [1] - vacuum body到目标距离
-            [vacuum_to_target_angle_xy / np.pi],          # [1] - 水平角度
-            [vacuum_to_target_angle_z / np.pi],           # [1] - 垂直角度
-            
-            np.array(arm_to_target_rels).flatten() / max_distance,  # [27] - 所有手臂到目标相对位置
-            np.array(arm_to_target_distances) / max_distance,       # [9] - 所有手臂到目标距离
-        
+            vacuum_to_target_rel / max_distance,                      # [3] - vacuum body到目标相对位置
+            [vacuum_to_target_distance / max_distance],               # [1] - vacuum body到目标距离
+            [vacuum_to_target_angle_xy / np.pi],                      # [1] - 水平角度
+            [vacuum_to_target_angle_z / np.pi],                       # [1] - 垂直角度
+
+            np.array(arm_to_target_rels).flatten() / max_distance,    # [27] - 所有手臂到目标相对位置
+            np.array(arm_to_target_distances) / max_distance,         # [9] - 所有手臂到目标距离
         ], dtype=np.float32)
         
         return observation
@@ -407,27 +455,27 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         # print(f"Center to target distance: {center_to_target_distance:.4f}")
         # print(f"Center to target relative position: {target_position} - {sphere_center} = {center_to_target_rel}")
         
-        center_to_target_angle_xy = np.arctan2(center_to_target_rel[1], center_to_target_rel[0])
-        center_to_target_angle_z = np.arctan2(center_to_target_rel[2], np.linalg.norm(center_to_target_rel[:2]))
+        # center_to_target_angle_xy = np.arctan2(center_to_target_rel[1], center_to_target_rel[0])
+        # center_to_target_angle_z = np.arctan2(center_to_target_rel[2], np.linalg.norm(center_to_target_rel[:2]))
         
-        sphere_to_target_distances = []
-        for sphere_pos in sphere_positions:
-            distance = np.linalg.norm(target_position - sphere_pos)
-            sphere_to_target_distances.append(distance)
+        # sphere_to_target_distances = []
+        # for sphere_pos in sphere_positions:
+        #     distance = np.linalg.norm(target_position - sphere_pos)
+        #     sphere_to_target_distances.append(distance)
         
-        sphere_to_target_distances = np.array(sphere_to_target_distances)
+        # sphere_to_target_distances = np.array(sphere_to_target_distances)
         
         return {
             'sphere_center': sphere_center,
             'sphere_positions': sphere_positions,
             'center_to_target_rel': center_to_target_rel,
             'center_to_target_distance': center_to_target_distance,
-            'center_to_target_angle_xy': center_to_target_angle_xy,
-            'center_to_target_angle_z': center_to_target_angle_z,
-            'sphere_to_target_distances': sphere_to_target_distances,
-            'max_sphere_distance': np.max(sphere_to_target_distances),
-            'min_sphere_distance': np.min(sphere_to_target_distances),
-            'avg_sphere_distance': np.mean(sphere_to_target_distances)
+            # 'center_to_target_angle_xy': center_to_target_angle_xy,
+            # 'center_to_target_angle_z': center_to_target_angle_z,
+            # 'sphere_to_target_distances': sphere_to_target_distances,
+            # 'max_sphere_distance': np.max(sphere_to_target_distances),
+            # 'min_sphere_distance': np.min(sphere_to_target_distances),
+            # 'avg_sphere_distance': np.mean(sphere_to_target_distances)
         }
 
     def step(self, action):
@@ -534,13 +582,15 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         object_position = self.data.xpos[body_id]
 
         target_position = object_position.copy()
-        target_position[2] += 0.0085
+        approaching_target_position = target_position.copy()
+        approaching_target_position[2] += 0.0485
 
         # 🎯 获取当前状态信息
-        sphere_info = self._get_sphere_center_to_target_info(target_position)
-        current_center_distance = sphere_info['center_to_target_distance']
-        current_max_deviation = sphere_info['max_sphere_distance']
-        current_avg_deviation = sphere_info['avg_sphere_distance']
+        approaching_sphere_info = self._get_sphere_center_to_target_info(approaching_target_position)
+        approaching_current_center_distance = approaching_sphere_info['center_to_target_distance']
+
+        alignment_target_position = target_position.copy()
+        alignment_target_position[2] += 0.0085
         
         # 🎯 初始化奖励
         total_reward = 0.0
@@ -551,25 +601,46 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         dropped = False
         
         # 🎯 阶段管理
-        self._update_task_stage(current_center_distance, object_position)
+        task_stage_progress_reward = self._update_task_stage(approaching_current_center_distance, alignment_target_position)
+
+        total_reward += task_stage_progress_reward
+
+        time_penalty = 0.0
         
         # 🎯 阶段特定奖励
         if self.task_stage == "approach":
-            position_diff = object_position - self.initial_position
             if not np.allclose(self.initial_position, object_position, atol=0.1):
                 print("⚠️ Object moved, applying penalty.")
                 # print(f"Active position: {active_position}, Initial height: {self.initial_object_height}")
-                total_reward += -self.reward_weights["dropped_penalty"]
+                total_reward += -self.reward_weights["moved_penalty"]
                 dropped = True
 
-            distance_reward = self._calculate_distance_reward(current_center_distance)
+            distance_reward = self._calculate_distance_reward(approaching_current_center_distance)
+            self.previous_center_distance = approaching_current_center_distance
             total_reward += distance_reward
-            # approach_reward = self._calculate_approach_reward(current_center_distance)
-            # total_reward += approach_reward
+
+            time_penalty = -2.0 * self.reward_weights["time_penalty"]
             
-        # elif self.task_stage == "alignment":
-        #     alignment_reward = self._calculate_alignment_reward(sphere_info)
-        #     total_reward += alignment_reward
+        elif self.task_stage == "alignment":
+            if not np.allclose(self.initial_position, object_position, atol=0.1):
+                print("⚠️ Object moved, applying penalty.")
+                # print(f"Active position: {active_position}, Initial height: {self.initial_object_height}")
+                total_reward += -self.reward_weights["moved_penalty"]
+                dropped = True
+
+            alignment_current_center_distance = self._get_sphere_center_to_target_info(alignment_target_position)['center_to_target_distance']
+
+            distance_reward = self._calculate_distance_reward(alignment_current_center_distance)
+            self.previous_center_distance = alignment_current_center_distance
+            total_reward += distance_reward                
+
+            alignment_reward = self._calculate_alignment_reward()
+            total_reward += alignment_reward
+
+            # progressive_reward = self._new_calculate_progressive_alignment_reward()
+            # total_reward += progressive_reward
+
+            time_penalty = -1.0 * self.reward_weights["time_penalty"]
             
         # elif self.task_stage == "suction":
         #     suction_reward = self._calculate_suction_reward(current_center_distance)
@@ -591,7 +662,8 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
                 total_reward += -self.reward_weights["dropped_penalty"]
                 dropped = True
 
-            lift_reward, task_completed = self._calculate_lift_reward(object_position)
+            lift_reward, task_completed, suction_is_not_activated = self._calculate_lift_reward(object_position)
+            dropped = dropped or suction_is_not_activated
             total_reward += lift_reward
         
         # 🎯 全局惩罚
@@ -600,15 +672,14 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
 
         collision_penalty, collision_detected = self._calculate_collision_penalty()
         total_reward += collision_penalty
+
+        total_reward += time_penalty
         
         # 🎯 更新历史状态
-        self.previous_center_distance = current_center_distance
-        self.previous_max_deviation = current_max_deviation
-        self.previous_avg_deviation = current_avg_deviation
         
         return total_reward, task_completed, collision_detected, dropped
 
-    def _update_task_stage(self, distance, object_position):
+    def _update_task_stage(self, approaching_current_center_distance, alignment_target_position):
         """更新任务阶段"""
         # if self.task_stage == "approach" and distance < self.approach_threshold:
         #     self.task_stage = "alignment"
@@ -625,11 +696,48 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         #     self.stage_start_step = self.current_step
         #     self.suction_activated = True
         #     print(f"🎯 进入抓取阶段 (距离: {distance:.6f}m)")
+        task_stage_progress_reward = 0.0
 
-        if self.task_stage == "approach" and distance < self.suction_threshold:
-            self.task_stage = "lift"
+        if self.task_stage == "approach" and approaching_current_center_distance < self.alignment_threshold:
+            self.task_stage = "alignment"
             self.stage_start_step = self.current_step
-            print(f"进入提升阶段 (距离: {distance:.6f}m)")
+            print(f"进入对齐阶段 (距离: {approaching_current_center_distance:.6f}m)")
+            self.previous_center_distance = None
+            if not self.is_approaching_reward_given:
+                self.is_approaching_reward_given = True
+                task_stage_progress_reward = self.reward_weights["stage_completion"]
+                print(f"🎯 接近阶段奖励: {task_stage_progress_reward:.2f}")
+        elif self.task_stage == "alignment":
+            # 🎯 获取alignment_target_position和sphere_center
+            # body_id = self.model.jnt_bodyid[self.active_joint_id]
+            # object_position = self.data.xpos[body_id]
+            
+            # alignment_target_position = object_position.copy()
+            # alignment_target_position[2] += 0.0085
+            
+            sphere_center, _ = self._get_vacuum_sphere_center()
+            
+            # 🎯 检查是否在圆柱体内
+            # 1. 高度检查：sphere_center的z坐标与alignment_target_position的z坐标差值
+            height_diff = abs(sphere_center[2] - alignment_target_position[2])
+            height_ok = height_diff <= self.suction_height_threshold
+            
+            # 2. 半径检查：sphere_center与alignment_target_position在xy平面的距离
+            xy_distance = np.sqrt((sphere_center[0] - alignment_target_position[0])**2 + 
+                                (sphere_center[1] - alignment_target_position[1])**2)
+            radius_ok = xy_distance <= self.suction_radius_threshold
+            
+            # 🎯 如果同时满足高度和半径条件，进入下一阶段
+            if height_ok and radius_ok:
+                self.task_stage = "lift"
+                self.stage_start_step = self.current_step
+                print(f"✅ 进入提升阶段!")
+                if not self.is_alignment_reward_given:
+                    self.is_alignment_reward_given = True
+                    task_stage_progress_reward = self.reward_weights["stage_completion"]
+                    print(f"🎯 对齐阶段奖励: {task_stage_progress_reward:.2f}")
+        
+        return task_stage_progress_reward
 
     def _calculate_distance_reward(self, distance):
         """基础距离奖励 - 所有阶段都适用"""
@@ -658,16 +766,38 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         # return approach_reward + speed_reward
         return 0.0
 
-    def _calculate_alignment_reward(self, sphere_info):
+    def _calculate_alignment_reward(self):
         """对齐阶段奖励"""
-        max_deviation = sphere_info['max_sphere_distance']
-        avg_deviation = sphere_info['avg_sphere_distance']
+        standard_quaternions = np.array([-0.707, 0.0, 0.707, 0.0])
+
+        robot2_vacuum_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:vacuum_sphere")
+        robot2_vacuum_quat = self.data.xquat[robot2_vacuum_body_id]
+
+        orientation_similarity = np.abs(np.dot(robot2_vacuum_quat, standard_quaternions))
         
-        max_deviation_progress = self.previous_max_deviation - max_deviation
-        avg_deviation_progress = self.previous_avg_deviation - avg_deviation
         
-        precision_reward = (max_deviation_progress + avg_deviation_progress) * self.reward_weights["alignment"]
-        
+        # 🎯 扩展的精度奖励阶梯
+        if orientation_similarity > 0.995:    # 约5度内 - 完美对齐
+            precision_reward = 1.0 * self.reward_weights["alignment"]
+        elif orientation_similarity > 0.99:   # 约8度内 - 优秀对齐
+            precision_reward = 0.5 * self.reward_weights["alignment"]
+        elif orientation_similarity > 0.98:   # 约11度内 - 良好对齐
+            precision_reward = 0.2 * self.reward_weights["alignment"]
+        elif orientation_similarity > 0.95:   # 约18度内 - 可接受对齐
+            precision_reward = 0.1 * self.reward_weights["alignment"]
+        elif orientation_similarity > 0.9:    # 约26度内 - 一般对齐
+            precision_reward = -1 * self.reward_weights["alignment"]
+        elif orientation_similarity > 0.8:    # 约37度内 - 较差对齐
+            precision_reward = -1 * self.reward_weights["alignment"]
+        elif orientation_similarity > 0.7:    # 约46度内 - 差对齐
+            precision_reward = -1 * self.reward_weights["alignment"]
+        elif orientation_similarity > 0.5:    # 约60度内 - 很差对齐
+            precision_reward = -1 * self.reward_weights["alignment"]
+        else:                                  # 大于60度 - 最差对齐
+            precision_reward = -1.0 * self.reward_weights["alignment"]
+
+        # print(f"对齐精度奖励: {precision_reward:.3f}, robot2_vacuum_quat: {robot2_vacuum_quat}")
+
         return precision_reward 
 
     def _calculate_suction_reward(self, distance):
@@ -741,6 +871,8 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         adhere_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:adhere_winch")
         adhere_control = self.data.ctrl[adhere_actuator_id]
 
+        suction_is_not_activated = False
+
         if adhere_control == 1.0:  # 吸附激活
             suction_reward += 1.0
             print(f"🔗 真空吸附激活: {adhere_control:.3f}")
@@ -755,9 +887,10 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
                 print(f"🔗 真空吸附激活,且物体提升: {adhere_control:.3f}")
 
             # 检查是否保持在提升高度
-            if self.lift_height_low_bound > lift_height and lift_height > self.lift_height_high_bound:
+            if self.lift_height_low_bound < lift_height and lift_height < self.lift_height_high_bound:
                 self.lift_stable_steps += 1
-                lift_reward += 2.0  # 每步保持提升奖励
+                # lift_reward += 2.0  # 每步保持提升奖励
+                lift_reward += 10.0  # 每步保持提升奖励
                 
                 # 连续稳定提升奖励
                 if self.lift_stable_steps >= self.required_lift_steps:
@@ -770,6 +903,7 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
                     print(f"提升稳定: {self.lift_stable_steps}/{self.required_lift_steps} (高度: {lift_height:.6f}m)")
             elif lift_height > self.lift_height_high_bound:
                 print(f"提升高度超出范围 (高度: {lift_height:.6f}m)")
+                suction_reward = 0.0
                 lift_reward = 0.0
                 self.lift_stable_steps = 0
                 completion_reward = 0.0
@@ -783,10 +917,12 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
                 task_completed = False
 
         else:
+            suction_is_not_activated = True
+            print("❌ 真空吸附未激活，无法提升物体")
             suction_reward -= 1.0
             print(f"⚠️ 真空吸附未激活: {adhere_control:.3f}")
         
-        return lift_reward + completion_reward, task_completed
+        return lift_reward + completion_reward + suction_reward, task_completed, suction_is_not_activated
 
     def _calculate_collision_penalty(self):
         if self._check_robot_forbidden_collision():
@@ -809,3 +945,59 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
             "grasp_stable_steps": self.grasp_stable_steps
         }
         return info
+
+    def _new_calculate_progressive_alignment_reward(self):
+        """对齐阶段奖励 - 同时鼓励接近和对正"""
+        
+        # 🎯 朝向奖励
+        standard_quaternions = np.array([-0.707, 0.0, 0.707, 0.0])
+        robot2_vacuum_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:vacuum_sphere")
+        robot2_vacuum_quat = self.data.xquat[robot2_vacuum_body_id]
+        orientation_similarity = np.abs(np.dot(robot2_vacuum_quat, standard_quaternions))
+        
+        # 🎯 位置信息
+        body_id = self.model.jnt_bodyid[self.active_joint_id]
+        object_position = self.data.xpos[body_id]
+        alignment_target_position = object_position.copy()
+        alignment_target_position[2] += 0.0085
+        
+        sphere_center, _ = self._get_vacuum_sphere_center()
+        
+        # 🎯 关键改进：分别计算高度和XY距离
+        height_diff = abs(sphere_center[2] - alignment_target_position[2])
+        xy_distance = np.sqrt((sphere_center[0] - alignment_target_position[0])**2 + 
+                            (sphere_center[1] - alignment_target_position[1])**2)
+        
+        # 🎯 高度奖励（垂直对齐）
+        height_reward = max(0, (self.suction_height_threshold * 3 - height_diff) / (self.suction_height_threshold * 3)) * 20
+        
+        # 🎯 XY位置奖励（水平对齐）
+        xy_reward = max(0, (self.suction_radius_threshold * 3 - xy_distance) / (self.suction_radius_threshold * 3)) * 20
+        
+        # 🎯 朝向奖励（但要求距离足够近才给高奖励）
+        distance_factor = max(0, 1.0 - (height_diff + xy_distance) / 0.02)  # 距离越近因子越大
+        
+        if orientation_similarity > 0.995:
+            orientation_reward = 30.0 * (1.0 + distance_factor)  # 近距离时朝向奖励翻倍
+        elif orientation_similarity > 0.99:
+            orientation_reward = 15.0 * (1.0 + distance_factor * 0.5)
+        elif orientation_similarity > 0.98:
+            orientation_reward = 8.0
+        elif orientation_similarity > 0.95:
+            orientation_reward = 3.0
+        else:
+            orientation_reward = -5.0  # 朝向太差给惩罚
+        
+        # 🎯 组合奖励：三个维度都重要
+        total_alignment_reward = (height_reward + xy_reward + orientation_reward) * self.reward_weights["alignment"] / 100.0
+        
+        # 🎯 调试信息
+        if self.current_step % 100 == 0:
+            print(f"🎯 对齐奖励分解:")
+            print(f"   朝向相似度: {orientation_similarity:.4f} -> 奖励: {orientation_reward:.2f}")
+            print(f"   高度差: {height_diff*1000:.1f}mm -> 奖励: {height_reward:.2f}")
+            print(f"   XY距离: {xy_distance*1000:.1f}mm -> 奖励: {xy_reward:.2f}")
+            print(f"   距离因子: {distance_factor:.3f}")
+            print(f"   总对齐奖励: {total_alignment_reward:.2f}")
+        
+        return total_alignment_reward

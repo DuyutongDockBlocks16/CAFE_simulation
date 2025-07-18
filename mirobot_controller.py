@@ -443,7 +443,13 @@ class MirobotController:
         # except Exception as e:
         #     print(f"❌ 无法获取robot1真空吸嘴四元数: {e}")
 
-        self._check_vacuum_touch_sensor()
+        # self._check_vacuum_touch_sensor()
+
+        # robot1_vacuum_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot1:vacuum_sphere")
+        # robot1_vacuum_vel = self.data.cvel[robot1_vacuum_body_id][:3]
+        # linear_speed = np.linalg.norm(robot1_vacuum_vel)
+        
+        # print(f"🚀 Robot1 Vacuum Speed: {linear_speed:.6f} m/s (State: {self.state})")
 
         if self.state == FiniteState.IDLE:
             self.pick_position = current_object_position

@@ -49,6 +49,7 @@ class HybridController:
 
         self.robot_1_rover_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot1:rover")
         self.robot_2_rover_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
+        self.robot2_rover_id = self.robot_2_rover_id
 
         self.picking_positions = [
             [1, -2.45], # left
@@ -56,7 +57,36 @@ class HybridController:
         ]
 
         self.placing_positions = [
+            [2.8, -1.0],  # placing position 1
         ]  
+
+        self.robot2_arm_bodies = [
+            "robot2:base",          
+            "robot2:base_link",     
+            "robot2:link1",         
+            "robot2:link2",         
+            "robot2:link3",         
+            "robot2:link4",         
+            "robot2:link5",         
+            "robot2:link6",         
+            "robot2:vacuum_sphere"
+        ]
+
+        self.robot2_body_ids = []
+        for body_name in self.robot2_arm_bodies:
+            try:
+                body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+                self.robot2_body_ids.append(body_id)
+            except:
+                continue
+
+        self.forbidden_geoms = [
+            "wall_front", "wall_back", "wall_left", "wall_right",
+            "pickingplace:table0",
+            "pickingplace:table2"
+        ]
+
+        self.robot_arm_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name) for name in self.robot2_arm_bodies]
 
         self.target_position_x_y = None
 
@@ -74,12 +104,32 @@ class HybridController:
         self.max_distance = 8.0
 
         self.sec_robot_navigation_model = PPO.load(sec_robot_navigation_model_path)
+        self.sec_robot_picking_model = PPO.load(sec_robot_picking_model_path)
         self._start_object_placer_thread(self.model, self.data, self.object_joint_ids, self.left_object_position, self.right_object_position, self.shared_state)
         self._start_object_remover_threads(self.model, self.data, self.object_joint_ids)
 
         self.first_robot_status = None
         self.second_robot_status = RLRobotFiniteState.IDLE
         self.second_robot_is_active = False
+
+        self.active_joint_id = None
+
+        self.object_joints = []
+        for i in range(self.model.njnt):
+            joint_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_JOINT, i)
+            if joint_name and joint_name.startswith("object") and joint_name.endswith(":joint"):
+                try:
+                    object_id = int(joint_name.split("object")[1].split(":")[0])
+                    self.object_joints.append((object_id, i, joint_name))
+                except (ValueError, IndexError):
+                    continue
+
+        self.object_joints.sort(key=lambda x: x[0])
+
+        self.suction_height_threshold = 0.01 
+        self.suction_radius_threshold = 0.015 
+
+        self.picking_stable_steps = 0
 
     def _get_data_and_model(self):
         model = mujoco.MjModel.from_xml_path("xml/scene_mirobot.xml")
@@ -127,7 +177,7 @@ class HybridController:
             self.second_robot_is_active = True
 
         if self.second_robot_is_active:
-            if self.second_robot_status == RLRobotFiniteState.IDLE:
+            if self.second_robot_status == RLRobotFiniteState.IDLE or self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:
                 self.target_position_x_y = self.picking_positions[1]
                 navigation_obs = self._get_navigation_obs()
                 action, _ = self.sec_robot_navigation_model.predict(navigation_obs, deterministic=True)
@@ -138,16 +188,95 @@ class HybridController:
                 if reached:
                     self.second_robot_status = RLRobotFiniteState.PICKING_OBJECT
                     action = np.zeros(SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH, dtype=np.float32)
-                    break_flag = True
+                    # break_flag = True
+                    rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
+                    self.data.cvel[rover_body_id] = 0.0
+                    self.second_robot_status = RLRobotFiniteState.PICKING_OBJECT
+                    
+                self._apply_navigation_action(action)
+            if self.second_robot_status == RLRobotFiniteState.PICKING_OBJECT:
+                
+                left_joint_id, left_position, right_joint_id, right_position = self._get_placed_object_info()
+
+                if left_joint_id is not None:
+                    self.active_position = left_position
+                    self.active_joint_id = left_joint_id
+                    self.side = "left"
+                elif right_joint_id is not None:
+                    self.active_position = right_position
+                    self.active_joint_id = right_joint_id
+                    self.side = "right"
+
+                picking_obs = self._get_picking_obs()
+                action, _ = self.sec_robot_picking_model.predict(picking_obs, deterministic=True)
+
+                picked = False
+
+                touched = False
+                sensor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "robot2:vacuum_touch")
+                sensor_data = self.data.sensordata[sensor_id]
+                if sensor_data > 0:
+                    touched = True
+
+                suction_activated = False
+                adhere_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:adhere_winch")
+                adhere_control = self.data.ctrl[adhere_actuator_id]
+                if adhere_control == 1.0:
+                    suction_activated = True
+
+                picked = touched and suction_activated
+                if picked:
+                    self.picking_stable_steps += 1
+
+                if self.picking_stable_steps == 100:
+                    self.picking_stable_steps = 0
+                    self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION
+                    joint_names = ["robot2:Joint1", "robot2:Joint2", "robot2:Joint3", "robot2:Joint4", "robot2:Joint5"]
+    
+                    for joint_name in joint_names:
+                        # 找到对应的actuator
+                        actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name)
+                        if actuator_id >= 0:
+                            # 修改gear参数
+                            self.model.actuator_gear[actuator_id] = 0.08
+                    action = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # 停止导航
+                    # action = [1.0, action[1], action[2], action[3], action[4], action[5]]
+                #     # action = np.zeros(SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH, dtype=np.float32)
+                #     # break_flag = True
+                    print("Object picked successfully, moving to placing position.")
+
+                self._apply_picking_action(action)
+
+            if self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION:
+                self.target_position_x_y = self.placing_positions[0]
+                navigation_obs = self._get_navigation_obs()
+                action, _ = self.sec_robot_navigation_model.predict(navigation_obs, deterministic=True)
+
+                robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]
+                dist_to_target = np.linalg.norm(robot_2_rover_pos - self.target_position_x_y)
+                reached = (dist_to_target < 0.35)
+                if reached:
+                    self.second_robot_status = RLRobotFiniteState.PLACING_OBJECT
+                    action = np.zeros(SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH, dtype=np.float32)
+                    # break_flag = True
+                    rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
+                    self.data.cvel[rover_body_id] = 0.0
                     
                 self._apply_navigation_action(action)
             
+            if self.second_robot_status == RLRobotFiniteState.PLACING_OBJECT:
+                adhere_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:adhere_winch")
+                self.data.ctrl[adhere_actuator_id] = 0.0  # 停止吸附
+
+                self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION
+
         return break_flag
 
     def run_simulation(self):
         with mujoco.viewer.launch_passive(self.model, self.data) as viewer:
             step = 0
             while True:
+                # sleep(0.01)
                 break_flag = self.step()
                 if break_flag:
                     save_mujoco_state_to_file(self.model, self.data)
@@ -157,9 +286,9 @@ class HybridController:
                 mujoco.mj_step(self.model, self.data)
                 step += 1
 
-                if not np.all(np.isfinite(self.data.qacc)) or np.any(np.abs(self.data.qacc) > 1e7):
-                    print("QACC error detected! Simulation unstable, exiting loop.")
-                    break
+                # if not np.all(np.isfinite(self.data.qacc)) or np.any(np.abs(self.data.qacc) > 1e7):
+                #     print("QACC error detected! Simulation unstable, exiting loop.")
+                #     break
                     
                 viewer.sync()
 
@@ -258,7 +387,237 @@ class HybridController:
         ], dtype=np.float32)
 
         return observation
+
+    def _get_picking_obs(self):
+        robot_2_arm_positions = np.array([self.data.xpos[body_id] for body_id in self.robot_arm_ids])  # [9, 3]
+        robot_2_arm_velocities = np.array([self.data.cvel[body_id] for body_id in self.robot_arm_ids])  # [9, 6]
+
+        # get active position according to the active joint
+        if self.active_joint_id is not None:
+            body_id = self.model.jnt_bodyid[self.active_joint_id]
+            active_position = self.data.xpos[body_id]
+
+        object_position = active_position.copy()
+
+        target_position = object_position.copy()
+        approaching_target_position = target_position.copy()
+        approaching_target_position[2] += 0.0385
+
+        alignment_target_position = target_position.copy()
+        alignment_target_position[2] += 0.0085
+
+        # 🎯 获取当前状态信息
+        approaching_sphere_info = self._get_sphere_center_to_target_info(approaching_target_position)
+        approaching_current_center_distance = approaching_sphere_info['center_to_target_distance']
+        approaching_center_to_target_rel = approaching_sphere_info['center_to_target_rel']
+
+        alignment_sphere_info = self._get_sphere_center_to_target_info(alignment_target_position)
+        alignment_current_center_distance = alignment_sphere_info['center_to_target_distance']
+        alignment_center_to_target_rel = alignment_sphere_info['center_to_target_rel']
+        
+        # 🎯 计算角度信息
+        approaching_center_to_target_angle_xy = np.arctan2(approaching_center_to_target_rel[1], approaching_center_to_target_rel[0])
+        approaching_center_to_target_angle_z = np.arctan2(approaching_center_to_target_rel[2], np.linalg.norm(approaching_center_to_target_rel[:2]))
+        
+        alignment_center_to_target_angle_xy = np.arctan2(alignment_center_to_target_rel[1], alignment_center_to_target_rel[0])
+        alignment_center_to_target_angle_z = np.arctan2(alignment_center_to_target_rel[2], np.linalg.norm(alignment_center_to_target_rel[:2]))
+        
+        # 🎯 添加圆柱体检测信息
+        sphere_center = approaching_sphere_info['sphere_center']
+        
+        height_diff = abs(sphere_center[2] - alignment_target_position[2])
+        xy_distance = np.sqrt((sphere_center[0] - alignment_target_position[0])**2 + 
+                            (sphere_center[1] - alignment_target_position[1])**2)
+        
+        height_ok = height_diff <= self.suction_height_threshold
+        radius_ok = xy_distance <= self.suction_radius_threshold
+        cylinder_ready = float(height_ok and radius_ok)
+        
+        robot_2_arm_positions = np.array([self.data.xpos[body_id] for body_id in self.robot_arm_ids])
+        robot_2_arm_velocities = np.array([self.data.cvel[body_id] for body_id in self.robot_arm_ids])
+        
+        arm_to_target_rels = []
+        arm_to_target_distances = []
+        
+        for body_id in self.robot_arm_ids:
+            arm_body_pos = self.data.xpos[body_id]
+            arm_target_rel = target_position - arm_body_pos
+            arm_to_target_rels.append(arm_target_rel)
+            arm_to_target_distances.append(np.linalg.norm(arm_target_rel))
+        
+        vacuum_sphere_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:vacuum_sphere")
+        vacuum_sphere_pos = self.data.xpos[vacuum_sphere_body_id]
+        vacuum_sphere_vel = self.data.cvel[vacuum_sphere_body_id]
+        
+        # 🎯 获取真空吸嘴朝向
+        robot2_vacuum_quat = self.data.xquat[vacuum_sphere_body_id]
+
+        linear_velocity = vacuum_sphere_vel[:3]
+        current_max_velocity = np.linalg.norm(linear_velocity)
+        
+        vacuum_to_target_rel = target_position - vacuum_sphere_pos
+        vacuum_to_target_distance = np.linalg.norm(vacuum_to_target_rel)
+        vacuum_to_target_angle_xy = np.arctan2(vacuum_to_target_rel[1], vacuum_to_target_rel[0])
+        vacuum_to_target_angle_z = np.arctan2(vacuum_to_target_rel[2], np.linalg.norm(vacuum_to_target_rel[:2]))
+        
+        robot2_pos = self.data.xpos[self.robot2_rover_id]
+        robot2_quat = self.data.xquat[self.robot2_rover_id]
+        robot2_orientation = self._quaternion_to_yaw(robot2_quat)
+        
+        max_position = 3.0
+        max_distance = 3.0
+        max_speed = 15.0
+
+        adhere_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:adhere_winch")
+        adhere_control = self.data.ctrl[adhere_actuator_id]
+        
+        joint1_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint1")
+        joint1_control_raw = self.data.ctrl[joint1_actuator_id]
+        joint1_control = (joint1_control_raw - (-1.919)) / (2.792 - (-1.919)) * 2 - 1
+        
+        joint2_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint2")
+        joint2_control_raw = self.data.ctrl[joint2_actuator_id]
+        joint2_control = (joint2_control_raw - (-0.611)) / (1.222 - (-0.611)) * 2 - 1
+        
+        joint3_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint3")
+        joint3_control_raw = self.data.ctrl[joint3_actuator_id]
+        joint3_control = (joint3_control_raw - (-1.565)) / (1.40 - (-1.565)) * 2 - 1
+        
+        joint4_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint4")
+        joint4_control_raw = self.data.ctrl[joint4_actuator_id]
+        joint4_control = joint4_control_raw / 3.142
+        
+        joint5_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint5")
+        joint5_control_raw = self.data.ctrl[joint5_actuator_id]
+        joint5_control = (joint5_control_raw - (-1.8)) / (2.2 - (-1.8)) * 2 - 1
+
+        observation = np.concatenate([
+            robot2_pos / max_position,                                # [3] - 机器人位置
+            [robot2_orientation / np.pi],                             # [1] - 机器人朝向
+            
+            vacuum_sphere_pos / max_position,                         # [3] - vacuum sphere位置
+            vacuum_sphere_vel[:3] / max_speed,                        # [3] - vacuum sphere线速度
+            
+            [adhere_control],                                         # [1] - 吸附控制
+            [joint1_control],                                         # [1] - 关节1控制
+            [joint2_control],                                         # [1] - 关节2控制
+            [joint3_control],                                         # [1] - 关节3控制
+            [joint4_control],                                         # [1] - 关节4控制
+            [joint5_control],                                         # [1] - 关节5控制
+
+            # 🎯 接近阶段信息
+            approaching_center_to_target_rel / max_distance,          # [3] - 接近目标相对位置
+            [approaching_current_center_distance / max_distance],     # [1] - 接近目标距离
+            [approaching_center_to_target_angle_xy / np.pi],          # [1] - 接近水平角度
+            [approaching_center_to_target_angle_z / np.pi],           # [1] - 接近垂直角度
+
+            # 🎯 对齐阶段信息
+            alignment_center_to_target_rel / max_distance,            # [3] - 对齐目标相对位置
+            [alignment_current_center_distance / max_distance],       # [1] - 对齐目标距离
+            [alignment_center_to_target_angle_xy / np.pi],            # [1] - 对齐水平角度
+            [alignment_center_to_target_angle_z / np.pi],             # [1] - 对齐垂直角度
+
+            # 🎯 圆柱体检测信息
+            [height_diff / max_distance],                             # [1] - 高度差
+            [xy_distance / max_distance],                             # [1] - XY平面距离
+            [cylinder_ready],                                         # [1] - 是否在圆柱体内
+
+            # # 🎯 任务阶段信息
+            # [1.0 if self.task_stage == "approach" else 0.0],         # [1] - 接近阶段
+            # [1.0 if self.task_stage == "alignment" else 0.0],        # [1] - 对齐阶段
+            # [1.0 if self.task_stage == "lift" else 0.0],             # [1] - 提升阶段
+            [1.0],
+            [0.0],
+            [0.0],
+
+            # 🎯 真空吸嘴朝向信息
+            robot2_vacuum_quat,                                       # [4] - 真空吸嘴四元数
+            
+            vacuum_to_target_rel / max_distance,                      # [3] - vacuum body到目标相对位置
+            [vacuum_to_target_distance / max_distance],               # [1] - vacuum body到目标距离
+            [vacuum_to_target_angle_xy / np.pi],                      # [1] - 水平角度
+            [vacuum_to_target_angle_z / np.pi],                       # [1] - 垂直角度
+
+            np.array(arm_to_target_rels).flatten() / max_distance,    # [27] - 所有手臂到目标相对位置
+            np.array(arm_to_target_distances) / max_distance,         # [9] - 所有手臂到目标距离
+        ], dtype=np.float32)
+        
+        return observation
+
+    def _get_sphere_center_to_target_info(self, target_position):
+        sphere_center, sphere_positions = self._get_vacuum_sphere_center()
+        
+        center_to_target_rel = target_position - sphere_center
+        center_to_target_distance = np.linalg.norm(center_to_target_rel)
+        
+        return {
+            'sphere_center': sphere_center,
+            'sphere_positions': sphere_positions,
+            'center_to_target_rel': center_to_target_rel,
+            'center_to_target_distance': center_to_target_distance,
+        }
     
+    def _get_placed_object_info(self):
+        left_joint_id = None
+        left_position = None
+        right_joint_id = None
+        right_position = None
+        
+        for object_id, joint_id, joint_name in self.object_joints:
+            body_id = self.model.jnt_bodyid[joint_id]
+            position = self.data.xpos[body_id]
+
+            if np.allclose(position, self.left_object_position, atol=0.1):
+                left_joint_id = joint_id
+                left_position = position.copy()
+
+            elif np.allclose(position, self.right_object_position, atol=0.1):
+                right_joint_id = joint_id
+                right_position = position.copy()
+        
+        return left_joint_id, left_position, right_joint_id, right_position
+
+    def _get_vacuum_sphere_center(self):
+        vacuum_sphere_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:vacuum_sphere")
+        vacuum_sphere_pos = self.data.xpos[vacuum_sphere_body_id]
+        
+        sphere_relative_positions = np.array([
+            [0.0, 0.0, 0.0],        # 中心sphere
+            [0.0027, 0.0027, 0.0],  # 右上
+            [0.0027, -0.0027, 0.0], # 右下
+            [-0.0027, 0.0027, 0.0], # 左上
+            [-0.0027, -0.0027, 0.0], # 左下
+            [-0.003, 0.0, 0.0],     # 左
+            [0.003, 0.0, 0.0],      # 右
+            [0.0, -0.003, 0.0],     # 下
+            [0.0, 0.003, 0.0]       # 上
+        ])
+        
+        sphere_absolute_positions = []
+        
+        vacuum_sphere_quat = self.data.xquat[vacuum_sphere_body_id]
+        rotation_matrix = self._quaternion_to_rotation_matrix(vacuum_sphere_quat)
+        
+        for rel_pos in sphere_relative_positions:
+            rotated_pos = rotation_matrix @ rel_pos
+            absolute_pos = vacuum_sphere_pos + rotated_pos
+            sphere_absolute_positions.append(absolute_pos)
+        
+        sphere_center = np.mean(sphere_absolute_positions, axis=0)
+        
+        return sphere_center, sphere_absolute_positions
+
+    def _quaternion_to_rotation_matrix(self, quat):
+        w, x, y, z = quat
+        
+        rotation_matrix = np.array([
+            [1 - 2*(y**2 + z**2), 2*(x*y - w*z), 2*(x*z + w*y)],
+            [2*(x*y + w*z), 1 - 2*(x**2 + z**2), 2*(y*z - w*x)],
+            [2*(x*z - w*y), 2*(y*z + w*x), 1 - 2*(x**2 + y**2)]
+        ])
+        
+        return rotation_matrix
+
     def _quaternion_to_yaw(self, quat):
         w, x, y, z = quat
         yaw = np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
@@ -412,8 +771,14 @@ class HybridController:
 
     def _apply_navigation_action(self, action):
         self.data.ctrl[
-            FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH:
-            FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH
+            FIRST_ROBOT_ACTION_SPACE_LENGTH :
+            FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH
+        ] = action
+
+    def _apply_picking_action(self, action):
+        self.data.ctrl[
+            FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH:
+            FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH +SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH
         ] = action
     
     def _start_object_remover_threads(self, model, data, object_joint_ids):
@@ -452,16 +817,16 @@ class HybridController:
         return self.first_robot_controller.get_status()
 
 if __name__ == "__main__":
-    # hybrid_controller = HybridController(
-    #         sec_robot_navigation_model_path="final_model_continued_21600K_20250707_165449.zip",
-    #         sec_robot_picking_model_path=None,
-    #         sec_robot_placing_model_path=None
-    #     )
-    # hybrid_controller.run_simulation()
+    hybrid_controller = HybridController(
+            sec_robot_navigation_model_path="final_model_continued_21600K_20250707_165449.zip",
+            sec_robot_picking_model_path="final_picking_model_continued_144000K_20250718_140701.zip",
+            sec_robot_placing_model_path=None
+        )
+    hybrid_controller.run_simulation()
 
 
-    state_file = "saved_states/robot_state_20250710_162826.pkl"
-    view_saved_state(state_file)
+    # state_file = "saved_states/robot_state_20250710_162826.pkl"
+    # view_saved_state(state_file)
 
 
 
