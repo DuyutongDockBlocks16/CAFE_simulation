@@ -22,6 +22,8 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         self.data.qpos[:] = state_data['qpos']
         self.data.qvel[:] = state_data['qvel'] 
         self.data.ctrl[:] = state_data['ctrl']
+
+
         robot1_motor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot1:drive")
         self.model.actuator_gear[robot1_motor_id] = 0.0
         # robot2_motor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:drive")
@@ -57,7 +59,7 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
 
         self.object_joints.sort(key=lambda x: x[0])
 
-        self.max_steps = 5000
+        self.max_steps = 1500
         self.current_step = 0
         self.initial_qpos = np.copy(self.data.qpos)
         self.initial_qvel = np.copy(self.data.qvel)
@@ -142,11 +144,12 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
             "distance": 1000.0,
             "alignment": 10.0,
             "suction": 200.0,
+            "speed_penalty": 1.0,
             "stability": 100.0,
             "rover_penalty": 200.0,
             "collision_penalty": 20.0,
-            "moved_penalty": 300.0,
-            "dropped_penalty": 20.0,
+            "moved_penalty": 20.0,
+            "dropped_penalty": 200.0,
             "stage_completion": 2000.0,
             "final_completion": 2000.0
         }
@@ -157,8 +160,8 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
             low=-np.inf, high=np.inf, shape=obs.shape, dtype=np.float32
         )
 
-        self.low_bounds = np.array([-1.0, -1.919, -0.611, -1.565, -3.142, -1.8], dtype=np.float32)
-        self.high_bounds = np.array([1.0, 2.792, 1.222, 1.40, 3.142, 2.2], dtype=np.float32)
+        self.low_bounds = np.array([-1.0, -1.919, -0.611, -1.565, -3.142, -0.2], dtype=np.float32)
+        self.high_bounds = np.array([1.0, 2.792, 1.222, 1.40, 3.142, 0.2], dtype=np.float32)
 
         num_actuators = self.model.nu
 
@@ -178,6 +181,8 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         self.lift_stable_steps = 0
         self.required_lift_steps = 5
 
+        self.picking_stable_steps = 0
+
     def reset(self, seed=None, options=None):
         self.data.qpos[:] = self.initial_qpos
         self.data.qvel[:] = self.initial_qvel
@@ -196,6 +201,7 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         
         self.previous_center_distance = None
         mujoco.mj_forward(self.model, self.data)
+        self.picking_stable_steps = 0
 
         self._record_initial_object_height()
 
@@ -216,85 +222,34 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
             self.initial_position = None
 
     def _get_obs(self):
-        robot_2_arm_positions = np.array([self.data.xpos[body_id] for body_id in self.robot_arm_ids])  # [9, 3]
-        robot_2_arm_velocities = np.array([self.data.cvel[body_id] for body_id in self.robot_arm_ids])  # [9, 6]
-
-        # get active position according to the active joint
-        if self.active_joint_id is not None:
-            body_id = self.model.jnt_bodyid[self.active_joint_id]
-            active_position = self.data.xpos[body_id]
-
-        object_position = active_position.copy()
-
-        target_position = object_position.copy()
-        approaching_target_position = target_position.copy()
-        approaching_target_position[2] += 0.0385
-
-        alignment_target_position = target_position.copy()
-        alignment_target_position[2] += 0.0085
-
-        # 🎯 获取当前状态信息
-        approaching_sphere_info = self._get_sphere_center_to_target_info(approaching_target_position)
-        approaching_current_center_distance = approaching_sphere_info['center_to_target_distance']
-        approaching_center_to_target_rel = approaching_sphere_info['center_to_target_rel']
-
-        alignment_sphere_info = self._get_sphere_center_to_target_info(alignment_target_position)
-        alignment_current_center_distance = alignment_sphere_info['center_to_target_distance']
-        alignment_center_to_target_rel = alignment_sphere_info['center_to_target_rel']
         
-        # 🎯 计算角度信息
-        approaching_center_to_target_angle_xy = np.arctan2(approaching_center_to_target_rel[1], approaching_center_to_target_rel[0])
-        approaching_center_to_target_angle_z = np.arctan2(approaching_center_to_target_rel[2], np.linalg.norm(approaching_center_to_target_rel[:2]))
-        
-        alignment_center_to_target_angle_xy = np.arctan2(alignment_center_to_target_rel[1], alignment_center_to_target_rel[0])
-        alignment_center_to_target_angle_z = np.arctan2(alignment_center_to_target_rel[2], np.linalg.norm(alignment_center_to_target_rel[:2]))
-        
-        # 🎯 添加圆柱体检测信息
-        sphere_center = approaching_sphere_info['sphere_center']
-        
-        height_diff = abs(sphere_center[2] - alignment_target_position[2])
-        xy_distance = np.sqrt((sphere_center[0] - alignment_target_position[0])**2 + 
-                            (sphere_center[1] - alignment_target_position[1])**2)
-        
-        height_ok = height_diff <= self.suction_height_threshold
-        radius_ok = xy_distance <= self.suction_radius_threshold
-        cylinder_ready = float(height_ok and radius_ok)
-        
-        robot_2_arm_positions = np.array([self.data.xpos[body_id] for body_id in self.robot_arm_ids])
-        robot_2_arm_velocities = np.array([self.data.cvel[body_id] for body_id in self.robot_arm_ids])
-        
-        arm_to_target_rels = []
-        arm_to_target_distances = []
-        
-        for body_id in self.robot_arm_ids:
-            arm_body_pos = self.data.xpos[body_id]
-            arm_target_rel = target_position - arm_body_pos
-            arm_to_target_rels.append(arm_target_rel)
-            arm_to_target_distances.append(np.linalg.norm(arm_target_rel))
-        
-        vacuum_sphere_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:vacuum_sphere")
-        vacuum_sphere_pos = self.data.xpos[vacuum_sphere_body_id]
-        vacuum_sphere_vel = self.data.cvel[vacuum_sphere_body_id]
-        
-        # 🎯 获取真空吸嘴朝向
-        robot2_vacuum_quat = self.data.xquat[vacuum_sphere_body_id]
-
-        linear_velocity = vacuum_sphere_vel[:3]
-        current_max_velocity = np.linalg.norm(linear_velocity)
-        
-        vacuum_to_target_rel = target_position - vacuum_sphere_pos
-        vacuum_to_target_distance = np.linalg.norm(vacuum_to_target_rel)
-        vacuum_to_target_angle_xy = np.arctan2(vacuum_to_target_rel[1], vacuum_to_target_rel[0])
-        vacuum_to_target_angle_z = np.arctan2(vacuum_to_target_rel[2], np.linalg.norm(vacuum_to_target_rel[:2]))
-        
+        # 🎯 基础信息
         robot2_pos = self.data.xpos[self.robot2_rover_id]
         robot2_quat = self.data.xquat[self.robot2_rover_id]
         robot2_orientation = self._quaternion_to_yaw(robot2_quat)
         
-        max_position = 3.0
-        max_distance = 3.0
-        max_speed = 15.0
+        # 🎯 获取目标位置
+        if self.active_joint_id is not None:
+            body_id = self.model.jnt_bodyid[self.active_joint_id]
+            target_position = self.data.xpos[body_id]
+        
+        vacuum_contact_site_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, "robot2:vacuum_contact_site")
+        vacuum_contact_site_pos = self.data.site_xpos[vacuum_contact_site_id]
+        # print(f"✅ 使用vacuum_contact_site位置: {vacuum_contact_site_pos}")
 
+        # 🎯 计算contact_site到目标的信息
+        contact_to_target_rel = target_position - vacuum_contact_site_pos
+        contact_to_target_distance = np.linalg.norm(contact_to_target_rel)
+        contact_to_target_angle_xy = np.arctan2(contact_to_target_rel[1], contact_to_target_rel[0])
+        contact_to_target_angle_z = np.arctan2(contact_to_target_rel[2], np.linalg.norm(contact_to_target_rel[:2]))
+        
+        # 🎯 vacuum_sphere的速度和朝向信息
+        vacuum_sphere_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:vacuum_sphere")
+        vacuum_sphere_pos = self.data.xpos[vacuum_sphere_body_id]
+        vacuum_sphere_vel = self.data.cvel[vacuum_sphere_body_id]
+        vacuum_sphere_quat = self.data.xquat[vacuum_sphere_body_id]
+        
+        # 🎯 控制信号
         adhere_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:adhere_winch")
         adhere_control = self.data.ctrl[adhere_actuator_id]
         
@@ -317,53 +272,46 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         joint5_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint5")
         joint5_control_raw = self.data.ctrl[joint5_actuator_id]
         joint5_control = (joint5_control_raw - (-1.8)) / (2.2 - (-1.8)) * 2 - 1
-
+        
+        # 🎯 传感器数据
+        sensor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "robot2:vacuum_touch")
+        sensor_data = self.data.sensordata[sensor_id]
+        if sensor_data > 0:
+            sensor_data = 1.0
+        
+        # 🎯 归一化参数
+        max_position = 3.0
+        max_distance = 1.0
+        max_speed = 15.0
+        
+        # 🎯 简化的观测空间
         observation = np.concatenate([
-            robot2_pos / max_position,                                # [3] - 机器人位置
-            [robot2_orientation / np.pi],                             # [1] - 机器人朝向
+            # 基础位置和朝向信息
+            robot2_pos / max_position,                                    # [3] - 机器人位置
+            [robot2_orientation / np.pi],                                 # [1] - 机器人朝向
             
-            vacuum_sphere_pos / max_position,                         # [3] - vacuum sphere位置
-            vacuum_sphere_vel[:3] / max_speed,                        # [3] - vacuum sphere线速度
+            # vacuum接触点位置和速度
+            vacuum_contact_site_pos / max_position,                       # [3] - contact site位置
+            vacuum_sphere_vel[:3] / max_speed,                           # [3] - vacuum sphere线速度
             
-            [adhere_control],                                         # [1] - 吸附控制
-            [joint1_control],                                         # [1] - 关节1控制
-            [joint2_control],                                         # [1] - 关节2控制
-            [joint3_control],                                         # [1] - 关节3控制
-            [joint4_control],                                         # [1] - 关节4控制
-            [joint5_control],                                         # [1] - 关节5控制
-
-            # 🎯 接近阶段信息
-            approaching_center_to_target_rel / max_distance,          # [3] - 接近目标相对位置
-            [approaching_current_center_distance / max_distance],     # [1] - 接近目标距离
-            [approaching_center_to_target_angle_xy / np.pi],          # [1] - 接近水平角度
-            [approaching_center_to_target_angle_z / np.pi],           # [1] - 接近垂直角度
-
-            # 🎯 对齐阶段信息
-            alignment_center_to_target_rel / max_distance,            # [3] - 对齐目标相对位置
-            [alignment_current_center_distance / max_distance],       # [1] - 对齐目标距离
-            [alignment_center_to_target_angle_xy / np.pi],            # [1] - 对齐水平角度
-            [alignment_center_to_target_angle_z / np.pi],             # [1] - 对齐垂直角度
-
-            # 🎯 圆柱体检测信息
-            [height_diff / max_distance],                             # [1] - 高度差
-            [xy_distance / max_distance],                             # [1] - XY平面距离
-            [cylinder_ready],                                         # [1] - 是否在圆柱体内
-
-            # 🎯 任务阶段信息
-            [1.0 if self.task_stage == "approach" else 0.0],         # [1] - 接近阶段
-            [1.0 if self.task_stage == "alignment" else 0.0],        # [1] - 对齐阶段
-            [1.0 if self.task_stage == "lift" else 0.0],             # [1] - 提升阶段
-
-            # 🎯 真空吸嘴朝向信息
-            robot2_vacuum_quat,                                       # [4] - 真空吸嘴四元数
+            # 控制信号
+            [adhere_control],                                            # [1] - 吸附控制
+            [joint1_control],                                            # [1] - 关节1控制
+            [joint2_control],                                            # [1] - 关节2控制
+            [joint3_control],                                            # [1] - 关节3控制
+            [joint4_control],                                            # [1] - 关节4控制
+            [joint5_control],                                            # [1] - 关节5控制
+            [sensor_data],                                               # [1] - 接触传感器
             
-            vacuum_to_target_rel / max_distance,                      # [3] - vacuum body到目标相对位置
-            [vacuum_to_target_distance / max_distance],               # [1] - vacuum body到目标距离
-            [vacuum_to_target_angle_xy / np.pi],                      # [1] - 水平角度
-            [vacuum_to_target_angle_z / np.pi],                       # [1] - 垂直角度
-
-            np.array(arm_to_target_rels).flatten() / max_distance,    # [27] - 所有手臂到目标相对位置
-            np.array(arm_to_target_distances) / max_distance,         # [9] - 所有手臂到目标距离
+            # 🎯 核心：contact_site到目标的信息
+            contact_to_target_rel / max_distance,                        # [3] - 相对位置
+            [contact_to_target_distance / max_distance],                 # [1] - 距离
+            [contact_to_target_angle_xy / np.pi],                        # [1] - 水平角度
+            [contact_to_target_angle_z / np.pi],                         # [1] - 垂直角度
+            
+            # vacuum sphere朝向（用于对齐任务）
+            vacuum_sphere_quat,                                          # [4] - 朝向四元数
+            
         ], dtype=np.float32)
         
         return observation
@@ -506,6 +454,7 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
 
         normalized_action = np.clip(action, -1, 1)
         real_action = self.low_bounds + (normalized_action + 1) * (self.high_bounds - self.low_bounds) / 2
+        # real_action = np.clip(action, self.low_bounds, self.high_bounds)
         
         terminated = False
         truncated = False
@@ -527,6 +476,10 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         if reached:
             terminated = True
         
+        # if is_speeding:
+        #     print("Robot2 is speeding, applying speed penalty.")
+        #     terminated = True
+
         if collision_detected:
             print("Robot2 collision with forbidden area detected, terminating episode.")
             terminated = True
@@ -578,104 +531,101 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
             self.viewer.sync()
 
     def _calculate_reward(self):
+        """简化的奖励函数 - 使用vacuum_contact_site"""
+        
+        # 🎯 获取目标位置
         body_id = self.model.jnt_bodyid[self.active_joint_id]
-        object_position = self.data.xpos[body_id]
+        target_position = self.data.xpos[body_id]
+        
 
-        target_position = object_position.copy()
-        approaching_target_position = target_position.copy()
-        approaching_target_position[2] += 0.0485
+        vacuum_contact_site_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, "robot2:vacuum_contact_site")
+        vacuum_contact_site_pos = self.data.site_xpos[vacuum_contact_site_id]
 
-        # 🎯 获取当前状态信息
-        approaching_sphere_info = self._get_sphere_center_to_target_info(approaching_target_position)
-        approaching_current_center_distance = approaching_sphere_info['center_to_target_distance']
-
-        alignment_target_position = target_position.copy()
-        alignment_target_position[2] += 0.0085
+        
+        # 🎯 计算contact_site到目标的距离
+        contact_to_target_distance = np.linalg.norm(target_position - vacuum_contact_site_pos)
         
         # 🎯 初始化奖励
         total_reward = 0.0
-        task_completed = False
-
-        # print(f"Active position: {object_position}, Initial height: {self.initial_position}")
-
         dropped = False
         
-        # 🎯 阶段管理
-        task_stage_progress_reward = self._update_task_stage(approaching_current_center_distance, alignment_target_position)
-
-        total_reward += task_stage_progress_reward
-
-        time_penalty = 0.0
+        # 🎯 距离奖励 - 核心驱动力
+        distance_reward = max(self._calculate_distance_reward(contact_to_target_distance), -100)
+        total_reward += distance_reward
+        self.previous_center_distance = contact_to_target_distance
         
-        # 🎯 阶段特定奖励
-        if self.task_stage == "approach":
-            if not np.allclose(self.initial_position, object_position, atol=0.1):
+        # 🎯 接触奖励
+        sensor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "robot2:vacuum_touch")
+        sensor_data = self.data.sensordata[sensor_id]
+        touched = False
+        
+        if sensor_data > 0:
+            print("✅ Vacuum touch sensor activated, object touched.")
+            touched = True
+            total_reward += 200.0
+        else:
+            # 🎯 只有在没有接触时才检查物体是否移动
+            if not np.allclose(self.initial_position, target_position, atol=0.1):
                 print("⚠️ Object moved, applying penalty.")
-                # print(f"Active position: {active_position}, Initial height: {self.initial_object_height}")
                 total_reward += -self.reward_weights["moved_penalty"]
                 dropped = True
-
-            distance_reward = self._calculate_distance_reward(approaching_current_center_distance)
-            self.previous_center_distance = approaching_current_center_distance
-            total_reward += distance_reward
-
-            time_penalty = -2.0 * self.reward_weights["time_penalty"]
-            
-        elif self.task_stage == "alignment":
-            if not np.allclose(self.initial_position, object_position, atol=0.1):
-                print("⚠️ Object moved, applying penalty.")
-                # print(f"Active position: {active_position}, Initial height: {self.initial_object_height}")
-                total_reward += -self.reward_weights["moved_penalty"]
-                dropped = True
-
-            alignment_current_center_distance = self._get_sphere_center_to_target_info(alignment_target_position)['center_to_target_distance']
-
-            distance_reward = self._calculate_distance_reward(alignment_current_center_distance)
-            self.previous_center_distance = alignment_current_center_distance
-            total_reward += distance_reward                
-
+        
+        # 🎯 吸附控制检测
+        adhere_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:adhere_winch")
+        adhere_control = self.data.ctrl[adhere_actuator_id]
+        suction_activated = (adhere_control == 1.0)
+        
+        # 🎯 抓取成功检测
+        picked = touched and suction_activated
+        if picked:
+            self.picking_stable_steps += 1
+            picking_reward = self.reward_weights["suction"]
+            total_reward += picking_reward
+            print("✅ 吸附成功，物体已吸附。")
+        else:
+            self.picking_stable_steps = 0
+        
+        # 🎯 任务完成检测
+        task_completed = False
+        if self.picking_stable_steps >= 10:
+            task_completed = True
+            total_reward += self.reward_weights["final_completion"]
+            print("✅ 任务完成！物体已成功吸附。")
+        
+        # 🎯 速度惩罚 - 防止过于激烈的动作
+        vacuum_sphere_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:vacuum_sphere")
+        vacuum_vel = self.data.cvel[vacuum_sphere_body_id][:3]
+        speed = np.linalg.norm(vacuum_vel)
+        
+        # is_speeding = speed > 0.5
+        # if is_speeding:
+        #     total_reward += -self.reward_weights["speed_penalty"] * speed
+        if speed > 0.5:  # 如果速度超过0.5m/s，给予惩罚
+            speed_penalty = -1.0 * self.reward_weights["speed_penalty"] * speed
+            total_reward += speed_penalty
+        
+        
+        # 🎯 朝向奖励 - 当距离足够近时才重要
+        if contact_to_target_distance < 0.05:  # 5cm内才考虑朝向
             alignment_reward = self._calculate_alignment_reward()
             total_reward += alignment_reward
-
-            # progressive_reward = self._new_calculate_progressive_alignment_reward()
-            # total_reward += progressive_reward
-
-            time_penalty = -1.0 * self.reward_weights["time_penalty"]
-            
-        # elif self.task_stage == "suction":
-        #     suction_reward = self._calculate_suction_reward(current_center_distance)
-        #     total_reward += suction_reward
-            
-        # elif self.task_stage == "grasp":
-        #     grasp_reward, grasp_stable = self._calculate_grasp_reward(current_center_distance)
-        #     total_reward += grasp_reward
-            
-        #     if grasp_stable:
-        #         self.task_stage = "lift"
-        #         self.stage_start_step = self.current_step
-                
-        elif self.task_stage == "lift":
-            
-            if self.initial_object_height is not None and object_position[2] < 0.29696562:
-                print("⚠️ Object dropped below initial height, applying penalty.")
-                # print(f"Active position: {active_position}, Initial height: {self.initial_object_height}")
-                total_reward += -self.reward_weights["dropped_penalty"]
-                dropped = True
-
-            lift_reward, task_completed, suction_is_not_activated = self._calculate_lift_reward(object_position)
-            dropped = dropped or suction_is_not_activated
-            total_reward += lift_reward
         
-        # 🎯 全局惩罚
-        # rover_penalty = self._calculate_rover_penalty()
-        # total_reward += rover_penalty
-
-        collision_penalty, collision_detected = self._calculate_collision_penalty()
-        total_reward += collision_penalty
-
+        # 🎯 时间惩罚
+        time_penalty = -1.0 * self.reward_weights["time_penalty"]
         total_reward += time_penalty
         
-        # 🎯 更新历史状态
+        # 🎯 碰撞检测
+        collision_penalty, collision_detected = self._calculate_collision_penalty()
+        total_reward += collision_penalty
+        
+        # 🎯 调试信息
+        # if self.current_step % 100 == 0:
+        #     print(f"🎯 奖励信息 (Step {self.current_step}):")
+        #     print(f"   Contact距离: {contact_to_target_distance:.6f}m")
+        #     print(f"   距离奖励: {distance_reward:.2f}")
+        #     print(f"   总奖励: {total_reward:.2f}")
+        #     print(f"   接触状态: {'✅' if touched else '❌'}")
+        #     print(f"   吸附状态: {'✅' if suction_activated else '❌'}")
         
         return total_reward, task_completed, collision_detected, dropped
 

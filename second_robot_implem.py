@@ -191,7 +191,6 @@ class HybridController:
                     # break_flag = True
                     rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
                     self.data.cvel[rover_body_id] = 0.0
-                    self.second_robot_status = RLRobotFiniteState.PICKING_OBJECT
                     
                 self._apply_navigation_action(action)
             if self.second_robot_status == RLRobotFiniteState.PICKING_OBJECT:
@@ -228,18 +227,20 @@ class HybridController:
                 if picked:
                     self.picking_stable_steps += 1
 
-                if self.picking_stable_steps == 100:
+                if self.picking_stable_steps == 5:
                     self.picking_stable_steps = 0
                     self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION
-                    joint_names = ["robot2:Joint1", "robot2:Joint2", "robot2:Joint3", "robot2:Joint4", "robot2:Joint5"]
+                    # joint_names = ["robot2:Joint1", "robot2:Joint2", "robot2:Joint3", "robot2:Joint4", "robot2:Joint5"]
+                    # joint_names = ["robot2:Joint1", "robot2:Joint2", "robot2:Joint3", "robot2:Joint4", "robot2:Joint5"]
     
-                    for joint_name in joint_names:
-                        # 找到对应的actuator
-                        actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name)
-                        if actuator_id >= 0:
-                            # 修改gear参数
-                            self.model.actuator_gear[actuator_id] = 0.08
-                    action = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # 停止导航
+                    # for joint_name in joint_names:
+                    #     # 找到对应的actuator
+                    #     actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name)
+                    #     if actuator_id >= 0:
+                    #         # 修改gear参数
+                    #         self.model.actuator_gear[actuator_id] = 0.2
+                    action = [1.0, 0.0, 0.0, 0.1, 0.0, 0.0]  # 停止导航
+                    # action = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # 停止导航
                     # action = [1.0, action[1], action[2], action[3], action[4], action[5]]
                 #     # action = np.zeros(SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH, dtype=np.float32)
                 #     # break_flag = True
@@ -276,7 +277,7 @@ class HybridController:
         with mujoco.viewer.launch_passive(self.model, self.data) as viewer:
             step = 0
             while True:
-                # sleep(0.01)
+                sleep(0.001)
                 break_flag = self.step()
                 if break_flag:
                     save_mujoco_state_to_file(self.model, self.data)
@@ -389,85 +390,33 @@ class HybridController:
         return observation
 
     def _get_picking_obs(self):
-        robot_2_arm_positions = np.array([self.data.xpos[body_id] for body_id in self.robot_arm_ids])  # [9, 3]
-        robot_2_arm_velocities = np.array([self.data.cvel[body_id] for body_id in self.robot_arm_ids])  # [9, 6]
-
-        # get active position according to the active joint
-        if self.active_joint_id is not None:
-            body_id = self.model.jnt_bodyid[self.active_joint_id]
-            active_position = self.data.xpos[body_id]
-
-        object_position = active_position.copy()
-
-        target_position = object_position.copy()
-        approaching_target_position = target_position.copy()
-        approaching_target_position[2] += 0.0385
-
-        alignment_target_position = target_position.copy()
-        alignment_target_position[2] += 0.0085
-
-        # 🎯 获取当前状态信息
-        approaching_sphere_info = self._get_sphere_center_to_target_info(approaching_target_position)
-        approaching_current_center_distance = approaching_sphere_info['center_to_target_distance']
-        approaching_center_to_target_rel = approaching_sphere_info['center_to_target_rel']
-
-        alignment_sphere_info = self._get_sphere_center_to_target_info(alignment_target_position)
-        alignment_current_center_distance = alignment_sphere_info['center_to_target_distance']
-        alignment_center_to_target_rel = alignment_sphere_info['center_to_target_rel']
-        
-        # 🎯 计算角度信息
-        approaching_center_to_target_angle_xy = np.arctan2(approaching_center_to_target_rel[1], approaching_center_to_target_rel[0])
-        approaching_center_to_target_angle_z = np.arctan2(approaching_center_to_target_rel[2], np.linalg.norm(approaching_center_to_target_rel[:2]))
-        
-        alignment_center_to_target_angle_xy = np.arctan2(alignment_center_to_target_rel[1], alignment_center_to_target_rel[0])
-        alignment_center_to_target_angle_z = np.arctan2(alignment_center_to_target_rel[2], np.linalg.norm(alignment_center_to_target_rel[:2]))
-        
-        # 🎯 添加圆柱体检测信息
-        sphere_center = approaching_sphere_info['sphere_center']
-        
-        height_diff = abs(sphere_center[2] - alignment_target_position[2])
-        xy_distance = np.sqrt((sphere_center[0] - alignment_target_position[0])**2 + 
-                            (sphere_center[1] - alignment_target_position[1])**2)
-        
-        height_ok = height_diff <= self.suction_height_threshold
-        radius_ok = xy_distance <= self.suction_radius_threshold
-        cylinder_ready = float(height_ok and radius_ok)
-        
-        robot_2_arm_positions = np.array([self.data.xpos[body_id] for body_id in self.robot_arm_ids])
-        robot_2_arm_velocities = np.array([self.data.cvel[body_id] for body_id in self.robot_arm_ids])
-        
-        arm_to_target_rels = []
-        arm_to_target_distances = []
-        
-        for body_id in self.robot_arm_ids:
-            arm_body_pos = self.data.xpos[body_id]
-            arm_target_rel = target_position - arm_body_pos
-            arm_to_target_rels.append(arm_target_rel)
-            arm_to_target_distances.append(np.linalg.norm(arm_target_rel))
-        
-        vacuum_sphere_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:vacuum_sphere")
-        vacuum_sphere_pos = self.data.xpos[vacuum_sphere_body_id]
-        vacuum_sphere_vel = self.data.cvel[vacuum_sphere_body_id]
-        
-        # 🎯 获取真空吸嘴朝向
-        robot2_vacuum_quat = self.data.xquat[vacuum_sphere_body_id]
-
-        linear_velocity = vacuum_sphere_vel[:3]
-        current_max_velocity = np.linalg.norm(linear_velocity)
-        
-        vacuum_to_target_rel = target_position - vacuum_sphere_pos
-        vacuum_to_target_distance = np.linalg.norm(vacuum_to_target_rel)
-        vacuum_to_target_angle_xy = np.arctan2(vacuum_to_target_rel[1], vacuum_to_target_rel[0])
-        vacuum_to_target_angle_z = np.arctan2(vacuum_to_target_rel[2], np.linalg.norm(vacuum_to_target_rel[:2]))
-        
+        # 🎯 基础信息
         robot2_pos = self.data.xpos[self.robot2_rover_id]
         robot2_quat = self.data.xquat[self.robot2_rover_id]
         robot2_orientation = self._quaternion_to_yaw(robot2_quat)
         
-        max_position = 3.0
-        max_distance = 3.0
-        max_speed = 15.0
+        # 🎯 获取目标位置
+        if self.active_joint_id is not None:
+            body_id = self.model.jnt_bodyid[self.active_joint_id]
+            target_position = self.data.xpos[body_id]
+        
+        vacuum_contact_site_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, "robot2:vacuum_contact_site")
+        vacuum_contact_site_pos = self.data.site_xpos[vacuum_contact_site_id]
+        # print(f"✅ 使用vacuum_contact_site位置: {vacuum_contact_site_pos}")
 
+        # 🎯 计算contact_site到目标的信息
+        contact_to_target_rel = target_position - vacuum_contact_site_pos
+        contact_to_target_distance = np.linalg.norm(contact_to_target_rel)
+        contact_to_target_angle_xy = np.arctan2(contact_to_target_rel[1], contact_to_target_rel[0])
+        contact_to_target_angle_z = np.arctan2(contact_to_target_rel[2], np.linalg.norm(contact_to_target_rel[:2]))
+        
+        # 🎯 vacuum_sphere的速度和朝向信息
+        vacuum_sphere_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:vacuum_sphere")
+        vacuum_sphere_pos = self.data.xpos[vacuum_sphere_body_id]
+        vacuum_sphere_vel = self.data.cvel[vacuum_sphere_body_id]
+        vacuum_sphere_quat = self.data.xquat[vacuum_sphere_body_id]
+        
+        # 🎯 控制信号
         adhere_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:adhere_winch")
         adhere_control = self.data.ctrl[adhere_actuator_id]
         
@@ -490,56 +439,46 @@ class HybridController:
         joint5_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint5")
         joint5_control_raw = self.data.ctrl[joint5_actuator_id]
         joint5_control = (joint5_control_raw - (-1.8)) / (2.2 - (-1.8)) * 2 - 1
-
+        
+        # 🎯 传感器数据
+        sensor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "robot2:vacuum_touch")
+        sensor_data = self.data.sensordata[sensor_id]
+        if sensor_data > 0:
+            sensor_data = 1.0
+        
+        # 🎯 归一化参数
+        max_position = 3.0
+        max_distance = 1.0
+        max_speed = 15.0
+        
+        # 🎯 简化的观测空间
         observation = np.concatenate([
-            robot2_pos / max_position,                                # [3] - 机器人位置
-            [robot2_orientation / np.pi],                             # [1] - 机器人朝向
+            # 基础位置和朝向信息
+            robot2_pos / max_position,                                    # [3] - 机器人位置
+            [robot2_orientation / np.pi],                                 # [1] - 机器人朝向
             
-            vacuum_sphere_pos / max_position,                         # [3] - vacuum sphere位置
-            vacuum_sphere_vel[:3] / max_speed,                        # [3] - vacuum sphere线速度
+            # vacuum接触点位置和速度
+            vacuum_contact_site_pos / max_position,                       # [3] - contact site位置
+            vacuum_sphere_vel[:3] / max_speed,                           # [3] - vacuum sphere线速度
             
-            [adhere_control],                                         # [1] - 吸附控制
-            [joint1_control],                                         # [1] - 关节1控制
-            [joint2_control],                                         # [1] - 关节2控制
-            [joint3_control],                                         # [1] - 关节3控制
-            [joint4_control],                                         # [1] - 关节4控制
-            [joint5_control],                                         # [1] - 关节5控制
-
-            # 🎯 接近阶段信息
-            approaching_center_to_target_rel / max_distance,          # [3] - 接近目标相对位置
-            [approaching_current_center_distance / max_distance],     # [1] - 接近目标距离
-            [approaching_center_to_target_angle_xy / np.pi],          # [1] - 接近水平角度
-            [approaching_center_to_target_angle_z / np.pi],           # [1] - 接近垂直角度
-
-            # 🎯 对齐阶段信息
-            alignment_center_to_target_rel / max_distance,            # [3] - 对齐目标相对位置
-            [alignment_current_center_distance / max_distance],       # [1] - 对齐目标距离
-            [alignment_center_to_target_angle_xy / np.pi],            # [1] - 对齐水平角度
-            [alignment_center_to_target_angle_z / np.pi],             # [1] - 对齐垂直角度
-
-            # 🎯 圆柱体检测信息
-            [height_diff / max_distance],                             # [1] - 高度差
-            [xy_distance / max_distance],                             # [1] - XY平面距离
-            [cylinder_ready],                                         # [1] - 是否在圆柱体内
-
-            # # 🎯 任务阶段信息
-            # [1.0 if self.task_stage == "approach" else 0.0],         # [1] - 接近阶段
-            # [1.0 if self.task_stage == "alignment" else 0.0],        # [1] - 对齐阶段
-            # [1.0 if self.task_stage == "lift" else 0.0],             # [1] - 提升阶段
-            [1.0],
-            [0.0],
-            [0.0],
-
-            # 🎯 真空吸嘴朝向信息
-            robot2_vacuum_quat,                                       # [4] - 真空吸嘴四元数
+            # 控制信号
+            [adhere_control],                                            # [1] - 吸附控制
+            [joint1_control],                                            # [1] - 关节1控制
+            [joint2_control],                                            # [1] - 关节2控制
+            [joint3_control],                                            # [1] - 关节3控制
+            [joint4_control],                                            # [1] - 关节4控制
+            [joint5_control],                                            # [1] - 关节5控制
+            [sensor_data],                                               # [1] - 接触传感器
             
-            vacuum_to_target_rel / max_distance,                      # [3] - vacuum body到目标相对位置
-            [vacuum_to_target_distance / max_distance],               # [1] - vacuum body到目标距离
-            [vacuum_to_target_angle_xy / np.pi],                      # [1] - 水平角度
-            [vacuum_to_target_angle_z / np.pi],                       # [1] - 垂直角度
-
-            np.array(arm_to_target_rels).flatten() / max_distance,    # [27] - 所有手臂到目标相对位置
-            np.array(arm_to_target_distances) / max_distance,         # [9] - 所有手臂到目标距离
+            # 🎯 核心：contact_site到目标的信息
+            contact_to_target_rel / max_distance,                        # [3] - 相对位置
+            [contact_to_target_distance / max_distance],                 # [1] - 距离
+            [contact_to_target_angle_xy / np.pi],                        # [1] - 水平角度
+            [contact_to_target_angle_z / np.pi],                         # [1] - 垂直角度
+            
+            # vacuum sphere朝向（用于对齐任务）
+            vacuum_sphere_quat,                                          # [4] - 朝向四元数
+            
         ], dtype=np.float32)
         
         return observation
@@ -819,13 +758,13 @@ class HybridController:
 if __name__ == "__main__":
     hybrid_controller = HybridController(
             sec_robot_navigation_model_path="final_model_continued_21600K_20250707_165449.zip",
-            sec_robot_picking_model_path="final_picking_model_continued_144000K_20250718_140701.zip",
+            sec_robot_picking_model_path="models/final_picking_model_3000K_20250722_192051.zip.bak",
             sec_robot_placing_model_path=None
         )
     hybrid_controller.run_simulation()
 
 
-    # state_file = "saved_states/robot_state_20250710_162826.pkl"
+    # state_file = "saved_states/robot_state_20250721_151909.pkl"
     # view_saved_state(state_file)
 
 

@@ -1,4 +1,4 @@
 APPROACHING_MODEL_NAME = "final_model_continued_21600K_20250707_165449.zip"
-PICKING_MODEL_NAME = "final_picking_model_continued_144000K_20250718_140701.zip"
+PICKING_MODEL_NAME = "final_picking_model_3000K_20250722_192051.zip"
 
 SUCCESS_THRESHOLD = 10000

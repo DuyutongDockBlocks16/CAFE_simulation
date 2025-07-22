@@ -26,7 +26,7 @@ gym.register(
     entry_point="picking_env:SecondRobotPickingMuJoCoEnv",
     kwargs={
         "xml_path": "xml/scene_mirobot.xml",
-        "state_filepath": "saved_states/robot_state_20250710_162826.pkl"
+        "state_filepath": "saved_states/robot_state_20250721_151909.pkl"
     }
 )
 
@@ -209,11 +209,11 @@ def picking_model_training_parallel(load_model_path=None, num_envs=8):
                     tensorboard_log="./ppo_logs/")
         loaded_steps = 0
 
-    total_additional_steps = 72_000_000
+    total_additional_steps = 3_000_000
 
     ent_scheduler = EntCoefficientScheduler(
         initial_ent_coef=0.02,         
-        final_ent_coef=0.02,          
+        final_ent_coef=0.00005,          
         total_timesteps=total_additional_steps,
         schedule_type='exponential',    
         verbose=1
@@ -300,12 +300,12 @@ def picking_model_implementation(env):
 
     for _ in range(200000000000):
         env.render()  # Render at every step
-        # sleep(0.01)
-        action, _ = model.predict(obs, deterministic=True)
+        sleep(0.1)
+        action, _ = model.predict(obs, deterministic=False)
         obs, reward, terminated, truncated, info = env.step(action)
         if terminated or truncated:
             # obs, info = env.reset()
-            env.unwrapped.data.ctrl[:] = 0
+            # env.unwrapped.data.ctrl[:] = 0
             mujoco.mj_step(env.unwrapped.model, env.unwrapped.data)  
             break
 
