@@ -58,9 +58,9 @@ class HybridController:
         ]
 
         self.placing_positions = [
-            [2.66, -0.8],  # placing position 1
-            [2.60, 1]
-        ]  
+            [2.80, -1],
+            [2.80, 1]
+        ]
 
         self.robot2_arm_bodies = [
             "robot2:base",          
@@ -81,11 +81,27 @@ class HybridController:
                 self.robot2_body_ids.append(body_id)
             except:
                 continue
+            
+        self.vacuum_sphere_body = ["robot2:vacuum_sphere"]
+
+        self.vacuum_sphere_body_ids = []
+        for body_name in self.vacuum_sphere_body:
+            try:
+                body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+                self.vacuum_sphere_body_ids.append(body_id)
+            except:
+                continue
 
         self.forbidden_geoms = [
             "wall_front", "wall_back", "wall_left", "wall_right",
             "pickingplace:table0",
             "pickingplace:table2"
+        ]
+        
+        self.object_geoms = [
+            "object0_geom", "object1_geom", "object2_geom", "object3_geom",
+            "object4_geom", "object5_geom", "object6_geom", "object7_geom",
+            "object8_geom", "object9_geom"
         ]
 
         self.robot_arm_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name) for name in self.robot2_arm_bodies]
@@ -199,7 +215,6 @@ class HybridController:
                 self._apply_navigation_action(action)
             
             if self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:
-                print("Navigating to picking position.")
                 self.target_position_x_y = self.picking_positions[0]
                 navigation_obs = self._get_navigation_obs()
                 action, _ = self.sec_robot_navigation_backward_model.predict(navigation_obs, deterministic=True)
@@ -237,7 +252,8 @@ class HybridController:
                 touched = False
                 sensor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "robot2:vacuum_touch")
                 sensor_data = self.data.sensordata[sensor_id]
-                if sensor_data > 0:
+                # print(f"Vacuum position: {vacuum_pos}, Target position: {target_pos}, Distance: {distance}, Sensor data: {sensor_data}")
+                if sensor_data > 0 and self._check_robot_object_collision():
                     touched = True
 
                 suction_activated = False
@@ -248,25 +264,14 @@ class HybridController:
 
                 picked = touched and suction_activated
                 if picked:
+                    print("Object picked successfully, suction activated.")
                     self.picking_stable_steps += 1
 
                 if self.picking_stable_steps == 5:
+                    print(self.picking_stable_steps, "steps of stable picking detected.")
                     self.picking_stable_steps = 0
                     self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION
-                    # joint_names = ["robot2:Joint1", "robot2:Joint2", "robot2:Joint3", "robot2:Joint4", "robot2:Joint5"]
-                    # joint_names = ["robot2:Joint1", "robot2:Joint2", "robot2:Joint3", "robot2:Joint4", "robot2:Joint5"]
-    
-                    # for joint_name in joint_names:
-                    #     # 找到对应的actuator
-                    #     actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name)
-                    #     if actuator_id >= 0:
-                    #         # 修改gear参数
-                    #         self.model.actuator_gear[actuator_id] = 0.2
                     action = [1.0, 0.0, 0.0, 0.1, 0.0, 0.0]  # 停止导航
-                    # action = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # 停止导航
-                    # action = [1.0, action[1], action[2], action[3], action[4], action[5]]
-                #     # action = np.zeros(SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH, dtype=np.float32)
-                #     # break_flag = True
                     print("Object picked successfully, moving to placing position.")
 
                 self._apply_picking_action(action)
@@ -279,7 +284,7 @@ class HybridController:
                 
                 robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]
                 dist_to_target = np.linalg.norm(robot_2_rover_pos - self.target_position_x_y)
-                reached = (dist_to_target < 0.15)
+                reached = (dist_to_target < 0.38)
                 if reached:
                     print("Reached placing position, preparing to place object.")
                     self.second_robot_status = RLRobotFiniteState.PLACING_OBJECT
@@ -293,6 +298,11 @@ class HybridController:
             if self.second_robot_status == RLRobotFiniteState.PLACING_OBJECT:
                 adhere_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:adhere_winch")
                 self.data.ctrl[adhere_actuator_id] = 0.0  # 停止吸附
+                
+                # reset all robot2 joints to zero
+                for joint_id in self.robot_arm_ids:
+                    self.data.qpos[joint_id] = 0.0
+                    self.data.qvel[joint_id] = 0.0
 
                 self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION
                 # break_flag = True
@@ -780,6 +790,24 @@ class HybridController:
 
     def get_first_robot_status(self):
         return self.first_robot_controller.get_status()
+    
+    def _check_robot_object_collision(self):
+        for i in range(self.data.ncon):
+            contact = self.data.contact[i]
+            geom1_id = contact.geom1
+            geom2_id = contact.geom2
+            
+            body1_id = self.model.geom_bodyid[geom1_id]
+            body2_id = self.model.geom_bodyid[geom2_id]
+            
+            geom1_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom1_id)
+            geom2_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom2_id)
+            
+            if ((body1_id in self.vacuum_sphere_body_ids and geom2_name in self.object_geoms) or
+                (body2_id in self.vacuum_sphere_body_ids and geom1_name in self.object_geoms)):
+                return True
+        
+        return False
 
 if __name__ == "__main__":
     hybrid_controller = HybridController(
