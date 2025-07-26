@@ -23,7 +23,8 @@ SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH = 6
 
 class HybridController:
     def __init__(self, 
-            sec_robot_navigation_model_path,
+            sec_robot_forward_model_path,
+            sec_robot_backward_model_path,
             sec_robot_picking_model_path,
             sec_robot_placing_model_path
         ):
@@ -57,7 +58,8 @@ class HybridController:
         ]
 
         self.placing_positions = [
-            [2.8, -1.0],  # placing position 1
+            [2.66, -0.8],  # placing position 1
+            [2.60, 1]
         ]  
 
         self.robot2_arm_bodies = [
@@ -102,8 +104,10 @@ class HybridController:
         self.max_position = 3.0     
         self.max_speed = 2.0        
         self.max_distance = 8.0
-
-        self.sec_robot_navigation_model = PPO.load(sec_robot_navigation_model_path)
+        
+        
+        self.sec_robot_navigation_forward_model = PPO.load(sec_robot_forward_model_path)
+        self.sec_robot_navigation_backward_model = PPO.load(sec_robot_backward_model_path)
         self.sec_robot_picking_model = PPO.load(sec_robot_picking_model_path)
         self._start_object_placer_thread(self.model, self.data, self.object_joint_ids, self.left_object_position, self.right_object_position, self.shared_state)
         self._start_object_remover_threads(self.model, self.data, self.object_joint_ids)
@@ -177,10 +181,10 @@ class HybridController:
             self.second_robot_is_active = True
 
         if self.second_robot_is_active:
-            if self.second_robot_status == RLRobotFiniteState.IDLE or self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:
+            if self.second_robot_status == RLRobotFiniteState.IDLE:
                 self.target_position_x_y = self.picking_positions[1]
                 navigation_obs = self._get_navigation_obs()
-                action, _ = self.sec_robot_navigation_model.predict(navigation_obs, deterministic=True)
+                action, _ = self.sec_robot_navigation_forward_model.predict(navigation_obs, deterministic=True)
 
                 robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]
                 dist_to_target = np.linalg.norm(robot_2_rover_pos - self.target_position_x_y)
@@ -193,6 +197,25 @@ class HybridController:
                     self.data.cvel[rover_body_id] = 0.0
                     
                 self._apply_navigation_action(action)
+            
+            if self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:
+                print("Navigating to picking position.")
+                self.target_position_x_y = self.picking_positions[0]
+                navigation_obs = self._get_navigation_obs()
+                action, _ = self.sec_robot_navigation_backward_model.predict(navigation_obs, deterministic=True)
+
+                robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]
+                dist_to_target = np.linalg.norm(robot_2_rover_pos - self.target_position_x_y)
+                reached = (dist_to_target < 0.15)
+                if reached:
+                    self.second_robot_status = RLRobotFiniteState.PICKING_OBJECT
+                    action = np.zeros(SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH, dtype=np.float32)
+                    # break_flag = True
+                    rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
+                    self.data.cvel[rover_body_id] = 0.0
+                    
+                self._apply_navigation_action(action)
+                
             if self.second_robot_status == RLRobotFiniteState.PICKING_OBJECT:
                 
                 left_joint_id, left_position, right_joint_id, right_position = self._get_placed_object_info()
@@ -251,12 +274,14 @@ class HybridController:
             if self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION:
                 self.target_position_x_y = self.placing_positions[0]
                 navigation_obs = self._get_navigation_obs()
-                action, _ = self.sec_robot_navigation_model.predict(navigation_obs, deterministic=True)
-
+                action, _ = self.sec_robot_navigation_forward_model.predict(navigation_obs, deterministic=True)
+                # action, _ = self.sec_robot_navigation_backward_model.predict(navigation_obs, deterministic=True)
+                
                 robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]
                 dist_to_target = np.linalg.norm(robot_2_rover_pos - self.target_position_x_y)
-                reached = (dist_to_target < 0.35)
+                reached = (dist_to_target < 0.15)
                 if reached:
+                    print("Reached placing position, preparing to place object.")
                     self.second_robot_status = RLRobotFiniteState.PLACING_OBJECT
                     action = np.zeros(SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH, dtype=np.float32)
                     # break_flag = True
@@ -270,6 +295,7 @@ class HybridController:
                 self.data.ctrl[adhere_actuator_id] = 0.0  # 停止吸附
 
                 self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION
+                # break_flag = True
 
         return break_flag
 
@@ -757,14 +783,15 @@ class HybridController:
 
 if __name__ == "__main__":
     hybrid_controller = HybridController(
-            sec_robot_navigation_model_path="final_model_continued_21600K_20250707_165449.zip",
+            sec_robot_forward_model_path="models/final_model_continued_21600K_20250707_165449.zip.bak",
+            sec_robot_backward_model_path="models/final_model_continued_56000K_20250724_140118.zip.bak",
             sec_robot_picking_model_path="models/final_picking_model_3000K_20250722_192051.zip.bak",
             sec_robot_placing_model_path=None
         )
     hybrid_controller.run_simulation()
 
 
-    # state_file = "saved_states/robot_state_20250721_151909.pkl"
+    # state_file = "saved_states/robot_state_20250723_093442.pkl"
     # view_saved_state(state_file)
 
 

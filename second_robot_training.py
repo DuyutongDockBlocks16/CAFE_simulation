@@ -21,14 +21,24 @@ from utils.mujoco_state_loader import load_mujoco_state_from_file, restore_mujoc
 import numpy as np
 import pickle
 import json
+import torch
 
 gym.register(
     id="SecondRobotMuJoCoEnv-v0",
     entry_point="sec_robot_env:SecondRobotMuJoCoEnv",
     kwargs={
         "xml_path": "xml/scene_mirobot.xml",
+        "state_filepath": "saved_states/robot_state_20250723_093442.pkl"
     }
 )
+
+# gym.register(
+#     id="SecondRobotMuJoCoEnv-v0",
+#     entry_point="sec_robot_env:SecondRobotMuJoCoEnv",
+#     kwargs={
+#         "xml_path": "xml/scene_mirobot.xml",
+#     }
+# )
 
 def make_env(rank, seed=0):
     """Factory function to create environment"""
@@ -198,7 +208,13 @@ def approach_model_training_parallel(load_model_path=None, num_envs=8):
         print("🆕 Creating new PPO model with parallel environments...")
         print(f"🔄 Using {num_envs} parallel environments")
         
-        model = PPO("MlpPolicy", env, verbose=1, 
+        # policy_kwargs = dict(
+        #     log_std_init=-2  # 你可以尝试 -1, -2, -3 看效果
+        # )
+        
+        model = PPO("MlpPolicy", env, 
+                    # policy_kwargs=policy_kwargs,
+                    verbose=1, 
                     learning_rate=1e-4,     
                     n_steps=1024,           # 调整为并行环境合适的值
                     batch_size=128,          
@@ -211,7 +227,7 @@ def approach_model_training_parallel(load_model_path=None, num_envs=8):
                     tensorboard_log="./ppo_logs/")
         loaded_steps = 0
 
-    total_additional_steps = 7_200_000
+    total_additional_steps = 28_000_000
 
     ent_scheduler = EntCoefficientScheduler(
         initial_ent_coef=0.02,         
@@ -293,9 +309,56 @@ def approach_model_training_parallel(load_model_path=None, num_envs=8):
     
     env.close()
 
+def approaching_model_implementation(env):
+    model = PPO.load(APPROACHING_MODEL_NAME, env=env)
+    # print("Current log_std:", model.policy.log_std.data)
+    # with torch.no_grad():
+    #     model.policy.log_std.data.fill_(-2.0)  # std ≈ exp(-2) ≈ 0.135
+        
+    # model.save("ppo_lower_std")
+
+    obs, info = env.reset()
+
+    env.render()
+    sleep(15)
+
+    for _ in range(200000000000):
+        env.render()  # Render at every step
+        sleep(0.01)
+        action, _ = model.predict(obs, deterministic=True)
+        obs, reward, terminated, truncated, info = env.step(action)
+        if terminated or truncated:
+            # obs, info = env.reset()
+            # env.unwrapped.data.ctrl[:] = 0
+            mujoco.mj_step(env.unwrapped.model, env.unwrapped.data)  
+            break
+
+    model = env.unwrapped.model
+    data = env.unwrapped.data
+
+    env.close()
+
+    sleep(20)
+
+    with mujoco.viewer.launch_passive(model, data) as viewer:
+        print("Press ESC to exit viewer...")
+        last_time = time.time()
+        frame_count = 0
+        while viewer.is_running():
+            mujoco.mj_step(model, data)
+            viewer.sync()
+            frame_count += 1
+            now = time.time()
+            if now - last_time >= 1.0:
+                # print(f"Simulated FPS: {frame_count}")
+                frame_count = 0
+                last_time = now
+
+
 if __name__ == "__main__":
     approach_env = gym.make("SecondRobotMuJoCoEnv-v0")
     # approach_model_training(approach_env, load_model_path=APPROACHING_MODEL_NAME)
     # approach_model_training(approach_env)
     # approach_model_training_parallel()
-    # approach_model_training_parallel(load_model_path=APPROACHING_MODEL_NAME)
+    approach_model_training_parallel(load_model_path=APPROACHING_MODEL_NAME)
+    # approaching_model_implementation(approach_env)

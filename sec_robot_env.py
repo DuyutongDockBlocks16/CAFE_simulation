@@ -7,13 +7,15 @@ import threading
 from util_threads.object_remover import remove_object_on_plane
 from util_threads.object_placer import place_object_on_table
 from util_threads.object_remover_step_counter import remove_object_on_plane_with_step_counter
+from utils.mujoco_state_loader import load_mujoco_state_from_file, restore_mujoco_state
 from config.env_config import FiniteState
 import random
 
 ACTION_SPACE_REDUCTION = 14  # Number of actuators to be reduced from the action space for moving
 
 class SecondRobotMuJoCoEnv(gym.Env):
-    def __init__(self, xml_path, action_repeat=4):
+    # def __init__(self, xml_path, action_repeat=4):
+    def __init__(self, xml_path, state_filepath, action_repeat=4):
         super().__init__()
 
         self.action_repeat = action_repeat
@@ -22,6 +24,15 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         self.model = mujoco.MjModel.from_xml_path(xml_path)
         self.data = mujoco.MjData(self.model)
+
+        # state_data = load_mujoco_state_from_file(state_filepath)
+
+        # self.data.qpos[:] = state_data['qpos']
+        # self.data.qvel[:] = state_data['qvel'] 
+        # self.data.ctrl[:] = state_data['ctrl']
+
+        # self.data.qfrc_applied[:] = state_data['qfrc_applied']
+        # self.data.time = state_data['time']
 
         time_step = 0.005
         self.model.opt.timestep = time_step
@@ -58,17 +69,24 @@ class SecondRobotMuJoCoEnv(gym.Env):
                 # [2, -1],
                 # [0, 2],
                 # [0, 1],
-                [-1, -2.45],
+                # [-1, -2.45],
                 # [1, -2.45],
+                [-2, 2],
+                [-2, 0]
             ]
-        
-        self.picking_positions = [
-                # [1, -2.45],
-                [-1, -2.45],
+
+        self.robot2_quats = [
+            [1, 0, 0, 0],  # Default quaternion (no rotation)
+            [0, 0, 0, 1],  # 180 degrees around Z-axis
         ]
+    
+        # self.picking_positions = [
+        #         [1, -2.45],
+        #         # [-1, -2.45],
+        # ]
 
-        self.target_position_x_y = random.choice(self.picking_positions)
-
+        self.target_position_x_y = random.choice(self.target_positions)
+       
         self.robot1_recent_positions = []
         self.robot2_recent_positions = []
         self.prediction_steps = 5
@@ -228,10 +246,10 @@ class SecondRobotMuJoCoEnv(gym.Env):
             self.data.qvel[:] = self.initial_qvel
             self.data.ctrl[:] = self.initial_ctrl
 
-            self._start_object_placer_thread(self.model, self.data, self.object_joint_ids, self.left_object_position, self.right_object_position, self.shared_state)
-            self._start_object_remover_threads(self.model, self.data, self.object_joint_ids)
-            self.first_robot_controller.set_state(FiniteState.IDLE)
-            self.first_robot_controller.reset_all_joints()
+            # self._start_object_placer_thread(self.model, self.data, self.object_joint_ids, self.left_object_position, self.right_object_position, self.shared_state)
+            # self._start_object_remover_threads(self.model, self.data, self.object_joint_ids)
+            # self.first_robot_controller.set_state(FiniteState.IDLE)
+            # self.first_robot_controller.reset_all_joints()
 
             self.current_world_step = 0
 
@@ -249,10 +267,10 @@ class SecondRobotMuJoCoEnv(gym.Env):
                 FiniteState.LIFTING_JOINT3,
                 FiniteState.WAITING_LIFTING_JOINT3
             ]
-            while self.first_robot_controller.get_status() in inactive_status:
-                mujoco.mj_step(self.model, self.data)
-                self.first_robot_controller.step(self.shared_state["current_object_position"])
-                mujoco.mj_forward(self.model, self.data)
+            # while self.first_robot_controller.get_status() in inactive_status:
+            #     mujoco.mj_step(self.model, self.data)
+            #     # self.first_robot_controller.step(self.shared_state["current_object_position"])
+            #     mujoco.mj_forward(self.model, self.data)
 
         if not self.finished:
             self.reset_robot2_only()
@@ -299,13 +317,13 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         terminated = False
         truncated = False
-        self.first_robot_controller.step(self.shared_state["current_object_position"])
+        # self.first_robot_controller.step(self.shared_state["current_object_position"])
         self.data.ctrl[ACTION_SPACE_REDUCTION:ACTION_SPACE_REDUCTION+len(real_action)] = real_action
-        status = self.first_robot_controller.get_status()
-        if self.shared_state["current_object_index"] >= len(self.object_joint_ids) and status == FiniteState.IDLE:
-            print("All objects have been placed. Exit")
-            truncated = True
-            self.finished = True
+        # status = self.first_robot_controller.get_status()
+        # if self.shared_state["current_object_index"] >= len(self.object_joint_ids) and status == FiniteState.IDLE:
+        #     print("All objects have been placed. Exit")
+        #     truncated = True
+        #     self.finished = True
 
         mujoco.mj_step(self.model, self.data)
 
@@ -316,7 +334,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         if self._check_robot_forbidden_collision():
             print("Robot collision with forbidden area detected! Terminating episode.")
-            reward -= 200
+            reward -= 2000
             terminated = True
 
         if self._check_robot_robot_collision():
@@ -408,6 +426,9 @@ class SecondRobotMuJoCoEnv(gym.Env):
         placing_2_angle = np.arctan2(placing_2_rel[1], placing_2_rel[0]) - robot2_orientation
         placing_2_angle = np.arctan2(np.sin(placing_2_angle), np.cos(placing_2_angle))
         placing_2_rel_normalized = placing_2_rel / max_distance
+
+        # print [target_relative_angle / np.pi],
+        # print([target_relative_angle / np.pi])
         
         observation = np.concatenate([
             # 🎯 机器人自身状态
