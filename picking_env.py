@@ -24,10 +24,10 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         self.data.ctrl[:] = state_data['ctrl']
 
 
-        robot1_motor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot1:drive")
-        self.model.actuator_gear[robot1_motor_id] = 0.0
-        # robot2_motor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:drive")
-        # self.model.actuator_gear[robot2_motor_id] = 0.0
+        # robot1_motor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot1:drive")
+        # self.model.actuator_gear[robot1_motor_id] = 0.0
+        robot2_motor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:drive")
+        self.model.actuator_gear[robot2_motor_id] = 0.0
         # reset all data.ctrl to 0
         self.data.qfrc_applied[:] = state_data['qfrc_applied']
         self.data.time = state_data['time']
@@ -59,7 +59,8 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
 
         self.object_joints.sort(key=lambda x: x[0])
 
-        self.max_steps = 1500
+        self.max_steps = 2000
+        # self.max_steps = 5000
         self.current_step = 0
         self.initial_qpos = np.copy(self.data.qpos)
         self.initial_qvel = np.copy(self.data.qvel)
@@ -90,6 +91,22 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
             "pickingplace:table0",
             "pickingplace:table2"
         ]
+        
+        self.object_geoms = [
+            "object0_geom", "object1_geom", "object2_geom", "object3_geom",
+            "object4_geom", "object5_geom", "object6_geom", "object7_geom",
+            "object8_geom", "object9_geom"
+        ]
+        
+        self.vacuum_sphere_body = ["robot2:vacuum_sphere"]
+
+        self.vacuum_sphere_body_ids = []
+        for body_name in self.vacuum_sphere_body:
+            try:
+                body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+                self.vacuum_sphere_body_ids.append(body_id)
+            except:
+                continue
 
         self.robot_arm_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name) for name in self.robot2_arm_bodies]
         
@@ -115,7 +132,7 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
 
         self.previous_center_distance = None
 
-        self.progress_reward_scale = 1000.0  
+        self.progress_reward_scale = 2000.0  
         self.distance_threshold = 0.005 
 
         self.success_counter = 0
@@ -160,8 +177,9 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
             low=-np.inf, high=np.inf, shape=obs.shape, dtype=np.float32
         )
 
-        self.low_bounds = np.array([-1.0, -1.919, -0.611, -1.565, -3.142, -0.2], dtype=np.float32)
-        self.high_bounds = np.array([1.0, 2.792, 1.222, 1.40, 3.142, 0.2], dtype=np.float32)
+        self.low_bounds = np.array([-1.0, -10, 0, -1.565, -3.142, -0.2], dtype=np.float32)
+        # self.low_bounds = np.array([-1.0, -1.919, -0.611, -1.565, -3.142, -0.2], dtype=np.float32)
+        self.high_bounds = np.array([1.0, 10, 1.222, 1.40, 3.142, 0.2], dtype=np.float32)
 
         num_actuators = self.model.nu
 
@@ -188,6 +206,9 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         self.data.qvel[:] = self.initial_qvel
         self.data.ctrl[:] = self.initial_ctrl
         self.current_step = 0
+        
+        rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
+        print(f"in Rover position: {self.data.xpos[rover_body_id]}")
 
         self.task_stage = "approach"
         self.is_approaching_reward_given = False
@@ -255,11 +276,12 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         
         joint1_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint1")
         joint1_control_raw = self.data.ctrl[joint1_actuator_id]
-        joint1_control = (joint1_control_raw - (-1.919)) / (2.792 - (-1.919)) * 2 - 1
+        joint1_control = (joint1_control_raw - (-10)) / (10 - (-10)) * 2 - 1
         
         joint2_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint2")
         joint2_control_raw = self.data.ctrl[joint2_actuator_id]
-        joint2_control = (joint2_control_raw - (-0.611)) / (1.222 - (-0.611)) * 2 - 1
+        joint2_control = (joint2_control_raw - (0)) / (1.222 - (0)) * 2 - 1
+        # joint2_control = (joint2_control_raw - (-0.611)) / (1.222 - (-0.611)) * 2 - 1
         
         joint3_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint3")
         joint3_control_raw = self.data.ctrl[joint3_actuator_id]
@@ -276,7 +298,7 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         # 🎯 传感器数据
         sensor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "robot2:vacuum_touch")
         sensor_data = self.data.sensordata[sensor_id]
-        if sensor_data > 0:
+        if sensor_data > 0 and self._check_robot_object_collision():
             sensor_data = 1.0
         
         # 🎯 归一化参数
@@ -428,6 +450,9 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
 
     def step(self, action):
         # self._check_robot2_rover_velocity()
+        # print the action
+        # print(f"Action: {action}")
+
         if self.action_repeat == 1:
             # 如果action_repeat=1，使用原始step逻辑
             return self._original_step(action)
@@ -455,6 +480,8 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         normalized_action = np.clip(action, -1, 1)
         real_action = self.low_bounds + (normalized_action + 1) * (self.high_bounds - self.low_bounds) / 2
         # real_action = np.clip(action, self.low_bounds, self.high_bounds)
+        # print(f"Real Action: {real_action}")
+        # print(f"Real Action: {real_action}, Normalized Action: {normalized_action}, action: {action}")
         
         terminated = False
         truncated = False
@@ -489,6 +516,7 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
             terminated = True
 
         if self.current_step >= self.max_steps:
+            print("Maximum steps reached, terminating episode.")
             truncated = True
         
         if not np.all(np.isfinite(self.data.qacc)) or np.any(np.abs(self.data.qacc) > 1e7):
@@ -559,7 +587,7 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         sensor_data = self.data.sensordata[sensor_id]
         touched = False
         
-        if sensor_data > 0:
+        if sensor_data > 0 and self._check_robot_object_collision():
             print("✅ Vacuum touch sensor activated, object touched.")
             touched = True
             total_reward += 200.0
@@ -583,7 +611,11 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
             total_reward += picking_reward
             print("✅ 吸附成功，物体已吸附。")
         else:
-            self.picking_stable_steps = 0
+            if self.picking_stable_steps > 0:
+                print("❌ 吸附失败，物体未吸附。")
+                dropped = True
+            # self.picking_stable_steps = 0
+            
         
         # 🎯 任务完成检测
         task_completed = False
@@ -616,6 +648,7 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         
         # 🎯 碰撞检测
         collision_penalty, collision_detected = self._calculate_collision_penalty()
+        # print(f"Collision detected: {collision_detected}, applying penalty: {collision_penalty:.2f}")
         total_reward += collision_penalty
         
         # 🎯 调试信息
@@ -628,6 +661,24 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         #     print(f"   吸附状态: {'✅' if suction_activated else '❌'}")
         
         return total_reward, task_completed, collision_detected, dropped
+    
+    def _check_robot_object_collision(self):
+        for i in range(self.data.ncon):
+            contact = self.data.contact[i]
+            geom1_id = contact.geom1
+            geom2_id = contact.geom2
+            
+            body1_id = self.model.geom_bodyid[geom1_id]
+            body2_id = self.model.geom_bodyid[geom2_id]
+            
+            geom1_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom1_id)
+            geom2_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom2_id)
+            
+            if ((body1_id in self.vacuum_sphere_body_ids and geom2_name in self.object_geoms) or
+                (body2_id in self.vacuum_sphere_body_ids and geom1_name in self.object_geoms)):
+                return True
+        
+        return False
 
     def _update_task_stage(self, approaching_current_center_distance, alignment_target_position):
         """更新任务阶段"""
@@ -875,10 +926,39 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         return lift_reward + completion_reward + suction_reward, task_completed, suction_is_not_activated
 
     def _calculate_collision_penalty(self):
-        if self._check_robot_forbidden_collision():
+        # print("Checking for collisions...")
+        if self._check_robot_forbidden_collision() or self._check_vacuum_sphere_collision_with_rover_body():
             print("Robot2 collision with forbidden area detected, applying penalty.")
             return -self.reward_weights["collision_penalty"], True
+        
         return 0.0, False
+    
+    def _check_vacuum_sphere_collision_with_rover_body(self):
+        """检查vacuum sphere是否与rover body碰撞"""
+        
+        # 🔥 获取rover body ID
+        rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
+        
+        # 🔥 获取vacuum sphere body ID
+        vacuum_sphere_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:vacuum_sphere")
+        
+        for i in range(self.data.ncon):
+            contact = self.data.contact[i]
+            geom1_id = contact.geom1
+            geom2_id = contact.geom2
+            
+            # 🔥 获取几何体对应的body ID
+            body1_id = self.model.geom_bodyid[geom1_id]
+            body2_id = self.model.geom_bodyid[geom2_id]
+            
+            # 🔥 检查是否是rover和vacuum sphere之间的碰撞
+            if ((body1_id == rover_body_id and body2_id == vacuum_sphere_body_id) or
+                (body1_id == vacuum_sphere_body_id and body2_id == rover_body_id)):
+                
+                print(f"🚨 检测到rover与vacuum sphere碰撞!")
+                return True
+        
+        return False
 
     def _get_suction_direction(self, quat):
         rotation_matrix = self._quaternion_to_rotation_matrix(quat)

@@ -502,7 +502,8 @@ class MirobotController:
             finished = self.waiting_joint1_to_front()
             if finished:
                 self.state = FiniteState.PRE_PLACING_POSITION_TO_PLACING_POSITION
-                self.placing_position = random.choice([Direction.LEFT, Direction.RIGHT])
+                # self.placing_position = random.choice([Direction.LEFT, Direction.RIGHT])
+                self.placing_position = random.choice([Direction.LEFT])
         elif self.state == FiniteState.PRE_PLACING_POSITION_TO_PLACING_POSITION and self.placing_position == Direction.LEFT:
             finished = self.pre_placing_position_to_placing_position(direction_flag=Direction.LEFT)
             if finished:

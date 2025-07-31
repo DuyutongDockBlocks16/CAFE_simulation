@@ -26,7 +26,15 @@ gym.register(
     entry_point="picking_env:SecondRobotPickingMuJoCoEnv",
     kwargs={
         "xml_path": "xml/scene_mirobot.xml",
-        "state_filepath": "saved_states/robot_state_20250721_151909.pkl"
+        # "state_filepaths": [
+        #     "saved_states/robot_state_20250726_154225.pkl", 
+        #     # "saved_states/robot_state_20250721_151909.pkl"
+        # ]
+        # "state_filepath": "saved_states/robot_state_20250721_151909.pkl"
+        # "state_filepath": "saved_states/robot_state_20250726_154225.pkl"
+        # "state_filepath": "saved_states/robot_state_20250728_173657.pkl"
+        # "state_filepath": "saved_states/robot_state_20250728_191655.pkl"
+        "state_filepath": "saved_states/robot_state_20250730_113734.pkl"
     }
 )
 
@@ -198,8 +206,8 @@ def picking_model_training_parallel(load_model_path=None, num_envs=8):
         
         model = PPO("MlpPolicy", env, verbose=1, 
                     learning_rate=1e-4,     
-                    n_steps=1024,           # 调整为并行环境合适的值
-                    batch_size=128,          
+                    n_steps=2048,           # 调整为并行环境合适的值
+                    batch_size=256,          
                     n_epochs=8,            
                     ent_coef=0.02,          
                     clip_range=0.15,          
@@ -209,11 +217,16 @@ def picking_model_training_parallel(load_model_path=None, num_envs=8):
                     tensorboard_log="./ppo_logs/")
         loaded_steps = 0
 
-    total_additional_steps = 3_000_000
+    # total_additional_steps = 16_000_000
+    # total_additional_steps = 500_000
+    total_additional_steps = 5_000_000
 
     ent_scheduler = EntCoefficientScheduler(
-        initial_ent_coef=0.02,         
-        final_ent_coef=0.00005,          
+        initial_ent_coef=0.02,  
+        # final_ent_coef=0.02,  
+        # initial_ent_coef=0.1,  
+        # final_ent_coef=0.1,           
+        final_ent_coef=0.0005,          
         total_timesteps=total_additional_steps,
         schedule_type='exponential',    
         verbose=1
@@ -296,12 +309,15 @@ def picking_model_implementation(env):
     obs, info = env.reset()
 
     env.render()
-    sleep(15)
+    sleep(5)
 
     for _ in range(200000000000):
         env.render()  # Render at every step
-        sleep(0.1)
-        action, _ = model.predict(obs, deterministic=False)
+        # sleep(0.1)
+        action, _ = model.predict(obs, deterministic=True)
+        # save all action to file
+        # with open("picking_obs_log.txt", "a") as f:
+        #     f.write(f"{obs.tolist()}\n")
         obs, reward, terminated, truncated, info = env.step(action)
         if terminated or truncated:
             # obs, info = env.reset()

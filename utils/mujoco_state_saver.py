@@ -1,6 +1,7 @@
 import os
 import pickle
 from datetime import datetime
+import numpy as np
 
 def save_mujoco_state_to_file(model, data, filename=None):
     """
@@ -68,7 +69,5 @@ def save_mujoco_state(model, data):
     }
     
     print(f"💾 Saved MuJoCo state at time {data.time:.3f}")
-    print(f"   Robot position: {data.qpos[:3]}")
-    print(f"   Robot velocity: {data.qvel[:3]}")
     
     return state_data

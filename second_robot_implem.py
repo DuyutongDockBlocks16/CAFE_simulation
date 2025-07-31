@@ -25,7 +25,7 @@ class HybridController:
     def __init__(self, 
             sec_robot_forward_model_path,
             sec_robot_backward_model_path,
-            sec_robot_picking_model_path,
+            sec_robot_picking_model_paths,
             sec_robot_placing_model_path
         ):
         self.left_object_position = [1, -2.5, 0.28]
@@ -124,13 +124,19 @@ class HybridController:
         
         self.sec_robot_navigation_forward_model = PPO.load(sec_robot_forward_model_path)
         self.sec_robot_navigation_backward_model = PPO.load(sec_robot_backward_model_path)
-        self.sec_robot_picking_model = PPO.load(sec_robot_picking_model_path)
+        self.pick_models = []
+        for i in range(len(sec_robot_picking_model_paths)):
+            self.pick_models.append(PPO.load(sec_robot_picking_model_paths[i]))
+        # self.sec_robot_picking_model_0 = PPO.load(sec_robot_picking_model_paths[0])
+        # self.sec_robot_picking_model_1 = PPO.load(sec_robot_picking_model_paths[1])
+        self.picking_model_index = 0
         self._start_object_placer_thread(self.model, self.data, self.object_joint_ids, self.left_object_position, self.right_object_position, self.shared_state)
         self._start_object_remover_threads(self.model, self.data, self.object_joint_ids)
 
         self.first_robot_status = None
         self.second_robot_status = RLRobotFiniteState.IDLE
-        self.second_robot_is_active = False
+        self.first_robot_is_carrying = False
+        self.second_robot_is_picking = False
 
         self.active_joint_id = None
 
@@ -150,7 +156,19 @@ class HybridController:
         self.suction_radius_threshold = 0.015 
 
         self.picking_stable_steps = 0
+        self.break_count = 0
+        
+        self.stop_wait_steps = 0
+        self.required_stop_steps = 50
+        
+        self.low_bounds_for_0_and_1 = np.array([-1.0, -1.919, -0.611, -1.565, -3.142, -0.2], dtype=np.float32)
+        self.low_bounds_for_2 = np.array([-1.0, -10, 0, -1.565, -3.142, -0.2], dtype=np.float32)
+        self.high_bounds = np.array([1.0, 10, 1.222, 1.40, 3.142, 0.2], dtype=np.float32)
 
+        self.action_repeat = 4
+        self.current_action_repeat_count = 0
+        self.cached_picking_action = None
+        
     def _get_data_and_model(self):
         model = mujoco.MjModel.from_xml_path("xml/scene_mirobot.xml")
         data = mujoco.MjData(model)
@@ -181,7 +199,7 @@ class HybridController:
 
         self.first_robot_controller.step(self.shared_state["current_object_position"])
 
-        self.second_robot_is_active = False
+        self.first_robot_is_carrying = False
 
         if self.first_robot_status not in [
             FiniteState.IDLE,
@@ -194,11 +212,26 @@ class HybridController:
             FiniteState.WAITING_LIFTING_JOINT3,
             FiniteState.PLACING_POSITION_TO_ORIGIN_POSITION
         ]: 
-            self.second_robot_is_active = True
+            self.first_robot_is_carrying = True
+            
+        if self.second_robot_status in [
+            RLRobotFiniteState.PICKING_OBJECT,
+            RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION,
+            RLRobotFiniteState.PLACING_OBJECT
+        ]:
+            self.second_robot_is_picking = True
+        else :
+            self.second_robot_is_picking = False
 
-        if self.second_robot_is_active:
+        if self.first_robot_is_carrying or self.second_robot_is_picking:
             if self.second_robot_status == RLRobotFiniteState.IDLE:
-                self.target_position_x_y = self.picking_positions[1]
+                
+                left_joint_id, _, right_joint_id, _ = self._get_placed_object_info()
+                if left_joint_id is not None:
+                    self.target_position_x_y = self.picking_positions[0]
+                elif right_joint_id is not None:
+                    self.target_position_x_y = self.picking_positions[1]
+
                 navigation_obs = self._get_navigation_obs()
                 action, _ = self.sec_robot_navigation_forward_model.predict(navigation_obs, deterministic=True)
 
@@ -208,14 +241,18 @@ class HybridController:
                 if reached:
                     self.second_robot_status = RLRobotFiniteState.PICKING_OBJECT
                     action = np.zeros(SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH, dtype=np.float32)
-                    # break_flag = True
-                    rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
-                    self.data.cvel[rover_body_id] = 0.0
+                    self.break_count += 1
                     
                 self._apply_navigation_action(action)
             
-            if self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:
-                self.target_position_x_y = self.picking_positions[0]
+            elif self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:
+                
+                left_joint_id, _, right_joint_id, _ = self._get_placed_object_info()
+                if left_joint_id is not None:
+                    self.target_position_x_y = self.picking_positions[0]
+                elif right_joint_id is not None:
+                    self.target_position_x_y = self.picking_positions[1]
+
                 navigation_obs = self._get_navigation_obs()
                 action, _ = self.sec_robot_navigation_backward_model.predict(navigation_obs, deterministic=True)
 
@@ -223,15 +260,45 @@ class HybridController:
                 dist_to_target = np.linalg.norm(robot_2_rover_pos - self.target_position_x_y)
                 reached = (dist_to_target < 0.15)
                 if reached:
-                    self.second_robot_status = RLRobotFiniteState.PICKING_OBJECT
                     action = np.zeros(SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH, dtype=np.float32)
-                    # break_flag = True
-                    rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
-                    self.data.cvel[rover_body_id] = 0.0
+                    
+                    rover_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot2:centroid")
+                    rover_qvel_start = self.model.jnt_dofadr[rover_joint_id]
+                    linear_vel = self.data.qvel[rover_qvel_start:rover_qvel_start+3]
+                    speed = np.linalg.norm(linear_vel)
+
+                    if speed < 0.0001: 
+                        self.stop_wait_steps += 1
+                        # print(f"⏳ 停稳检测: {self.stop_wait_steps}/{self.required_stop_steps} (速度: {speed:.4f})")
+                        
+                        if self.stop_wait_steps >= self.required_stop_steps:
+                            self.second_robot_status = RLRobotFiniteState.PICKING_OBJECT
+                            self.break_count += 1
+                            # if self.break_count == 3:
+                            #     break_flag = True
+                            # self.stop_wait_steps = 0  
+                            # print("✅ Robot2已停稳，切换到PICKING_OBJECT状态")
+                    else:
+                        # 🔥 速度还太快，重置计数器
+                        self.stop_wait_steps = 0
+                        # print(f"🔄 速度过快，重置停稳计数 (速度: {speed:.4f})")
+                    
+                    
+                    # rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
+                    # rover_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot2:centroid")
+                    # rover_qvel_start = self.model.jnt_dofadr[rover_joint_id]
+                    # self.data.qvel[rover_qvel_start:rover_qvel_start+6] = 0.0
+                    # print speed of rover
+                    # print(f"Rover speed: {self.data.cvel[rover_body_id]}")
+
+                    # self.break_count += 1
+                    # if self.break_count == 2:
+                    #     break_flag = True
+
                     
                 self._apply_navigation_action(action)
                 
-            if self.second_robot_status == RLRobotFiniteState.PICKING_OBJECT:
+            elif self.second_robot_status == RLRobotFiniteState.PICKING_OBJECT:
                 
                 left_joint_id, left_position, right_joint_id, right_position = self._get_placed_object_info()
 
@@ -244,9 +311,21 @@ class HybridController:
                     self.active_joint_id = right_joint_id
                     self.side = "right"
 
-                picking_obs = self._get_picking_obs()
-                action, _ = self.sec_robot_picking_model.predict(picking_obs, deterministic=True)
-
+                if self.current_action_repeat_count == 0:
+                    # 🔥 计数器为0，需要获取新的action
+                    picking_obs = self._get_picking_obs()
+                    action, _ = self.pick_models[self.picking_model_index].predict(picking_obs, deterministic=True)
+                    self.cached_picking_action = action  # 🔥 缓存这个action
+                    # print(f"🎯 获取新的picking action: {action}")
+                else:
+                    # 🔥 使用缓存的action
+                    action = self.cached_picking_action
+                    # print(f"🔄 使用缓存的action (第{self.current_action_repeat_count + 1}次): {action}")
+                
+                self.current_action_repeat_count += 1
+                if self.current_action_repeat_count >= self.action_repeat:
+                    self.current_action_repeat_count = 0  # 🔥 重置计数器
+                
                 picked = False
 
                 touched = False
@@ -267,16 +346,21 @@ class HybridController:
                     print("Object picked successfully, suction activated.")
                     self.picking_stable_steps += 1
 
-                if self.picking_stable_steps == 5:
+                if self.picking_stable_steps == 25:
                     print(self.picking_stable_steps, "steps of stable picking detected.")
                     self.picking_stable_steps = 0
                     self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION
-                    action = [1.0, 0.0, 0.0, 0.1, 0.0, 0.0]  # 停止导航
+                    # action = [1.0, 0.0, 0.0, 0.05, 0.0, 0.0]  # 停止导航
                     print("Object picked successfully, moving to placing position.")
+                    print(f"Switched to picking model index: {self.picking_model_index}")
 
                 self._apply_picking_action(action)
 
-            if self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION:
+            elif self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION:
+                self.data.ctrl[
+                    FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH:
+                    FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH +SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH
+                ] = [1.0, 0.0, 0.0, 0.05, 0.0, 0.0] 
                 self.target_position_x_y = self.placing_positions[0]
                 navigation_obs = self._get_navigation_obs()
                 action, _ = self.sec_robot_navigation_forward_model.predict(navigation_obs, deterministic=True)
@@ -284,20 +368,23 @@ class HybridController:
                 
                 robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]
                 dist_to_target = np.linalg.norm(robot_2_rover_pos - self.target_position_x_y)
-                reached = (dist_to_target < 0.38)
+                reached = (dist_to_target < 0.35)
                 if reached:
                     print("Reached placing position, preparing to place object.")
                     self.second_robot_status = RLRobotFiniteState.PLACING_OBJECT
+                    self.picking_model_index = (self.picking_model_index + 1) % len(self.pick_models)
                     action = np.zeros(SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH, dtype=np.float32)
-                    # break_flag = True
+
                     rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
                     self.data.cvel[rover_body_id] = 0.0
                     
                 self._apply_navigation_action(action)
             
-            if self.second_robot_status == RLRobotFiniteState.PLACING_OBJECT:
+            elif self.second_robot_status == RLRobotFiniteState.PLACING_OBJECT:
                 adhere_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:adhere_winch")
                 self.data.ctrl[adhere_actuator_id] = 0.0  # 停止吸附
+                
+                self._apply_zero_action()
                 
                 # reset all robot2 joints to zero
                 for joint_id in self.robot_arm_ids:
@@ -313,8 +400,13 @@ class HybridController:
         with mujoco.viewer.launch_passive(self.model, self.data) as viewer:
             step = 0
             while True:
-                sleep(0.001)
+                # sleep(0.1)
                 break_flag = self.step()
+                # print position of rover
+                # if break_flag:
+                #     rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
+                #     print(f"in Rover position: {self.data.xpos[rover_body_id]}")
+                #     # [ 1.07028213 -2.31816306  0.19964572]
                 if break_flag:
                     save_mujoco_state_to_file(self.model, self.data)
                     print("Simulation ended, exiting loop.")
@@ -322,6 +414,9 @@ class HybridController:
 
                 mujoco.mj_step(self.model, self.data)
                 step += 1
+                
+                rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
+                # print(f"out Rover position: {self.data.xpos[rover_body_id]}")
 
                 # if not np.all(np.isfinite(self.data.qacc)) or np.any(np.abs(self.data.qacc) > 1e7):
                 #     print("QACC error detected! Simulation unstable, exiting loop.")
@@ -458,11 +553,18 @@ class HybridController:
         
         joint1_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint1")
         joint1_control_raw = self.data.ctrl[joint1_actuator_id]
-        joint1_control = (joint1_control_raw - (-1.919)) / (2.792 - (-1.919)) * 2 - 1
+        if self.picking_model_index >= 2:
+            joint1_control = (joint1_control_raw - (-10)) / (10 - (-10)) * 2 - 1
+        else:
+            joint1_control = (joint1_control_raw - (-1.919)) / (2.792 - (-1.919)) * 2 - 1
         
         joint2_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint2")
         joint2_control_raw = self.data.ctrl[joint2_actuator_id]
-        joint2_control = (joint2_control_raw - (-0.611)) / (1.222 - (-0.611)) * 2 - 1
+        if self.picking_model_index >= 2:
+            joint2_control = (joint2_control_raw - (0)) / (1.222 - (0)) * 2 - 1
+        else:
+            joint2_control = (joint2_control_raw - (-0.611)) / (1.222 - (-0.611)) * 2 - 1
+        
         
         joint3_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint3")
         joint3_control_raw = self.data.ctrl[joint3_actuator_id]
@@ -479,7 +581,7 @@ class HybridController:
         # 🎯 传感器数据
         sensor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "robot2:vacuum_touch")
         sensor_data = self.data.sensordata[sensor_id]
-        if sensor_data > 0:
+        if sensor_data > 0 and self._check_robot_object_collision():
             sensor_data = 1.0
         
         # 🎯 归一化参数
@@ -749,13 +851,36 @@ class HybridController:
             FIRST_ROBOT_ACTION_SPACE_LENGTH :
             FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH
         ] = action
+        
+    # def _apply_picking_action_with_repeat(self, action):
+    #     """应用带重复的picking动作"""
+        
+    #     # 🔥 重复执行action_repeat次
+    #     for _ in range(self.action_repeat):
+    #         self._apply_picking_action(action)
 
     def _apply_picking_action(self, action):
+        # print(f"Applying picking action: {action}")
+        normalized_action = np.clip(action, -1, 1)
+        if self.picking_model_index >= 2:
+            real_action = self.low_bounds_for_2 + (normalized_action + 1) * (self.high_bounds - self.low_bounds_for_2) / 2
+            self.data.ctrl[
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH:
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH +SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH
+            ] = real_action
+        else:
+            real_action = self.low_bounds_for_0_and_1 + (normalized_action + 1) * (self.high_bounds - self.low_bounds_for_0_and_1) / 2
+            self.data.ctrl[
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH:
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH +SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH
+            ] = action
+        
+    def _apply_zero_action(self):
         self.data.ctrl[
             FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH:
             FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH +SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH
-        ] = action
-    
+        ] = np.zeros(SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH, dtype=np.float32)
+        
     def _start_object_remover_threads(self, model, data, object_joint_ids):
         # lower plane parameters
         lower_plane_positions = [[2.8, 1.0],[2.8, -1.0]]
@@ -813,7 +938,12 @@ if __name__ == "__main__":
     hybrid_controller = HybridController(
             sec_robot_forward_model_path="models/final_model_continued_21600K_20250707_165449.zip.bak",
             sec_robot_backward_model_path="models/final_model_continued_56000K_20250724_140118.zip.bak",
-            sec_robot_picking_model_path="models/final_picking_model_3000K_20250722_192051.zip.bak",
+            sec_robot_picking_model_paths=[
+                    "models/final_picking_model_3000K_20250722_192051.zip.bak",
+                    "final_picking_model_continued_13000K_20250729_102650.zip",
+                    "final_picking_model_5000K_20250731_124426.zip"
+                ],
+            # sec_robot_picking_model_path="final_picking_model_50000K_20250728_102844.zip",
             sec_robot_placing_model_path=None
         )
     hybrid_controller.run_simulation()
@@ -821,92 +951,3 @@ if __name__ == "__main__":
 
     # state_file = "saved_states/robot_state_20250723_093442.pkl"
     # view_saved_state(state_file)
-
-
-
-# def approach_model_implementation(env):
-#     ppo_model = PPO.load(APPROACHING_MODEL_NAME, env=env)
-#     print(f"✅ Loaded PPO model: {APPROACHING_MODEL_NAME}")
-    
-#     obs, info = env.reset()
-#     print("🎬 Starting model demonstration...")
-    
-#     env.render()
-#     sleep(15) 
-    
-#     episode_count = 0
-#     max_episodes = 1 
-    
-#     while episode_count < max_episodes:
-#         print(f"\n🎯 Episode {episode_count + 1}/{max_episodes}")
-        
-#         step_count = 0
-#         max_steps_per_episode = 10000  
-        
-#         while step_count < max_steps_per_episode:
-#             env.render()
-
-#             action, _ = ppo_model.predict(obs, deterministic=True)
-#             obs, reward, terminated, truncated, info = env.step(action)
-            
-#             step_count += 1
-            
-#             if step_count % 500 == 0:
-#                 print(f"   Step {step_count}, Reward: {reward:.2f}")
-            
-#             if terminated or truncated:
-#                 print(f"   Episode ended after {step_count} steps")
-#                 print(f"   Final reward: {reward:.2f}")
-#                 print(f"   Terminated: {terminated}, Truncated: {truncated}")
-#                 # env.unwrapped.data.ctrl[:] = 0
-#                 # mujoco.mj_step(env.unwrapped.model, env.unwrapped.data)
-#                 save_mujoco_state_to_file(env.unwrapped.model, env.unwrapped.data)
-
-#                 # obs, info = env.reset()
-#                 break
-        
-#         episode_count += 1
-        
-#         if episode_count < max_episodes:
-#             print("   🔄 Starting next episode in 3 seconds...")
-#             sleep(3)
-    
-#     print("🎬 Demonstration completed!")
-    
-#     mujoco_model = env.unwrapped.model
-#     mujoco_data = env.unwrapped.data
-    
-#     if hasattr(env.unwrapped, "viewer") and env.unwrapped.viewer is not None:
-#         env.unwrapped.viewer.close()
-#     env.close()
-    
-#     print("🔍 Launching passive viewer...")
-#     sleep(5)
-    
-#     with mujoco.viewer.launch_passive(mujoco_model, mujoco_data) as viewer:
-#         print("🎮 Passive viewer launched!")
-#         print("   - Press ESC to exit viewer")
-#         print("   - Use mouse to rotate view")
-#         print("   - Use scroll to zoom")
-        
-#         last_time = time.time()
-#         frame_count = 0
-        
-#         while viewer.is_running():
-#             mujoco.mj_step(mujoco_model, mujoco_data)
-#             viewer.sync()
-            
-#             frame_count += 1
-#             current_time = time.time()
-            
-#             if current_time - last_time >= 5.0: 
-#                 fps = frame_count / (current_time - last_time)
-#                 print(f"📊 Simulation FPS: {fps:.1f}")
-#                 frame_count = 0
-#                 last_time = current_time
-    
-#     print("✅ Viewer closed. Implementation demo finished!")
-
-# def setup_initial_state(model, data):
-#     mujoco.mj_resetData(model, data)
-#     mujoco.mj_forward(model, data)

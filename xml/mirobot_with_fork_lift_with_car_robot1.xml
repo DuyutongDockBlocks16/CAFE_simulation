@@ -48,8 +48,8 @@
         <position ctrlrange="-1.8 2.2" kp="10" />
       </default>
       <default class="Robot2:Joint1">
-        <joint pos="0 0 0" axis="0 0 1" range="-1.919 2.792" damping="25.0" />
-        <position ctrlrange="-1.919 2.792" kp="30" />
+        <joint pos="0 0 0" axis="0 0 1" range="-10 10" damping="25.0" />
+        <position ctrlrange="-10 10" kp="30" />
       </default>
       <default class="Robot2:Joint2">
         <joint pos="0 0 0" axis="0 0 1" range="-0.611 1.222" damping="25.0" />
