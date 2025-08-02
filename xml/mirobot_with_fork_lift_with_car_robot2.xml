@@ -245,7 +245,7 @@
     gear="1.5" />
     <position name="robot2:ghost-steer" joint="robot2:ghost-steer-hinge" ctrllimited="true" ctrlrange="-.9 .9"
       gear="4.0" />
-    <adhesion name="robot2:adhere_winch" body="robot2:vacuum_sphere" ctrlrange="0 1" gain="4"/>
+    <adhesion name="robot2:adhere_winch" body="robot2:vacuum_sphere" ctrlrange="0 1" gain="5"/>
     <position class="Robot2:Joint1" name="robot2:Joint1" joint="robot2:Joint1" gear="0.2"/>
     <position class="Robot2:Joint2" name="robot2:Joint2" joint="robot2:Joint2" gear="0.2"/>
     <position class="Robot2:Joint3" name="robot2:Joint3" joint="robot2:Joint3" gear="0.2"/>
@@ -269,6 +269,77 @@
     <joint name="robot2:f-r-steer-hinge" joint1="robot2:f-r-steer-hinge" joint2="robot2:ghost-steer-hinge"
       polycoef="-0.00017013070152971507 2.0039379507086514 -1.4684576386267671 -1.0901354124362155 3.1974185558159771"
       class="acker_solver_param" />
+    
+    <connect name="vacuum_attachment_object0" 
+      body1="robot2:vacuum_sphere" 
+      body2="object0"  
+      anchor="0 0 0"
+      active="false"
+      solimp="0.8 0.9 0.001"
+      solref="0.05 1"/>
+    <connect name="vacuum_attachment_object1" 
+      body1="robot2:vacuum_sphere" 
+      body2="object1"  
+      anchor="0 0 0"
+      active="false"
+      solimp="0.8 0.9 0.001"
+      solref="0.05 1"/>
+    <connect name="vacuum_attachment_object2" 
+      body1="robot2:vacuum_sphere" 
+      body2="object2"  
+      anchor="0 0 0"
+      active="false"
+      solimp="0.8 0.9 0.001"
+      solref="0.05 1"/>
+    <connect name="vacuum_attachment_object3" 
+      body1="robot2:vacuum_sphere" 
+      body2="object3"  
+      anchor="0 0 0"
+      active="false"
+      solimp="0.8 0.9 0.001"
+      solref="0.05 1"/>
+    <connect name="vacuum_attachment_object4" 
+      body1="robot2:vacuum_sphere" 
+      body2="object4"  
+      anchor="0 0 0"
+      active="false"
+      solimp="0.8 0.9 0.001"
+      solref="0.05 1"/>
+    <connect name="vacuum_attachment_object5" 
+      body1="robot2:vacuum_sphere" 
+      body2="object5"  
+      anchor="0 0 0"
+      active="false"
+      solimp="0.8 0.9 0.001"
+      solref="0.05 1"/>
+    <connect name="vacuum_attachment_object6" 
+      body1="robot2:vacuum_sphere" 
+      body2="object6"  
+      anchor="0 0 0"
+      active="false"
+      solimp="0.8 0.9 0.001"
+      solref="0.05 1"/>
+    <connect name="vacuum_attachment_object7" 
+      body1="robot2:vacuum_sphere" 
+      body2="object7"  
+      anchor="0 0 0"
+      active="false"
+      solimp="0.8 0.9 0.001"
+      solref="0.05 1"/>
+    <connect name="vacuum_attachment_object8" 
+      body1="robot2:vacuum_sphere" 
+      body2="object8"  
+      anchor="0 0 0"
+      active="false"
+      solimp="0.8 0.9 0.001"
+      solref="0.05 1"/>
+    <connect name="vacuum_attachment_object9" 
+      body1="robot2:vacuum_sphere" 
+      body2="object9"  
+      anchor="0 0 0"
+      active="false"
+      solimp="0.8 0.9 0.001"
+      solref="0.05 1"/>
   </equality>
 
   <sensor>

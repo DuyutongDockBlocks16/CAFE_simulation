@@ -121,7 +121,6 @@ class HybridController:
         self.max_speed = 2.0        
         self.max_distance = 8.0
         
-        
         self.sec_robot_navigation_forward_model = PPO.load(sec_robot_forward_model_path)
         self.sec_robot_navigation_backward_model = PPO.load(sec_robot_backward_model_path)
         self.pick_models = []
@@ -169,6 +168,10 @@ class HybridController:
         self.current_action_repeat_count = 0
         self.cached_picking_action = None
         
+        self.vacuum_constraint_id = None
+        self.attached_object_id = None
+        self.is_object_attached = False
+        
     def _get_data_and_model(self):
         model = mujoco.MjModel.from_xml_path("xml/scene_mirobot.xml")
         data = mujoco.MjData(model)
@@ -210,7 +213,9 @@ class HybridController:
             FiniteState.WAITING_JOINT1_TURNING,
             FiniteState.LIFTING_JOINT3,
             FiniteState.WAITING_LIFTING_JOINT3,
-            FiniteState.PLACING_POSITION_TO_ORIGIN_POSITION
+            # FiniteState.PLACING_POSITION_TO_PRE_ORIGIN_POSITION,
+            FiniteState.PLACING_POSITION_TO_ORIGIN_POSITION,
+            FiniteState.RESETTING_ALL_JOINTS
         ]: 
             self.first_robot_is_carrying = True
             
@@ -224,6 +229,7 @@ class HybridController:
             self.second_robot_is_picking = False
 
         if self.first_robot_is_carrying or self.second_robot_is_picking:
+        # if self.first_robot_is_carrying:
             if self.second_robot_status == RLRobotFiniteState.IDLE:
                 
                 left_joint_id, _, right_joint_id, _ = self._get_placed_object_info()
@@ -279,7 +285,7 @@ class HybridController:
                             # self.stop_wait_steps = 0  
                             # print("✅ Robot2已停稳，切换到PICKING_OBJECT状态")
                     else:
-                        # 🔥 速度还太快，重置计数器
+                        # 速度还太快，重置计数器
                         self.stop_wait_steps = 0
                         # print(f"🔄 速度过快，重置停稳计数 (速度: {speed:.4f})")
                     
@@ -312,19 +318,19 @@ class HybridController:
                     self.side = "right"
 
                 if self.current_action_repeat_count == 0:
-                    # 🔥 计数器为0，需要获取新的action
+                    # 计数器为0，需要获取新的action
                     picking_obs = self._get_picking_obs()
                     action, _ = self.pick_models[self.picking_model_index].predict(picking_obs, deterministic=True)
-                    self.cached_picking_action = action  # 🔥 缓存这个action
+                    self.cached_picking_action = action  # 缓存这个action
                     # print(f"🎯 获取新的picking action: {action}")
                 else:
-                    # 🔥 使用缓存的action
+                    # 使用缓存的action
                     action = self.cached_picking_action
                     # print(f"🔄 使用缓存的action (第{self.current_action_repeat_count + 1}次): {action}")
                 
                 self.current_action_repeat_count += 1
                 if self.current_action_repeat_count >= self.action_repeat:
-                    self.current_action_repeat_count = 0  # 🔥 重置计数器
+                    self.current_action_repeat_count = 0  # 重置计数器
                 
                 picked = False
 
@@ -341,18 +347,39 @@ class HybridController:
                 if adhere_control == 1.0:
                     suction_activated = True
 
+                # suction_activated = True
+                
                 picked = touched and suction_activated
                 if picked:
                     print("Object picked successfully, suction activated.")
                     self.picking_stable_steps += 1
-
-                if self.picking_stable_steps == 25:
+                # if picked and not self.is_object_attached:
+                #     if self.active_joint_id is not None:
+                #         print(self.active_joint_id, "is the active joint id")
+                #         target_body_id = self.model.jnt_bodyid[self.active_joint_id]
+                #         self._activate_vacuum_constraint(target_body_id)
+                #     print("Object picked successfully, suction activated.")
+                #     self.picking_stable_steps += 1
+                # elif picked and self.is_object_attached:
+                #     # 物体已固定，继续计数
+                #     self.picking_stable_steps += 1
+                # else:
+                #     # 失去接触，但如果有约束就不重置
+                #     if not self.is_object_attached:
+                #         self.picking_stable_steps = 0
+                    
+                if self.picking_stable_steps >= 25:
                     print(self.picking_stable_steps, "steps of stable picking detected.")
+                    # target_body_id = self.model.jnt_bodyid[self.active_joint_id]
+                    # self._activate_vacuum_constraint(target_body_id)
                     self.picking_stable_steps = 0
                     self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION
-                    # action = [1.0, 0.0, 0.0, 0.05, 0.0, 0.0]  # 停止导航
+                    action = [1.0, 0.0, 0.0, 0.05, 0.0, 0.0]  # 停止导航
                     print("Object picked successfully, moving to placing position.")
                     print(f"Switched to picking model index: {self.picking_model_index}")
+                    
+                # set action[0] to 0
+                # action[0] = 0.0
 
                 self._apply_picking_action(action)
 
@@ -384,6 +411,8 @@ class HybridController:
                 adhere_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:adhere_winch")
                 self.data.ctrl[adhere_actuator_id] = 0.0  # 停止吸附
                 
+                self._deactivate_vacuum_constraint()
+                
                 self._apply_zero_action()
                 
                 # reset all robot2 joints to zero
@@ -393,6 +422,8 @@ class HybridController:
 
                 self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION
                 # break_flag = True
+        else:
+            self._brake_robot2()
 
         return break_flag
 
@@ -400,7 +431,7 @@ class HybridController:
         with mujoco.viewer.launch_passive(self.model, self.data) as viewer:
             step = 0
             while True:
-                # sleep(0.1)
+                # sleep(0.01)
                 break_flag = self.step()
                 # print position of rover
                 # if break_flag:
@@ -855,7 +886,7 @@ class HybridController:
     # def _apply_picking_action_with_repeat(self, action):
     #     """应用带重复的picking动作"""
         
-    #     # 🔥 重复执行action_repeat次
+    #     # 重复执行action_repeat次
     #     for _ in range(self.action_repeat):
     #         self._apply_picking_action(action)
 
@@ -880,6 +911,12 @@ class HybridController:
             FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH:
             FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH +SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH
         ] = np.zeros(SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH, dtype=np.float32)
+        
+    def _brake_robot2(self):
+        self.data.ctrl[
+            FIRST_ROBOT_ACTION_SPACE_LENGTH :
+            FIRST_ROBOT_ACTION_SPACE_LENGTH + 1
+        ] = [0]
         
     def _start_object_remover_threads(self, model, data, object_joint_ids):
         # lower plane parameters
@@ -933,6 +970,55 @@ class HybridController:
                 return True
         
         return False
+    
+    def _activate_vacuum_constraint(self, object_body_id):
+        """激活真空约束"""
+        try:
+            # extract the number of object_body_id to matach vacuum_attachment id
+            # str: object8 -> int: 8
+            body_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, object_body_id)
+            if body_name and body_name.startswith("object"):
+                # 提取数字: "object8" -> 8
+                object_number = int(body_name.replace("object", ""))
+                print(f"🔍 提取到物体编号: {object_number}")
+            else:
+                print(f"❌ 无效的body name: {body_name}")
+                return
+
+            # 查找约束ID (可能需要匹配特定的约束名称)
+            constraint_name = f"vacuum_attachment_object{object_number}"  # 如果约束名称包含编号
+            
+            print(f"🔍 查找约束名称: {constraint_name}")
+            
+            if self.vacuum_constraint_id is None:
+                self.vacuum_constraint_id = mujoco.mj_name2id(
+                    self.model, mujoco.mjtObj.mjOBJ_EQUALITY, constraint_name
+                )
+            
+            # 设置约束的第二个body为目标物体
+            self.model.eq_obj2id[self.vacuum_constraint_id] = object_body_id
+            
+            # 激活约束
+            self.data.eq_active[self.vacuum_constraint_id] = 1
+            
+            self.attached_object_id = object_body_id
+            self.is_object_attached = True
+            
+            print(f"✅ 激活真空约束，物体 {object_body_id} 已固定")
+            
+        except Exception as e:
+            print(f"❌ 激活约束失败: {e}")
+
+    def _deactivate_vacuum_constraint(self):
+        """停用真空约束"""
+        try:
+            if self.vacuum_constraint_id is not None:
+                self.data.eq_active[self.vacuum_constraint_id] = 0
+                self.attached_object_id = None
+                self.is_object_attached = False
+                print("🔓 停用真空约束，物体已释放")
+        except Exception as e:
+            print(f"❌ 停用约束失败: {e}")
 
 if __name__ == "__main__":
     hybrid_controller = HybridController(
