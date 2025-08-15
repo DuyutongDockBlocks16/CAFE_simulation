@@ -40,7 +40,9 @@ def remove_object_on_plane_with_step_counter(model, data, plane_positions, plane
                 qpos_adr = removal_info['qpos_adr']
                 joint_name = removal_info['joint_name']
                 
-                data.qpos[qpos_adr+2] = -100
+                data.qpos[qpos_adr] = 5
+                data.qpos[qpos_adr+1] = 0
+                data.qpos[qpos_adr+2] = 1.1
                 data.qpos[qpos_adr+3:qpos_adr+7] = [1, 0, 0, 0]
                 
                 print(f"{joint_name} removed at step {step_counter}")

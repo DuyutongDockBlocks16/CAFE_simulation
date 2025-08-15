@@ -2,22 +2,55 @@ import gymnasium as gym
 from simplized_hybrid_controller import SimpleHybridController
 import numpy as np
 import mujoco
+from mirobot_controller import MirobotController
+from config.env_config import Direction, Layer, FiniteState, RLRobotFiniteState
+import concurrent.futures
+from util_threads.object_placer import place_object_on_table
+from util_threads.object_remover_step_counter import remove_object_on_plane_with_step_counter
+import threading
+from stable_baselines3 import PPO
 
-class HybridMuJoCoEnv(gym.Env):
+
+
+FIRST_ROBOT_ACTION_SPACE_LENGTH = 8
+SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH = 2
+SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH = 6
+
+class FsmHybridMuJoCoEnv(gym.Env):
+    
+    def _get_data_and_model(self):
+        model = mujoco.MjModel.from_xml_path("xml/scene_mirobot.xml")
+        data = mujoco.MjData(model)
+        time_step = 0.005
+        model.opt.timestep = time_step  
+        return model, data
+    
     def __init__(self, action_repeat=40):
         super().__init__()
         self.action_repeat = action_repeat
         
-        self.simple_hybrid_controller = SimpleHybridController(
-            sec_robot_forward_model_path="models/final_model_continued_21600K_20250707_165449.zip.bak",
-            sec_robot_backward_model_path="models/final_model_continued_56000K_20250724_140118.zip.bak",
-            sec_robot_placing_model_path=None
-        )
+        sec_robot_forward_model_path = "models/final_model_continued_21600K_20250707_165449.zip.bak"
+        sec_robot_backward_model_path="models/final_model_continued_56000K_20250724_140118.zip.bak"
+
+        self.sec_robot_navigation_forward_model = PPO.load(sec_robot_forward_model_path)
+        self.sec_robot_navigation_backward_model = PPO.load(sec_robot_backward_model_path)
         
-        self.model, self.data = self.simple_hybrid_controller.get_model_and_data()
+        self.model, self.data = self._get_data_and_model()
         
-        self.robot_1_rover_id = self.simple_hybrid_controller.robot_1_rover_id
-        self.robot_2_rover_id = self.simple_hybrid_controller.robot_2_rover_id
+        self.initial_qpos = np.copy(self.data.qpos)
+        self.initial_qvel = np.copy(self.data.qvel)
+        self.initial_ctrl = np.copy(self.data.ctrl)
+
+        mujoco.mj_step(self.model, self.data)
+        
+        self.left_object_position = [1, -2.5, 0.28]
+        self.right_object_position = [-1, -2.5, 0.28]
+        
+        self.first_robot_controller = MirobotController(self.model, self.data, self.left_object_position, self.right_object_position)
+        
+        # Robot 1 setup
+        
+        self.robot_1_rover_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot1:rover")
         
         self.robot1_bodies = [
             "robot1:rover",         # chassis
@@ -38,6 +71,24 @@ class HybridMuJoCoEnv(gym.Env):
             "robot1:vacuum_sphere"  # vacuum gripper
         ]
 
+        self.robot1_body_ids = []
+        for body_name in self.robot1_bodies:
+            try:
+                body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+                self.robot1_body_ids.append(body_id)
+            except:
+                continue
+            
+        self.robot1_recent_positions = []
+        
+        self.first_robot_status = None
+        
+        # Robot 1 setup end
+        
+        # Robot 2 setup
+        
+        self.robot_2_rover_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
+
         self.robot2_bodies = [
             "robot2:rover",         # chassis
             "robot2:r-l-wheel",     # rear left wheel
@@ -56,14 +107,6 @@ class HybridMuJoCoEnv(gym.Env):
             "robot2:link6",          # arm end effector
             "robot2:vacuum_sphere"
         ]
-        
-        self.robot1_body_ids = []
-        for body_name in self.robot1_bodies:
-            try:
-                body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
-                self.robot1_body_ids.append(body_id)
-            except:
-                continue
 
         self.robot2_body_ids = []
         for body_name in self.robot2_bodies:
@@ -72,24 +115,51 @@ class HybridMuJoCoEnv(gym.Env):
                 self.robot2_body_ids.append(body_id)
             except:
                 continue
-            
+        
+        self.robot2_recent_positions = []
+        
+        self.second_robot_status = RLRobotFiniteState.IDLE
+
+        self.robot_2_target_position_x_y = None
+
+        # Robot2 setup end
+        
+        # General setup for RL robots
+        self.prediction_steps = 5
+        self.required_stop_steps = 50
+        
         self.forbidden_geoms = [
             "wall_front", "wall_back", "wall_left", "wall_right",
         ]
-            
-        self.robot1_recent_positions = []
-        self.robot2_recent_positions = []
-        self.prediction_steps = 5
         
-        obs = self._get_obs()
+        self.max_position = 3.0     
+        self.max_speed = 2.0        
+        self.max_distance = 8.0
+        self.active_joint_id = None
+        # General setup end
         
-        self.observation_space = gym.spaces.Box(
-            low=-np.inf, high=np.inf, shape=obs.shape, dtype=np.float32
-        )
+        # RL FSM:
+        # IDLE = 0
+        # NAVIGATE_TO_PICKING_POSITION = 1
+        # PICKING_OBJECT = 2
+        # NAVIGATE_TO_PLACING_POSITION = 3
+        # PLACING_OBJECT = 4
+        # MOVING_TO_ORIGIN_POSITION = 5
+        # WAIT_FOR_FINISH = 6
         
-        # 0 for no action, 1 for brake
-        self.action_space = gym.spaces.Discrete(2)
-        
+        # action space:
+        # 0-8 for Robot 2 actions
+        # 0 Brake and wait
+        # 1 Keep moving
+        # 2 Move to pickingplace:table0
+        # 3 Move to pickingplace:table1
+        # 4 Pick
+        # 5 Move to placingplace:table0
+        # 6 Move to placingplace:table1
+        # 7 Place Upper
+        # 8 Place Lower
+        self.action_space = gym.spaces.Discrete(9)
+
         self.current_step = 0
         self.max_steps = 500000
         
@@ -110,7 +180,18 @@ class HybridMuJoCoEnv(gym.Env):
                 self.object_body_ids.append(body_id)
             except:
                 continue
-        # print(f"Object body IDs: {self.object_body_ids}")
+        
+        self.object_joints = []
+        for i in range(self.model.njnt):
+            joint_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_JOINT, i)
+            if joint_name and joint_name.startswith("object") and joint_name.endswith(":joint"):
+                try:
+                    object_id = int(joint_name.split("object")[1].split(":")[0])
+                    self.object_joints.append((object_id, i, joint_name))
+                except (ValueError, IndexError):
+                    continue
+
+        self.object_joints.sort(key=lambda x: x[0])
         
         self.floor_body_name = ["floor"]   
         self.floor_body_ids = []
@@ -120,7 +201,31 @@ class HybridMuJoCoEnv(gym.Env):
                 self.floor_body_ids.append(body_id)
             except:
                 continue 
-        # print(f"Floor body IDs: {self.floor_body_ids}")
+            
+        object_ids = self._get_object_ids(self.model)
+        
+        self.object_joint_ids = []
+        
+        for i in object_ids:
+            joint_name = f"object{i}:joint"
+            joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+            self.object_joint_ids.append((i, joint_id))
+            
+        self.shared_state = {"current_object_index": 0, "current_object_position": None, "stop": False, "stopped": True}
+            
+        self.start_object_placer_thread(self.model, self.data, self.object_joint_ids, self.left_object_position, self.right_object_position, self.shared_state)
+        
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+        self.remover_futures = []
+        self._start_object_remover_threads(self.model, self.data, self.object_joint_ids)
+        
+            
+        obs = self._get_obs()
+        
+        self.observation_space = gym.spaces.Box(
+            low=-np.inf, high=np.inf, shape=obs.shape, dtype=np.float32
+        )
+        
         
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -497,3 +602,59 @@ class HybridMuJoCoEnv(gym.Env):
         ])
         
         return features
+    
+    def _get_object_ids(self, model):
+        object_ids = []
+        for i in range(model.njnt):
+            name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
+            if name and name.startswith("object") and name.endswith(":joint"):
+                # extract the N from the name
+                try:
+                    num = int(name.split(":")[0][6:])  # "objectN:joint" -> N
+                    object_ids.append(num)
+                except Exception:
+                    continue
+        return sorted(object_ids)
+    
+    def start_object_placer_thread(self, model, data, object_joint_ids, left_object_position, right_object_position, shared_state):
+        threading.Thread(
+            target=place_object_on_table,
+            args=(model, data, left_object_position, right_object_position, object_joint_ids),
+            kwargs={"shared_state": shared_state},
+            daemon=True
+        ).start()
+
+    def _start_object_remover_threads(self, model, data, object_joint_ids):
+        
+        self._cancel_remover_tasks()
+    
+        if hasattr(self, 'executor'):
+            try:
+                self.executor.shutdown(wait=False) 
+            except:
+                pass
+    
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+        self.remover_futures = []
+        
+        # lower plane parameters
+        lower_plane_positions = [[2.8, 1.0],[2.8, -1.0]]
+        lower_plane_radius = 0.23
+        lower_plane_z = 0.23
+
+        future1 = self.executor.submit(
+            remove_object_on_plane_with_step_counter,
+            model, data, lower_plane_positions, lower_plane_radius, lower_plane_z, object_joint_ids
+        )
+        self.remover_futures.append(future1)
+
+        # upper plane parameters
+        upper_plane_positions = [[2.8, 1.0],[2.8, -1.0]]
+        upper_plane_radius = 0.15
+        upper_plane_z = 0.43
+
+        future2 = self.executor.submit(
+            remove_object_on_plane_with_step_counter,
+            model, data, upper_plane_positions, upper_plane_radius, upper_plane_z, object_joint_ids
+        )
+        self.remover_futures.append(future2)

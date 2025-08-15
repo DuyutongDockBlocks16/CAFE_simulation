@@ -53,7 +53,7 @@ class SimpleHybridController:
             joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
             self.object_joint_ids.append((i, joint_id))
         
-        self.shared_state = {"current_object_index": None, "current_object_position": None, "stop": False, "stopped": True}
+        self.shared_state = {"current_object_index": 0, "current_object_position": None, "stop": False, "stopped": True}
 
         self.robot_1_rover_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot1:rover")
         self.robot_2_rover_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
@@ -140,11 +140,11 @@ class SimpleHybridController:
         # self.sec_robot_picking_model_0 = PPO.load(sec_robot_picking_model_paths[0])
         # self.sec_robot_picking_model_1 = PPO.load(sec_robot_picking_model_paths[1])
         self.picking_model_index = 0
-        self._start_object_placer_thread(self.model, self.data, self.object_joint_ids, self.left_object_position, self.right_object_position, self.shared_state)
+        # self.start_object_placer_thread(self.model, self.data, self.object_joint_ids, self.left_object_position, self.right_object_position, self.shared_state)
         
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
         self.remover_futures = []
-        self._start_object_remover_threads(self.model, self.data, self.object_joint_ids)
+        # self._start_object_remover_threads(self.model, self.data, self.object_joint_ids)
 
         self.first_robot_status = None
         self.second_robot_status = RLRobotFiniteState.IDLE
@@ -214,8 +214,9 @@ class SimpleHybridController:
                     continue
         return sorted(object_ids)
     
-    def step(self):
+    def step(self, brake_flag):
         break_flag = False
+        action_switch = False
         
         self.first_robot_status = self.first_robot_controller.get_status()
         if self.shared_state["current_object_index"] >= len(self.object_joint_ids) and self.first_robot_status == FiniteState.IDLE:
@@ -268,6 +269,7 @@ class SimpleHybridController:
                 reached = (dist_to_target < 0.15)
                 if reached:
                     self.second_robot_status = RLRobotFiniteState.PICKING_OBJECT
+                    action_switch = True
                     action = np.zeros(SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH, dtype=np.float32)
                     self.break_count += 1
                     
@@ -301,6 +303,7 @@ class SimpleHybridController:
                         
                         if self.stop_wait_steps >= self.required_stop_steps:
                             self.second_robot_status = RLRobotFiniteState.PICKING_OBJECT
+                            action_switch = True
                             self.break_count += 1
                     else:
                         # 速度还太快，重置计数器
@@ -329,9 +332,11 @@ class SimpleHybridController:
                 
                 if self.robot_2_random_picking_count >= self.robot_2_random_picking_steps: 
                     target_position = self.data.xpos[self.robot_2_rover_id].copy()
+                    # target_position[1] += 1
                     target_position[2] += 0.05
                     self._move_object_to_position(self.active_joint_id, target_position)
                     self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION
+                    action_switch = True
                     self.robot_2_random_picking_steps = None
                     self.robot_2_random_picking_count = 0
 
@@ -351,6 +356,7 @@ class SimpleHybridController:
                 if reached:
                     print("Reached placing position, preparing to place object.")
                     self.second_robot_status = RLRobotFiniteState.PLACING_OBJECT
+                    action_switch = True
                     # self.picking_model_index = (self.picking_model_index + 1) % len(self.pick_models)
                     action = np.zeros(SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH, dtype=np.float32)
 
@@ -381,26 +387,61 @@ class SimpleHybridController:
                     target_position[2] += 0.02
                     self._move_object_to_position(self.active_joint_id, target_position)
                     self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION
+                    action_switch = True
                     self.robot_2_random_placing_steps = None
                     self.robot_2_random_placing_count = 0
 
                 # break_flag = True
+            elif self.second_robot_status == RLRobotFiniteState.WAIT_FOR_FINISH:
+                self.brake_robot2()
+                
         else:
             self.brake_robot2()
+            
+        if brake_flag:
+            self.brake_robot2()
+            
+        if self.shared_state["current_object_index"] >= len(self.object_joint_ids) and self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:
+            self.target_position_x_y = [-2, 1]
+            navigation_obs = self._get_navigation_obs()
+            action, _ = self.sec_robot_navigation_backward_model.predict(navigation_obs, deterministic=True)
+            # print("moving to 'origin position'")
 
-        return break_flag
+            robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]
+            dist_to_target = np.linalg.norm(robot_2_rover_pos - self.target_position_x_y)
+            reached = (dist_to_target < 0.20)
+            if reached:
+                action = np.zeros(SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH, dtype=np.float32)
+                
+                rover_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot2:centroid")
+                rover_qvel_start = self.model.jnt_dofadr[rover_joint_id]
+                linear_vel = self.data.qvel[rover_qvel_start:rover_qvel_start+3]
+                speed = np.linalg.norm(linear_vel)
+
+                if speed < 0.0001: 
+                    self.stop_wait_steps += 1
+                    
+                    if self.stop_wait_steps >= self.required_stop_steps:
+                        self.second_robot_status = RLRobotFiniteState.WAIT_FOR_FINISH
+                        self.break_count += 1
+                else:
+                    self.stop_wait_steps = 0
+
+            self._apply_navigation_action(action)
+
+        return break_flag, action_switch
     
-    def step_for_training(self):
-        break_flag = self.step()
+    def step_for_training(self, brake_flag=False):
+        break_flag, action_switch = self.step(brake_flag=brake_flag)
         mujoco.mj_step(self.model, self.data)
-        return break_flag
+        return break_flag, action_switch
 
     def run_simulation(self):
         with mujoco.viewer.launch_passive(self.model, self.data) as viewer:
             # step = 0
             while True:
                 # sleep(0.01)
-                break_flag = self.step()
+                break_flag, _ = self.step()
                 # print position of rover
                 # if break_flag:
                 #     rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
@@ -414,9 +455,9 @@ class SimpleHybridController:
                 mujoco.mj_step(self.model, self.data)
                 self.simulation_step += 1
                 
-                if self.simulation_step == 40000:
-                    self.reset()
-                    self.simulation_step = 0
+                # if self.simulation_step == 40000:
+                #     self.reset()
+                #     self.simulation_step = 0
 
                 # rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
                 # print(f"out Rover position: {self.data.xpos[rover_body_id]}")
@@ -742,7 +783,7 @@ class SimpleHybridController:
             except Exception as e:
                 print(f"   任务 {i}: 取消异常 {e}")
 
-    def _start_object_placer_thread(self, model, data, object_joint_ids, left_object_position, right_object_position, shared_state):
+    def start_object_placer_thread(self, model, data, object_joint_ids, left_object_position, right_object_position, shared_state):
         threading.Thread(
             target=place_object_on_table,
             args=(model, data, left_object_position, right_object_position, object_joint_ids),
@@ -767,7 +808,7 @@ class SimpleHybridController:
         return self.model, self.data
     
     def reset(self):
-        self._cancel_remover_tasks()
+        # self._cancel_remover_tasks()
         
         self.data.qpos[:] = self.initial_qpos
         self.data.qvel[:] = self.initial_qvel
@@ -775,17 +816,21 @@ class SimpleHybridController:
         
         if self.shared_state["stop"] is False:
             self.shared_state["stop"] = True
-            self.shared_state = {"current_object_index": 0, "current_object_position": None, "stop": False, "stopped": False}
+            self.shared_state = {"current_object_index": None, "current_object_position": None, "stop": False, "stopped": False}
+        # self.shared_state = {"current_object_index": 0, "current_object_position": None, "stop": False, "stopped": False}
+        # self.shared_state["current_object_index"] = 0
 
-        self._start_object_placer_thread(self.model, self.data, self.object_joint_ids, self.left_object_position, self.right_object_position, self.shared_state)
+        self.start_object_placer_thread(self.model, self.data, self.object_joint_ids, self.left_object_position, self.right_object_position, self.shared_state)
         self._start_object_remover_threads(self.model, self.data, self.object_joint_ids)
         
-        while self.shared_state["current_object_position"] is None:
-            print(self.shared_state["current_object_position"])
-            sleep(0.01)   
+        # while self.shared_state["current_object_position"] is None:
+        #     print(self.shared_state["current_object_position"])
+        #     sleep(0.01)   
         
         self.first_robot_status = None
+        self.first_robot_controller.reset_all_joints()
         self.first_robot_controller.set_state(FiniteState.IDLE)
+        
         self.second_robot_status = RLRobotFiniteState.IDLE
         
         mujoco.mj_forward(self.model, self.data)
