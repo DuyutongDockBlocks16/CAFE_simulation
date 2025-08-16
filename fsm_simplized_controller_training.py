@@ -1,3 +1,13 @@
+import os
+import torch
+
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
+torch.set_default_device('cpu')
+
+print("🖥️ 强制使用 CPU 进行训练")
+print(f"PyTorch device: {torch.device('cpu')}")
+print(f"CUDA available: {torch.cuda.is_available()}")
+
 import gymnasium as gym
 import sec_robot_env 
 from stable_baselines3 import PPO
@@ -218,9 +228,9 @@ def driver_model_training_parallel(load_model_path=None, num_envs=8):
                     tensorboard_log="./ppo_logs/")
         loaded_steps = 0
 
-    total_additional_steps = 160_000_000
+    # total_additional_steps = 160_000_000
     # total_additional_steps = 500_000
-    # total_additional_steps = 5_000_000
+    total_additional_steps = 1_500_000
 
     ent_scheduler = EntCoefficientScheduler(
         initial_ent_coef=0.02,  
