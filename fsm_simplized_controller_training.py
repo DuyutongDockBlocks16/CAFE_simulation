@@ -180,7 +180,7 @@ def driver_model_training_parallel(load_model_path=None, num_envs=8):
         os.system(f"cp {load_model_path} {backup_name}")
         print(f"📁 Created backup: {backup_name}")
 
-        model = MaskablePPO.load(load_model_path, env=env)
+        model = MaskablePPO.load(load_model_path, env=env, device='cpu',)
 
         model.ent_coef = 0.1
         model.learning_rate = 1e-4
@@ -205,6 +205,7 @@ def driver_model_training_parallel(load_model_path=None, num_envs=8):
         model = MaskablePPO(
             MaskableActorCriticPolicy, 
             env, verbose=1, 
+            device='cpu',
                     learning_rate=1e-4,     
                     n_steps=2048,           # 调整为并行环境合适的值
                     batch_size=256,          
