@@ -779,7 +779,7 @@ class SimpleHybridController:
         for i, future in enumerate(self.remover_futures):
             try:
                 cancelled = future.cancel()
-                # print(f"   任务 {i}: 取消{'成功' if cancelled else '失败'} (状态: {future.done()})")
+                print(f"   任务 {i}: 取消{'成功' if cancelled else '失败'} (状态: {future.done()})")
             except Exception as e:
                 print(f"   任务 {i}: 取消异常 {e}")
 
