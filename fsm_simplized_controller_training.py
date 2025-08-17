@@ -317,5 +317,5 @@ def driver_model_training_parallel(load_model_path=None, num_envs=8):
     
 if __name__ == "__main__":
     driver_env = gym.make("FsmHybridMuJoCoEnv-v0")
-    # driver_model_training(driver_env)
-    driver_model_training_parallel(load_model_path=None, num_envs=8)
+    driver_model_training(driver_env)
+    # driver_model_training_parallel(load_model_path=None, num_envs=8)

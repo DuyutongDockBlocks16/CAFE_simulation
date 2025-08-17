@@ -88,6 +88,8 @@ class FsmHybridMuJoCoEnv(gym.Env):
         
         self.first_robot_status = FiniteState.IDLE
         
+        self.first_robot_is_carrying = False
+        
         # Robot 1 setup end
         
         # Robot 2 setup
@@ -136,6 +138,8 @@ class FsmHybridMuJoCoEnv(gym.Env):
         self.robot_2_random_placing_count = 0
         
         self.robot_2_target_placing_position = None
+        
+        self.second_robot_is_picking = False
 
         # Robot2 setup end
         
@@ -225,9 +229,15 @@ class FsmHybridMuJoCoEnv(gym.Env):
         
         self.ALLOWED_ACTIONS = {
             RLRobotFiniteState.IDLE:                           [0, 2],
+            # RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:   [0, 2, 10],
             RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:   [0, 2],
             RLRobotFiniteState.PICKING_OBJECT:                 [3],
-            RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION:   [0, 4, 5],
+            RLRobotFiniteState.MAKE_DECISION_ON_PLACING_POSITION: [0, 4, 5],
+            # RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION:   [0, 4, 5],
+            # RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_1:   [0, 4, 9],
+            RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_1:   [0, 4],
+            # RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_2:   [0, 5, 9],
+            RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_2:   [0, 5],
             RLRobotFiniteState.PLACING_OBJECT:                 [0, 6, 7],
             RLRobotFiniteState.PLACING_OBJECT_UPPER:           [6],
             RLRobotFiniteState.PLACING_OBJECT_LOWER:           [7],
@@ -324,6 +334,7 @@ class FsmHybridMuJoCoEnv(gym.Env):
         self.first_robot_status = RLRobotFiniteState.IDLE
         self.first_robot_controller.reset_all_joints()
         self.first_robot_controller.set_state(FiniteState.IDLE)
+        self.first_robot_is_carrying = False
         
         self.second_robot_status = RLRobotFiniteState.IDLE
         
@@ -336,6 +347,8 @@ class FsmHybridMuJoCoEnv(gym.Env):
         self.robot_2_random_placing_count = 0
         
         self.robot_2_target_placing_position = None
+        
+        self.second_robot_is_picking = False
         
         self.data.qpos[:] = self.initial_qpos
         self.data.qvel[:] = self.initial_qvel
@@ -469,7 +482,9 @@ class FsmHybridMuJoCoEnv(gym.Env):
         break_flag = False
         
         self.first_robot_status = self.first_robot_controller.get_status()
-        if self.shared_state["current_object_index"] >= len(self.object_joint_ids) and self.first_robot_status == FiniteState.IDLE:
+        if self.shared_state["current_object_index"] >= len(self.object_joint_ids) \
+            and self.first_robot_status == FiniteState.IDLE\
+            and self.second_robot_status == RLRobotFiniteState.WAIT_FOR_FINISH:
             print("All objects have been placed. Exit")
             break_flag = True
             
@@ -524,111 +539,184 @@ class FsmHybridMuJoCoEnv(gym.Env):
         time_penalty = 0.1
         reward -= time_penalty
         
-        if self.second_robot_status == RLRobotFiniteState.IDLE:
+        self.first_robot_is_carrying = False
+
+        if self.first_robot_status not in [
+            FiniteState.IDLE,
+            FiniteState.ORIGIN_POSITION_TO_PICKING_POSITION,
+            FiniteState.DECREASING_JOINT3_AND_JOINT5,
+            FiniteState.WAITING_DECREASING_JOINT3_AND_JOINT5,
+            FiniteState.JOINT1_TURNING,
+            FiniteState.WAITING_JOINT1_TURNING,
+            FiniteState.LIFTING_JOINT3,
+            FiniteState.WAITING_LIFTING_JOINT3,
+            # FiniteState.PLACING_POSITION_TO_PRE_ORIGIN_POSITION,
+            FiniteState.PLACING_POSITION_TO_ORIGIN_POSITION,
+            FiniteState.RESETTING_ALL_JOINTS
+        ]: 
+            self.first_robot_is_carrying = True
             
-            left_joint_id, _, right_joint_id, _ = self._get_placed_object_info()
-            if left_joint_id is not None:
-                self.robot_2_target_position_x_y = self.picking_positions[0]
-            elif right_joint_id is not None:
-                self.robot_2_target_position_x_y = self.picking_positions[1]
+        if self.second_robot_status in [
+            RLRobotFiniteState.PICKING_OBJECT,
+            RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION,
+            RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_1,
+            RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_2,
+            RLRobotFiniteState.MAKE_DECISION_ON_PLACING_POSITION,
+            RLRobotFiniteState.PLACING_OBJECT_UPPER,
+            RLRobotFiniteState.PLACING_OBJECT_LOWER,
+            RLRobotFiniteState.PLACING_OBJECT
+        ]:
+            self.second_robot_is_picking = True
+        else :
+            self.second_robot_is_picking = False
+            
+        if self.first_robot_is_carrying or self.second_robot_is_picking:
+        
+            if self.second_robot_status == RLRobotFiniteState.IDLE:
                 
-            # print(f"Robot 2 target position: {self.robot_2_target_position_x_y}")
+                left_joint_id, _, right_joint_id, _ = self._get_placed_object_info()
+                if left_joint_id is not None:
+                    self.robot_2_target_position_x_y = self.picking_positions[0]
+                elif right_joint_id is not None:
+                    self.robot_2_target_position_x_y = self.picking_positions[1]
+                    
+                # print(f"Robot 2 target position: {self.robot_2_target_position_x_y}")
+                
+                if action == 0:
+                    self._brake_robot2()
+                elif action == 2:
+                    action_switch = self._predict_navigation_action_robot_2(self.robot_2_target_position_x_y, Direction.FORWARD, 0.2)
+                    if action_switch:
+                        self.second_robot_status = RLRobotFiniteState.PICKING_OBJECT
+                elif action == 9:
+                    self._back_car_robot2()
+                elif action == 10:
+                    self._forward_car_robot2()
             
-            if action == 0:
-                self._brake_robot2()
-            elif action == 2:
-                action_switch = self._predict_navigation_action_robot_2(self.robot_2_target_position_x_y, Direction.FORWARD, 0.2)
-                if action_switch:
-                    self.second_robot_status = RLRobotFiniteState.PICKING_OBJECT
-            elif action == 9:
-                self._back_car_robot2()
-            elif action == 10:
-                self._forward_car_robot2()
-        
-        elif self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION and \
-            self.shared_state["current_object_index"] >= len(self.object_joint_ids):
-            self.second_robot_status = RLRobotFiniteState.MOVING_TO_ORIGIN_POSITION
-        
-        elif self.second_robot_status == RLRobotFiniteState.MOVING_TO_ORIGIN_POSITION:
-            if action == 0:
-                self._brake_robot2()
-            elif action == 8:
-                action_switch = self.robot_2_navigation_to_origin_place()
-                if action_switch:
-                    self.second_robot_status = RLRobotFiniteState.WAIT_FOR_FINISH
-            elif action == 9:
-                self._back_car_robot2()
-            elif action == 10:
-                self._forward_car_robot2()
+            elif self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION and \
+                self.shared_state["current_object_index"] >= len(self.object_joint_ids):
+                self.second_robot_status = RLRobotFiniteState.MOVING_TO_ORIGIN_POSITION
             
-        elif self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:
-            
-            left_joint_id, _, right_joint_id, _ = self._get_placed_object_info()
-            if left_joint_id is not None:
-                self.robot_2_target_position_x_y = self.picking_positions[0]
-            elif right_joint_id is not None:
-                self.robot_2_target_position_x_y = self.picking_positions[1]
-            
-            if action == 0:
-                self._brake_robot2()
-            elif action == 2:
-                action_switch = self._predict_navigation_action_robot_2(self.robot_2_target_position_x_y, Direction.BACKWARD, 0.2)
+            elif self.second_robot_status == RLRobotFiniteState.MOVING_TO_ORIGIN_POSITION:
+                if action == 0:
+                    self._brake_robot2()
+                elif action == 8:
+                    action_switch = self.robot_2_navigation_to_origin_place()
+                    if action_switch:
+                        self.second_robot_status = RLRobotFiniteState.WAIT_FOR_FINISH
+                elif action == 9:
+                    self._back_car_robot2()
+                elif action == 10:
+                    self._forward_car_robot2()
+                
+            elif self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:
+                
+                left_joint_id, _, right_joint_id, _ = self._get_placed_object_info()
+                if left_joint_id is not None:
+                    self.robot_2_target_position_x_y = self.picking_positions[0]
+                elif right_joint_id is not None:
+                    self.robot_2_target_position_x_y = self.picking_positions[1]
+                
+                if action == 0:
+                    self._brake_robot2()
+                elif action == 2:
+                    action_switch = self._predict_navigation_action_robot_2(self.robot_2_target_position_x_y, Direction.BACKWARD, 0.2)
+                    if action_switch:
+                        self.second_robot_status = RLRobotFiniteState.PICKING_OBJECT
+                elif action == 9:
+                    self._back_car_robot2()
+                elif action == 10:
+                    self._forward_car_robot2()
+                
+            elif self.second_robot_status == RLRobotFiniteState.PICKING_OBJECT:
+                if action == 3:
+                    action_switch = self._picking_object()
                 if action_switch:
-                    self.second_robot_status = RLRobotFiniteState.PICKING_OBJECT
-            elif action == 9:
-                self._back_car_robot2()
-            elif action == 10:
-                self._forward_car_robot2()
+                    self.second_robot_status = RLRobotFiniteState.MAKE_DECISION_ON_PLACING_POSITION
             
-        elif self.second_robot_status == RLRobotFiniteState.PICKING_OBJECT:
-            if action == 3:
-               action_switch = self._picking_object()
-               if action_switch:
-                   self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION
-        
-        elif self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION:
+            elif self.second_robot_status == RLRobotFiniteState.MAKE_DECISION_ON_PLACING_POSITION:
+                if action == 0:
+                    self._brake_robot2()
+                elif action == 4:
+                    self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_1
+                elif action == 5:
+                    self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_2
+            elif self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_1:
+                
+                if action == 0:
+                    self._brake_robot2()
+                elif action == 4:
+                    self.robot_2_target_position_x_y = self.placing_positions[0]
+                    action_switch = self._predict_navigation_action_robot_2(self.robot_2_target_position_x_y, Direction.FORWARD, 0.4)
+                    if action_switch:
+                        self.second_robot_status = RLRobotFiniteState.PLACING_OBJECT
+            elif self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_2:
+                if action == 0:
+                    self._brake_robot2()
+                elif action == 5:
+                    self.robot_2_target_position_x_y = self.placing_positions[1]
+                    action_switch = self._predict_navigation_action_robot_2(self.robot_2_target_position_x_y, Direction.FORWARD, 0.4)
+                    if action_switch:
+                        self.second_robot_status = RLRobotFiniteState.PLACING_OBJECT
+                elif action == 9:
+                    self._back_car_robot2()
+                elif action == 10:
+                    self._forward_car_robot2()
             
-            if action == 0:
-                self._brake_robot2()
-            elif action == 4:
-                self.robot_2_target_position_x_y = self.placing_positions[0]
-                action_switch = self._predict_navigation_action_robot_2(self.robot_2_target_position_x_y, Direction.FORWARD, 0.4)
-                if action_switch:
-                    self.second_robot_status = RLRobotFiniteState.PLACING_OBJECT
-            elif action == 5:
-                self.robot_2_target_position_x_y = self.placing_positions[1]
-                action_switch = self._predict_navigation_action_robot_2(self.robot_2_target_position_x_y, Direction.FORWARD, 0.4)
-                if action_switch:
-                    self.second_robot_status = RLRobotFiniteState.PLACING_OBJECT
-            elif action == 9:
-                self._back_car_robot2()
-            elif action == 10:
-                self._forward_car_robot2()
-        
-        elif self.second_robot_status == RLRobotFiniteState.PLACING_OBJECT:
+            elif self.second_robot_status == RLRobotFiniteState.PLACING_OBJECT:
+                
+                if action == 0:
+                    self._brake_robot2()
+                elif action == 6:
+                    self.second_robot_status = RLRobotFiniteState.PLACING_OBJECT_UPPER
+                elif action == 7:
+                    self.second_robot_status = RLRobotFiniteState.PLACING_OBJECT_LOWER
             
-            if action == 0:
-                self._brake_robot2()
-            elif action == 6:
-                self.second_robot_status = RLRobotFiniteState.PLACING_OBJECT_UPPER
-            elif action == 7:
-                self.second_robot_status = RLRobotFiniteState.PLACING_OBJECT_LOWER
-        
-        elif self.second_robot_status == RLRobotFiniteState.PLACING_OBJECT_UPPER:
-            if action == 6:
-                action_switch = self._placing_object(Layer.UPPER)
-                if action_switch:
-                    self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION
-        
-        elif self.second_robot_status == RLRobotFiniteState.PLACING_OBJECT_LOWER:
-            if action == 7:
-                action_switch = self._placing_object(Layer.LOWER)
-                if action_switch:
-                    self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION
-        
-        elif self.second_robot_status == RLRobotFiniteState.WAIT_FOR_FINISH:
-            if action == 0:
-                self._brake_robot2()      
+            elif self.second_robot_status == RLRobotFiniteState.PLACING_OBJECT_UPPER:
+                if action == 6:
+                    action_switch = self._placing_object(Layer.UPPER)
+                    if action_switch:
+                        self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION
+            
+            elif self.second_robot_status == RLRobotFiniteState.PLACING_OBJECT_LOWER:
+                if action == 7:
+                    action_switch = self._placing_object(Layer.LOWER)
+                    if action_switch:
+                        self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION
+            
+            elif self.second_robot_status == RLRobotFiniteState.WAIT_FOR_FINISH:
+                if action == 0:
+                    self._brake_robot2()   
+        else:
+            self._brake_robot2()
+            
+        if self.shared_state["current_object_index"] >= len(self.object_joint_ids) and self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:
+            self.target_position_x_y = [-2, 1]
+            navigation_obs = self._get_navigation_obs()
+            action, _ = self.sec_robot_navigation_backward_model.predict(navigation_obs, deterministic=True)
+            # print("moving to 'origin position'")
+
+            robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]
+            dist_to_target = np.linalg.norm(robot_2_rover_pos - self.target_position_x_y)
+            reached = (dist_to_target < 0.20)
+            if reached:
+                action = np.zeros(SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH, dtype=np.float32)
+                
+                rover_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot2:centroid")
+                rover_qvel_start = self.model.jnt_dofadr[rover_joint_id]
+                linear_vel = self.data.qvel[rover_qvel_start:rover_qvel_start+3]
+                speed = np.linalg.norm(linear_vel)
+
+                if speed < 0.0001: 
+                    self.stop_wait_steps += 1
+                    
+                    if self.stop_wait_steps >= self.required_stop_steps:
+                        self.second_robot_status = RLRobotFiniteState.WAIT_FOR_FINISH
+                        self.break_count += 1
+                else:
+                    self.stop_wait_steps = 0
+
+            self._apply_navigation_action(action)
         
         if action_switch:
            reward += 4000
@@ -766,6 +854,7 @@ class FsmHybridMuJoCoEnv(gym.Env):
             # print(f"Placing object at {target_position}")
             self.robot_2_target_placing_position[2] += 0.02
             self._move_object_to_position(self.active_joint_id, self.robot_2_target_placing_position)
+            self.robot_2_target_placing_position = None
             action_switch = True
             self.robot_2_random_placing_steps = None
             self.robot_2_random_placing_count = 0
