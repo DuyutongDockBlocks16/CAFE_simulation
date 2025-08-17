@@ -357,15 +357,22 @@ class FsmHybridMuJoCoEnv(gym.Env):
         
         mujoco.mj_forward(self.model, self.data)
         
-        # left_joint_id, _, right_joint_id, _ = self._get_placed_object_info()
-        # if left_joint_id is not None:
-        #     self.robot_2_target_position_x_y = self.picking_positions[0]
-        # elif right_joint_id is not None:
-        #     self.robot_2_target_position_x_y = self.picking_positions[1]
-            
+        max_wait_time = 5.0  # 最多等待5秒
+        start_time = time.time()
         
-        # while self.robot_2_target_position_x_y is None:
-        #     self.robot_2_target_position_x_y = self.picking_positions[0]
+        while time.time() - start_time < max_wait_time:
+            
+            left_joint_id, _, right_joint_id, _ = self._get_placed_object_info()
+            if left_joint_id is not None:
+                self.robot_2_target_position_x_y = self.picking_positions[0]
+                break
+            elif right_joint_id is not None:
+                self.robot_2_target_position_x_y = self.picking_positions[1]
+                break
+            else:
+                mujoco.mj_forward(self.model, self.data)
+                print(f"⏳ 等待物体放置... (已等待 {time.time() - start_time:.1f}s)")
+                time.sleep(0.1)
 
         return self._get_obs(), info
 
@@ -490,7 +497,7 @@ class FsmHybridMuJoCoEnv(gym.Env):
             
         if break_flag:
             print("Task completed successfully! Terminating episode.")
-            reward += 5000
+            reward += 6000
             terminated = True
         
         if self.current_step >= self.max_steps:
@@ -624,7 +631,7 @@ class FsmHybridMuJoCoEnv(gym.Env):
                 self._brake_robot2()      
         
         if action_switch:
-           reward += 1000
+           reward += 4000
 
         # if self.second_robot_status != RLRobotFiniteState.WAIT_FOR_FINISH:
         #     if action == 0:
@@ -927,9 +934,10 @@ class FsmHybridMuJoCoEnv(gym.Env):
         
         trajectory_features = self._extract_trajectory_features(robot1_predicted_trajectory, robot2_pos)
 
-        target_pos = np.array(self.robot_2_target_position_x_y) 
-        if target_pos is None:
-            target_pos = robot2_pos
+        if self.robot_2_target_position_x_y is None:
+            target_pos = robot2_pos.copy()  
+        else:
+            target_pos = np.array(self.robot_2_target_position_x_y)
         target_rel = target_pos - robot2_pos  
         target_distance = np.linalg.norm(target_rel) 
         target_angle = np.arctan2(target_rel[1], target_rel[0])  
