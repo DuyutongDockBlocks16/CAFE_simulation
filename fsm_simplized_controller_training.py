@@ -193,7 +193,7 @@ def driver_model_training_parallel(load_model_path=None, num_envs=8):
         model = MaskablePPO.load(load_model_path, env=env, device='cpu',)
 
         model.ent_coef = 0.1
-        model.learning_rate = 1e-4
+        model.learning_rate = 3e-4
 
         print(f"✅ Successfully loaded model from: {load_model_path}")
         print(f"🔄 Using {num_envs} parallel environments")
@@ -216,7 +216,7 @@ def driver_model_training_parallel(load_model_path=None, num_envs=8):
             MaskableActorCriticPolicy, 
             env, verbose=1, 
             device='cpu',
-                    learning_rate=1e-4,     
+                    learning_rate=3e-4,     
                     n_steps=2048,           # 调整为并行环境合适的值
                     batch_size=256,          
                     n_epochs=8,            

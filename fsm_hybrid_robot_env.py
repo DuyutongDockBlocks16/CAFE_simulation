@@ -111,8 +111,8 @@ class FsmHybridMuJoCoEnv(gym.Env):
             "robot2:link3",         # arm joint 3
             "robot2:link4",         # arm joint 4
             "robot2:link5",         # arm joint 5
-            "robot2:link6",          # arm end effector
-            "robot2:vacuum_sphere"
+            # "robot2:link6",          # arm end effector
+            # "robot2:vacuum_sphere"
         ]
 
         self.robot2_body_ids = []
@@ -147,13 +147,14 @@ class FsmHybridMuJoCoEnv(gym.Env):
             
         self.prediction_steps = 5
         self.stop_wait_steps = 0
-        self.required_stop_steps = 50
+        self.required_stop_steps = 10
         
         self.forbidden_geoms = [
-            "wall_front", "wall_back", "wall_left", "wall_right",
+            "wall_front", 
+            "wall_back", "wall_left", "wall_right",
             "pickingplace:table0", "pickingplace:table2",
-            "placingplace2:low_plane", "placingplace2:high_plane",
-            "placingplace1:low_plane", "placingplace1:high_plane",  
+            # "placingplace2:low_plane", "placingplace2:high_plane",
+            # "placingplace1:low_plane", "placingplace1:high_plane",  
         ]
         
         self.max_position = 3.0     
@@ -229,15 +230,15 @@ class FsmHybridMuJoCoEnv(gym.Env):
         
         self.ALLOWED_ACTIONS = {
             RLRobotFiniteState.IDLE:                           [0, 2],
-            # RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:   [0, 2, 10],
-            RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:   [0, 2],
+            RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:   [0, 2, 10],
+            # RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:   [0, 2],
             RLRobotFiniteState.PICKING_OBJECT:                 [3],
             RLRobotFiniteState.MAKE_DECISION_ON_PLACING_POSITION: [0, 4, 5],
             # RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION:   [0, 4, 5],
-            # RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_1:   [0, 4, 9],
-            RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_1:   [0, 4],
-            # RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_2:   [0, 5, 9],
-            RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_2:   [0, 5],
+            RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_1:   [0, 4, 9],
+            # RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_1:   [0, 4],
+            RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_2:   [0, 5, 9],
+            # RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_2:   [0, 5],
             RLRobotFiniteState.PLACING_OBJECT:                 [0, 6, 7],
             RLRobotFiniteState.PLACING_OBJECT_UPPER:           [6],
             RLRobotFiniteState.PLACING_OBJECT_LOWER:           [7],
@@ -388,71 +389,6 @@ class FsmHybridMuJoCoEnv(gym.Env):
                 time.sleep(0.1)
 
         return self._get_obs(), info
-
-    def _get_obs(self):  
-        robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]  
-        
-        try:
-            robot2_body_id = self.robot_2_rover_id
-            robot2_vel = self.data.cvel[robot2_body_id][:2]  
-        except:
-            robot2_vel = np.zeros(2)
-        
-        robot2_quat = self.data.xquat[self.robot_2_rover_id]
-        robot2_orientation = self._quaternion_to_yaw(robot2_quat)
-
-        # robot1_predicted_trajectory = self._predict_robot1_trajectory()
-        # collision_risks, min_distances = self._calculate_collision_risk_timeline(robot2_pos, robot1_predicted_trajectory)
-        
-        # trajectory_features = self._extract_trajectory_features(robot1_predicted_trajectory, robot2_pos)
-
-        robot1_pos = self.data.xpos[self.robot_1_rover_id][:2]  
-        robot1_rel = robot1_pos - robot2_pos  
-        robot1_distance = np.linalg.norm(robot1_rel)  
-        robot1_angle = np.arctan2(robot1_rel[1], robot1_rel[0])
-        robot1_relative_angle = robot1_angle - robot2_orientation
-        robot1_relative_angle = np.arctan2(np.sin(robot1_relative_angle), np.cos(robot1_relative_angle))
-        robot1_rel_normalized = robot1_rel / self.max_distance
-
-        placingplace_object_numbers = self._get_object_number_on_each_placing_place()
-        
-        placingplace_object_numbers_for_observation = np.zeros(4, dtype=int)
-        for i, placingplace_object_number in enumerate(placingplace_object_numbers):
-            if placingplace_object_number == 0:
-                placingplace_object_numbers_for_observation[i] = 0
-            elif placingplace_object_number == 1:
-                placingplace_object_numbers_for_observation[i] = 1
-            elif placingplace_object_number >= 1:
-                placingplace_object_numbers_for_observation[i] = -1 # capacity exceeded
-        
-        observation = np.concatenate([
-            # 🎯 机器人自身状态
-            robot2_pos / self.max_position,                    # [2] 绝对位置
-            robot2_vel / self.max_speed,                       # [2] 速度 
-            [robot2_orientation / np.pi],                 # [1] 朝向 
-            
-            # 机器人2状态
-            [self.second_robot_status.value / len(RLRobotFiniteState)],  # [1] 状态（归一化）
-            # 机器人1状态
-            [self.first_robot_status.value / len(FiniteState)],  # [1] 状态（归一化）
-            
-            # 🎯 机器人1相对信息（增强版）
-            robot1_rel_normalized,                        # [2] 机器人1相对位置 
-            [robot1_distance / self.max_distance],             # [1] 机器人1距离
-            [robot1_relative_angle / np.pi],              # [1] 机器人1相对角度 
-
-            # trajectory_features,
-
-            # [np.max(collision_risks),                     # 最大风险
-            #  np.mean(collision_risks),                    # 平均风险
-            #  np.min(min_distances),                       # 最小距离
-            #  np.argmax(collision_risks) / self.prediction_steps],  # 最危险时刻(归一化)
-            
-            placingplace_object_numbers_for_observation,  # [4] 每个放置位置的物体数量（归一化）
-            
-        ], dtype=np.float32)
-
-        return observation
     
     def step(self, action):
         self._update_robot_tracking()
@@ -721,21 +657,29 @@ class FsmHybridMuJoCoEnv(gym.Env):
         if action_switch:
            reward += 4000
 
-        # if self.second_robot_status != RLRobotFiniteState.WAIT_FOR_FINISH:
-        #     if action == 0:
-        #         reward -= -0.1
-        #     if action != 0:
-        #         reward += 0.1
-                
-        robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
-        robot1_pos = self.data.xpos[self.robot_1_rover_id][:2]
+        reward += self._calculate_potential_field_reward() * 0.01
         
-        distance = np.linalg.norm(robot1_pos - robot2_pos)
-        
-        if distance < 0.5:
-            reward -= 0.4
+        placement_penalty = self._check_placement_violations()
+        reward += placement_penalty
 
         return reward, action_switch
+    
+    def _check_placement_violations(self):
+        penalty = 0
+        
+        # 获取每个托盘的物体数量
+        placingplace_object_numbers = self._get_object_number_on_each_placing_place()
+        
+        for i, object_count in enumerate(placingplace_object_numbers):
+            if object_count > 1:
+                # 🔥 渐进惩罚：超载的物体越多，惩罚越重
+                excess_objects = object_count - 1
+                violation_penalty = -1 * excess_objects  # 每多一个物体惩罚1分
+                penalty += violation_penalty
+                
+                print(f"⚠️ 托盘 {i+1} 超载！当前物体数: {object_count}, 惩罚: {violation_penalty}")
+        
+        return penalty
 
     def _brake_robot2(self):
         self.data.ctrl[
@@ -1333,3 +1277,197 @@ class FsmHybridMuJoCoEnv(gym.Env):
                 placingplace2_low_plane_object_number, \
                 placingplace1_high_plane_object_number, \
                 placingplace2_high_plane_object_number]
+
+    def _calculate_potential_field_reward(self):
+        robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
+        attractive_potential = 0
+        if self.robot_2_target_position_x_y is not None:
+            target_pos = np.array(self.robot_2_target_position_x_y)
+            distance_to_target = np.linalg.norm(target_pos - robot2_pos)
+            attractive_potential = 0.5 * distance_to_target**2 
+
+        repulsive_potential = 0
+        robot1_pos = self.data.xpos[self.robot_1_rover_id][:2]
+        distance_to_robot_1 = np.linalg.norm(robot2_pos - robot1_pos)
+
+        influence_distance = 3.0  # 影响范围
+        if distance_to_robot_1 < influence_distance:
+            repulsive_potential = 1.0 * (1/distance_to_robot_1 - 1/influence_distance)**2
+
+        # 🔥 总势能
+        total_potential = attractive_potential + repulsive_potential
+
+        # 🔥 势能差作为奖励（鼓励势能降低）
+        if hasattr(self, 'prev_potential'):
+            potential_reward = self.prev_potential - total_potential
+        else:
+            potential_reward = 0
+
+        self.prev_potential = total_potential
+
+        return potential_reward
+    
+    def _get_obs(self):
+        robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
+        robot2_vel = self.data.cvel[self.robot_2_rover_id][:2]
+        robot2_orientation = self._quaternion_to_yaw(self.data.xquat[self.robot_2_rover_id])
+        
+        placingplace_object_numbers = self._get_object_number_on_each_placing_place()
+        
+        placingplace_object_numbers_for_observation = np.zeros(4, dtype=int)
+        for i, placingplace_object_number in enumerate(placingplace_object_numbers):
+            if placingplace_object_number == 0:
+                placingplace_object_numbers_for_observation[i] = 0
+            elif placingplace_object_number == 1:
+                placingplace_object_numbers_for_observation[i] = 1
+            elif placingplace_object_number >= 1:
+                placingplace_object_numbers_for_observation[i] = -1 # capacity exceeded
+        
+        # 🔥 当前观察（25维）
+        current_obs = np.concatenate([
+            # 自身状态 [5维]
+            robot2_pos / self.max_position,                    # [2] 位置
+            robot2_vel / self.max_speed,                       # [2] 速度 
+            [robot2_orientation / np.pi],                      # [1] 朝向
+            
+            # 目标信息 [4维]
+            self._get_target_relative_info(),                  # [3] 目标相对位置+距离
+            [1.0 if self.robot_2_target_position_x_y is not None else 0.0],  # [1] 是否有目标
+            
+            # robot1信息 [9维]
+            self._get_robot1_relative_info(),                  # [9] robot1相对位置+速度+朝向
+
+            # 任务状态 [3维]
+            [self.second_robot_status.value / len(RLRobotFiniteState)],  # [1] 状态
+            [1.0 if self.second_robot_is_picking else 0.0],   # [1] 是否在拾取
+            [1.0 if self.first_robot_is_carrying else 0.0],   # [1] robot1是否在搬运
+            
+            # 放置位置状态 [4维]
+            placingplace_object_numbers_for_observation,       # [4] 每个放置位置的物体数量
+            
+        ], dtype=np.float32)
+        
+        # 🔥 更新历史位置
+        self._update_position_history()
+        
+        # 🔥 提取增强历史特征 (36维)
+        history_features = self._extract_enhanced_multi_scale_history()
+        
+        # 🔥 组合观察：25 + 36 = 61维
+        enhanced_obs = np.concatenate([current_obs, history_features])
+        
+        return enhanced_obs
+
+    def _update_position_history(self):
+        """更新位置历史记录"""
+        if not hasattr(self, 'robot_positions_history'):
+            self.robot_positions_history = []
+            self.history_sample_steps = [5, 10, 20, 50, 100, 200]  # 6个时间尺度
+        
+        # 获取当前两个机器人的位置
+        robot1_pos = self.data.xpos[self.robot_1_rover_id][:2]
+        robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
+        current_positions = np.concatenate([robot1_pos, robot2_pos])
+        
+        # 添加到历史记录
+        self.robot_positions_history.append(current_positions)
+        
+        # 限制历史长度（保留最近200步）
+        if len(self.robot_positions_history) > 200:
+            self.robot_positions_history.pop(0)
+
+    def _extract_enhanced_multi_scale_history(self):
+        """提取增强的多时间尺度历史特征"""
+        
+        if len(self.robot_positions_history) < 2:
+            return np.zeros(36)  # 6个时间点 × 6维特征 = 36维
+        
+        history_features = []
+        
+        for steps_back in self.history_sample_steps:
+            if steps_back < len(self.robot_positions_history):
+                # 🔥 获取历史位置
+                past_positions = self.robot_positions_history[-steps_back-1]
+                current_positions = self.robot_positions_history[-1]
+                
+                # 🎯 计算位置变化
+                position_delta = current_positions - past_positions
+                
+                # 🎯 计算距离变化
+                past_robot1_pos = past_positions[:2]
+                past_robot2_pos = past_positions[2:]
+                past_distance = np.linalg.norm(past_robot1_pos - past_robot2_pos)
+                
+                current_robot1_pos = current_positions[:2]
+                current_robot2_pos = current_positions[2:]
+                current_distance = np.linalg.norm(current_robot1_pos - current_robot2_pos)
+                
+                distance_change = current_distance - past_distance
+                
+                # 🎯 组合特征 [6维]
+                step_features = np.concatenate([
+                    past_positions / self.max_position,        # [4] 历史位置
+                    [distance_change / self.max_distance],     # [1] 距离变化
+                    [steps_back / 200.0]                       # [1] 时间权重
+                ])
+                
+                history_features.extend(step_features)
+            else:
+                # 历史不够，用零填充
+                history_features.extend(np.zeros(6))
+        
+        return np.array(history_features[:36], dtype=np.float32)
+
+    def _get_target_relative_info(self):
+        """获取目标相对信息"""
+        robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
+        
+        if self.robot_2_target_position_x_y is not None:
+            target_pos = np.array(self.robot_2_target_position_x_y)
+            target_rel = target_pos - robot2_pos
+            distance = np.linalg.norm(target_rel)
+            return np.concatenate([
+                target_rel / self.max_distance,     # [2] 归一化相对位置
+                [distance / self.max_distance]      # [1] 归一化距离
+            ])
+        else:
+            return np.zeros(3)
+
+    def _get_robot1_relative_info(self):
+        """增强版：包含位置、速度、朝向信息"""
+        robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
+        robot1_pos = self.data.xpos[self.robot_1_rover_id][:2]
+        
+        # 🔥 位置信息
+        robot1_rel = robot1_pos - robot2_pos
+        distance = np.linalg.norm(robot1_rel)
+        
+        # 🔥 robot1 速度信息
+        try:
+            robot1_vel = self.data.cvel[self.robot_1_rover_id][:2]
+        except:
+            robot1_vel = np.zeros(2)
+        
+        # 🔥 robot1 朝向信息
+        robot1_quat = self.data.xquat[self.robot_1_rover_id]
+        robot1_orientation = self._quaternion_to_yaw(robot1_quat)
+        
+        # 🔥 相对运动信息
+        robot2_vel = self.data.cvel[self.robot_2_rover_id][:2]
+        relative_velocity = robot1_vel - robot2_vel  # robot1相对于robot2的速度
+        
+        # 🔥 接近/远离判断
+        if distance > 0:
+            # 径向速度：正值表示相互远离，负值表示相互接近
+            radial_velocity = np.dot(relative_velocity, robot1_rel) / distance
+        else:
+            radial_velocity = 0.0
+        
+        return np.concatenate([
+            robot1_rel / self.max_distance,           # [2] 相对位置
+            [distance / self.max_distance],           # [1] 距离
+            robot1_vel / self.max_speed,              # [2] robot1速度
+            [robot1_orientation / np.pi],             # [1] robot1朝向
+            relative_velocity / self.max_speed,       # [2] 相对速度
+            [radial_velocity / self.max_speed],       # [1] 径向速度
+        ])
