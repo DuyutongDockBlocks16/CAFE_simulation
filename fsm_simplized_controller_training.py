@@ -216,7 +216,7 @@ def driver_model_training_parallel(load_model_path=None, num_envs=8):
             MaskableActorCriticPolicy, 
             env, verbose=1, 
             device='cpu',
-                    learning_rate=3e-4,     
+                    learning_rate=1e-3,     
                     n_steps=2048,           # 调整为并行环境合适的值
                     batch_size=256,          
                     n_epochs=8,            
@@ -230,7 +230,7 @@ def driver_model_training_parallel(load_model_path=None, num_envs=8):
 
     # total_additional_steps = 160_000_000
     # total_additional_steps = 500_000
-    total_additional_steps = 3_000_000
+    total_additional_steps = 6_000_000
 
     ent_scheduler = EntCoefficientScheduler(
         initial_ent_coef=0.02,  

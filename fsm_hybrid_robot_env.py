@@ -438,17 +438,17 @@ class FsmHybridMuJoCoEnv(gym.Env):
         
         if self._check_robot_robot_collision():
             print("Robot-robot collision detected! Terminating episode.")
-            reward -= 4000
+            reward -= 40
             terminated = True
             
         if self._check_robot_forbidden_collision():
             print("Robot collision with forbidden area detected! Terminating episode.")
-            reward -= 4000
+            reward -= 40
             terminated = True
             
         if break_flag:
             print("Task completed successfully! Terminating episode.")
-            reward += 6000
+            reward += 60
             terminated = True
         
         if self.current_step >= self.max_steps:
@@ -472,7 +472,7 @@ class FsmHybridMuJoCoEnv(gym.Env):
         
         reward = 0.0
         
-        time_penalty = 0.1
+        time_penalty = 0.001
         reward -= time_penalty
         
         self.first_robot_is_carrying = False
@@ -655,9 +655,9 @@ class FsmHybridMuJoCoEnv(gym.Env):
             self._apply_navigation_action(action)
         
         if action_switch:
-           reward += 4000
+           reward += 40
 
-        reward += self._calculate_potential_field_reward() * 0.01
+        reward += self._calculate_potential_field_reward() * 1
         
         placement_penalty = self._check_placement_violations()
         reward += placement_penalty
