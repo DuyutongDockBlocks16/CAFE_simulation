@@ -446,7 +446,7 @@ class FsmHybridMuJoCoEnv(gym.Env):
             
         if self._check_robot_forbidden_collision():
             print("Robot collision with forbidden area detected! Terminating episode.")
-            reward -= 0.01
+            reward -= 0.001
             self.check_robot_2_forbidden_collision_counter += 1
             # if self.check_robot_2_forbidden_collision_counter >= 80:
             #     terminated = True
