@@ -141,6 +141,8 @@ class FsmHybridMuJoCoEnv(gym.Env):
         
         self.second_robot_is_picking = False
 
+        self.check_robot_2_forbidden_collision_counter = 0
+
         # Robot2 setup end
         
         # General setup for RL robots
@@ -351,6 +353,8 @@ class FsmHybridMuJoCoEnv(gym.Env):
         
         self.second_robot_is_picking = False
         
+        self.check_robot_2_forbidden_collision_counter = 0
+        
         self.data.qpos[:] = self.initial_qpos
         self.data.qvel[:] = self.initial_qvel
         self.data.ctrl[:] = self.initial_ctrl
@@ -419,8 +423,7 @@ class FsmHybridMuJoCoEnv(gym.Env):
         
         self.first_robot_status = self.first_robot_controller.get_status()
         if self.shared_state["current_object_index"] >= len(self.object_joint_ids) \
-            and self.first_robot_status == FiniteState.IDLE\
-            and self.second_robot_status == RLRobotFiniteState.WAIT_FOR_FINISH:
+            and self.first_robot_status == FiniteState.IDLE:
             print("All objects have been placed. Exit")
             break_flag = True
             
@@ -443,9 +446,11 @@ class FsmHybridMuJoCoEnv(gym.Env):
             
         if self._check_robot_forbidden_collision():
             print("Robot collision with forbidden area detected! Terminating episode.")
-            reward -= 40
-            terminated = True
-            
+            reward -= 0.01
+            self.check_robot_2_forbidden_collision_counter += 1
+            # if self.check_robot_2_forbidden_collision_counter >= 80:
+            #     terminated = True
+
         if break_flag:
             print("Task completed successfully! Terminating episode.")
             reward += 60
@@ -657,8 +662,11 @@ class FsmHybridMuJoCoEnv(gym.Env):
         if action_switch:
            reward += 40
 
-        reward += self._calculate_potential_field_reward() * 1
-        
+        potential_field_reward = self._calculate_potential_field_reward() * 1
+        reward += potential_field_reward
+
+        # print(potential_field_reward)
+
         placement_penalty = self._check_placement_violations()
         reward += placement_penalty
 
@@ -1289,6 +1297,7 @@ class FsmHybridMuJoCoEnv(gym.Env):
         repulsive_potential = 0
         robot1_pos = self.data.xpos[self.robot_1_rover_id][:2]
         distance_to_robot_1 = np.linalg.norm(robot2_pos - robot1_pos)
+        # print(f"Distance to Robot 1: {distance_to_robot_1:.4f}")
 
         influence_distance = 3.0  # 影响范围
         if distance_to_robot_1 < influence_distance:
@@ -1300,7 +1309,9 @@ class FsmHybridMuJoCoEnv(gym.Env):
         # 🔥 势能差作为奖励（鼓励势能降低）
         if hasattr(self, 'prev_potential'):
             potential_reward = self.prev_potential - total_potential
+            # print(f"Potential Reward: {potential_reward:.4f}, Attractive: {attractive_potential:.4f}, Repulsive: {repulsive_potential:.4f}")
         else:
+            # print("No previous potential, initializing potential reward to 0.")
             potential_reward = 0
 
         self.prev_potential = total_potential

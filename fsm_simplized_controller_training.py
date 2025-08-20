@@ -20,7 +20,7 @@ import time
 import os
 from datetime import datetime
 from config.env_config import Direction, Layer, FiniteState
-from config.training_config import APPROACHING_MODEL_NAME, SUCCESS_THRESHOLD
+from config.training_config import DRIVER_MODEL_NAME
 from callbacks.episode_data_collector import EpisodeBatchCollector
 from callbacks.success_check_point_saver import SuccessCheckpointCallback
 from callbacks.training_renderer import RenderCallback
@@ -315,7 +315,67 @@ def driver_model_training_parallel(load_model_path=None, num_envs=8):
     
     env.close()
     
+def driver_model_test_single_episode(env):
+    """测试单个episode的简化版本"""
+    
+    def mask_fn(env):
+        return env.get_action_mask()
+    
+    env = ActionMasker(env, mask_fn)
+    model = MaskablePPO.load(DRIVER_MODEL_NAME, env=env)
+    
+    obs, info = env.reset()
+    env.render()
+    sleep(3)
+    
+    step_count = 0
+    print("🚀 开始单episode测试...")
+    
+    while True:
+        env.render()
+        
+        # 获取状态信息
+        fsm_state = env.unwrapped.second_robot_status
+        action_mask = env.unwrapped.get_action_mask()
+        valid_actions = np.where(action_mask)[0]
+        
+        # 每50步打印一次状态
+        if step_count % 50 == 0:
+            print(f"\nStep {step_count}:")
+            print(f"  FSM State: {fsm_state}")
+            print(f"  Valid actions: {valid_actions.tolist()}")
+        
+        # 预测并执行动作
+        action, _ = model.predict(obs, deterministic=True)
+        print(f"  Action: {action}", end="")
+        
+        obs, reward, terminated, truncated, info = env.step(action)
+        step_count += 1
+        
+        if step_count % 50 == 0:
+            print(f", Reward: {reward:.3f}")
+        else:
+            print()
+        
+        if terminated or truncated:
+            print(f"\n🏁 Episode结束!")
+            print(f"  总步数: {step_count}")
+            print(f"  终止原因: {'成功完成' if terminated else '超时截断'}")
+            print(f"  最终奖励: {reward:.3f}")
+            break
+        
+        if step_count > 10000:  # 防止无限循环
+            print("⚠️ 达到最大步数限制")
+            break
+        
+        sleep(0.01)
+    
+    env.close()
+    print("✅ 测试完成")
+    
 if __name__ == "__main__":
     driver_env = gym.make("FsmHybridMuJoCoEnv-v0")
     # driver_model_training(driver_env)
-    driver_model_training_parallel(load_model_path=None, num_envs=8)
+    # driver_model_training(driver_env, load_model_path=DRIVER_MODEL_NAME)
+    driver_model_training_parallel(load_model_path=DRIVER_MODEL_NAME, num_envs=14)
+    # driver_model_test_single_episode(driver_env)
