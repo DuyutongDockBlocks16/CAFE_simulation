@@ -37,8 +37,8 @@ from sb3_contrib.common.maskable.policies import MaskableActorCriticPolicy
 from sb3_contrib.common.wrappers import ActionMasker
 
 gym.register(
-    id="FsmHybridMuJoCoEnv-v0",
-    entry_point="fsm_hybrid_robot_env:FsmHybridMuJoCoEnv",
+    id="Fsm2RobotHybridMuJoCoEnv-v0",
+    entry_point="fsm_hybrid_2_robot_env:Fsm2RobotHybridMuJoCoEnv",
     # kwargs={
     #     "xml_path": "xml/scene_mirobot.xml",
     #     "state_filepath": "saved_states/robot_state_20250723_093442.pkl"
@@ -49,7 +49,7 @@ def make_env(rank, seed=0):
     """Factory function to create environment"""
     def _init():
         env = gym.make(
-            "FsmHybridMuJoCoEnv-v0"
+            "Fsm2RobotHybridMuJoCoEnv-v0"
             )
         env.reset(seed=seed + rank)
         return env
@@ -216,12 +216,13 @@ def driver_model_training_parallel(load_model_path=None, num_envs=8):
             MaskableActorCriticPolicy, 
             env, verbose=1, 
             device='cpu',
-                    learning_rate=1e-3,     
-                    n_steps=2048,           # 调整为并行环境合适的值
+                    learning_rate=3e-4,     
+                    n_steps=8192,           # 调整为并行环境合适的值
                     batch_size=256,          
                     n_epochs=8,            
                     ent_coef=0.02,          
-                    clip_range=0.15,          
+                    clip_range=0.15,   
+                    gamma=0.995,       
                     gae_lambda=0.95,         
                     vf_coef=1.0,            
                     # max_grad_norm=0.3,
@@ -230,7 +231,7 @@ def driver_model_training_parallel(load_model_path=None, num_envs=8):
 
     # total_additional_steps = 160_000_000
     # total_additional_steps = 500_000
-    total_additional_steps = 6_000_000
+    total_additional_steps = 9_000_000
 
     ent_scheduler = EntCoefficientScheduler(
         initial_ent_coef=0.02,  
@@ -374,8 +375,8 @@ def driver_model_test_single_episode(env):
     print("✅ 测试完成")
     
 if __name__ == "__main__":
-    driver_env = gym.make("FsmHybridMuJoCoEnv-v0")
+    driver_env = gym.make("Fsm2RobotHybridMuJoCoEnv-v0")
     # driver_model_training(driver_env)
-    driver_model_training(driver_env, load_model_path=DRIVER_MODEL_NAME)
-    # driver_model_training_parallel(load_model_path=DRIVER_MODEL_NAME, num_envs=14)
+    # driver_model_training(driver_env, load_model_path=DRIVER_MODEL_NAME)
+    driver_model_training_parallel(load_model_path=None, num_envs=14)
     # driver_model_test_single_episode(driver_env)

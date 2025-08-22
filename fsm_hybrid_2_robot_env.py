@@ -16,12 +16,14 @@ from enum import Enum
 FIRST_ROBOT_ACTION_SPACE_LENGTH = 8
 SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH = 2
 SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH = 6
+THIRD_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH = 2
+THIRD_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH = 6
 
 class Direction(Enum):
     FORWARD = 0
     BACKWARD = 1
 
-class FsmHybridMuJoCoEnv(gym.Env):
+class Fsm2RobotHybridMuJoCoEnv(gym.Env):
     
     def _get_data_and_model(self):
         model = mujoco.MjModel.from_xml_path("xml/scene_mirobot.xml")
@@ -142,21 +144,82 @@ class FsmHybridMuJoCoEnv(gym.Env):
         self.second_robot_is_picking = False
 
         self.check_robot_2_forbidden_collision_counter = 0
+        
+        self.stop_wait_steps_robot_2 = 0
+        
+        self.prev_potential_robot_2 = 0.0
 
         # Robot2 setup end
         
+        # Robot 3 setup
+
+        self.robot_3_rover_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot3:rover")
+
+        self.robot3_bodies = [
+            "robot3:rover",         # chassis
+            "robot3:r-l-wheel",     # rear left wheel
+            "robot3:r-r-wheel",     # rear right wheel  
+            "robot3:f-l-wheel",     # front left wheel
+            "robot3:f-l-wheel-hub", "robot3:f-l-wheel-1", "robot3:f-l-wheel-2",  # front left wheel hub and spokes
+            "robot3:f-r-wheel-hub", "robot3:f-r-wheel-1", "robot3:f-r-wheel-2",  # front right wheel hub and spokes
+            "robot3:f-r-wheel",     # front right wheel
+            "robot3:base",          # arm base
+            "robot3:base_link",     # arm base link
+            "robot3:link1",         # arm joint 1
+            "robot3:link2",         # arm joint 2
+            "robot3:link3",         # arm joint 3
+            "robot3:link4",         # arm joint 4
+            "robot3:link5",         # arm joint 5
+            # "robot3:link6",          # arm end effector
+            # "robot3:vacuum_sphere"
+        ]
+
+        self.robot3_body_ids = []
+        for body_name in self.robot3_bodies:
+            try:
+                body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+                self.robot3_body_ids.append(body_id)
+            except:
+                continue
+
+        self.robot_3_origin_place_x_y = [-2, 2]
+
+        self.robot3_recent_positions = []
+
+        self.third_robot_status = RLRobotFiniteState.IDLE
+
+        self.robot_3_target_position_x_y = None
+
+        self.robot_3_random_picking_steps = None
+        self.robot_3_random_picking_count = 0
+
+        self.robot_3_random_placing_steps = None
+        self.robot_3_random_placing_count = 0
+
+        self.robot_3_target_placing_position = None
+
+        self.third_robot_is_picking = False
+
+        self.check_robot_3_forbidden_collision_counter = 0
+        
+        self.stop_wait_steps_robot_3 = 0
+        
+        self.prev_potential_robot_3 = 0.0
+
+
+        # Robot3 setup end
+
         # General setup for RL robots
             
         self.prediction_steps = 5
-        self.stop_wait_steps = 0
         self.required_stop_steps = 10
         
         self.forbidden_geoms = [
             "wall_front", 
             "wall_back", "wall_left", "wall_right",
             "pickingplace:table0", "pickingplace:table2",
-            # "placingplace2:low_plane", "placingplace2:high_plane",
-            # "placingplace1:low_plane", "placingplace1:high_plane",  
+            "placingplace2:low_plane", "placingplace2:high_plane",
+            "placingplace1:low_plane", "placingplace1:high_plane",  
         ]
         
         self.max_position = 3.0     
@@ -194,59 +257,62 @@ class FsmHybridMuJoCoEnv(gym.Env):
         
         # action space:
         # 0-8 for Robot 2 actions
-        ACTIONS = {
-            # 0 Brake and wait
-            # 1 Keep moving
-            # 2 Move to pickingplace:table0
-            # 3 Move to pickingplace:table1
-            # 4 Pick
-            # 5 Move to placingplace:table0
-            # 6 Move to placingplace:table1
-            # 7 Place Upper
-            # 8 Place Lower
-            0: "Brake and wait",             
-            1: "Keep moving",     
-            2: "Move to pickingplace",
-            3: "Pick",         
-            4: "Move to placingplace:table0",         
-            5: "Move to placingplace:table1",   
-            6: "Place Upper",   
-            7: "Place Lower",  
-            8: "Moving to origin position",  # This action is used to move the robot back to the origin position
-            9: "Back car to adjust position",
-            10: "Forward car to adjust position"
+        ROBOT2_ACTIONS = {
+            0: "robot 2 Brake and wait",             
+            1: "robot 2 Keep moving",     
+            2: "robot 2 Move to pickingplace",
+            3: "robot 2 Pick",         
+            4: "robot 2 Move to placingplace:table0",         
+            5: "robot 2 Move to placingplace:table1",   
+            6: "robot 2 Place Upper",   
+            7: "robot 2 Place Lower",  
+            8: "robot 2 Moving to origin position",  
+            9: "robot 2 Back car to adjust position",
+            10: "robot 2 Forward car to adjust position",
+            11: "robot 2 Back full left turn",
+            12: "robot 2 Back full right turn",
+            13: "robot 2 Forward full left turn",
+            14: "robot 2 Forward full right turn"
         }
-        self.action_space = gym.spaces.Discrete(len(ACTIONS))
         
-        # self.ALLOWED_ACTIONS = {
-        #     RLRobotFiniteState.IDLE:                           [0, 2, 9, 10],
-        #     RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:   [0, 2, 9, 10],
-        #     RLRobotFiniteState.PICKING_OBJECT:                 [3],
-        #     RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION:   [0, 4, 5, 9, 10],
-        #     RLRobotFiniteState.PLACING_OBJECT:                 [0, 6, 7],
-        #     RLRobotFiniteState.PLACING_OBJECT_UPPER:           [6],
-        #     RLRobotFiniteState.PLACING_OBJECT_LOWER:           [7],
-        #     RLRobotFiniteState.MOVING_TO_ORIGIN_POSITION:      [0, 8, 9, 10],
-        #     RLRobotFiniteState.WAIT_FOR_FINISH:                [0]
-        # }
+        ROBOT3_ACTIONS = {
+            0: "robot 3 Brake and wait",             
+            1: "robot 3 Keep moving",     
+            2: "robot 3 Move to pickingplace",
+            3: "robot 3 Pick",         
+            4: "robot 3 Move to placingplace:table0",         
+            5: "robot 3 Move to placingplace:table1",   
+            6: "robot 3 Place Upper",   
+            7: "robot 3 Place Lower",  
+            8: "robot 3 Moving to origin position",  
+            9: "robot 3 Back car to adjust position",
+            10: "robot 3 Forward car to adjust position",
+            11: "robot 3 Back full left turn",
+            12: "robot 3 Back full right turn",
+            13: "robot 3 Forward full left turn",
+            14: "robot 3 Forward full right turn"
+        }
         
-        self.ALLOWED_ACTIONS = {
-            RLRobotFiniteState.IDLE:                           [0, 2],
-            RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:   [0, 2, 10],
-            # RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:   [0, 2],
+        self.robot2_action_count = len(ROBOT2_ACTIONS)
+        self.robot3_action_count = len(ROBOT3_ACTIONS)
+        
+        self.action_space = gym.spaces.Discrete(self.robot2_action_count * self.robot3_action_count)
+        
+        self.ALLOWED_ACTIONS_ROBOT2 = {
+            RLRobotFiniteState.IDLE:                           [0, 2, 9, 11, 12],
+            RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:   [0, 2, 10, 13, 14],
             RLRobotFiniteState.PICKING_OBJECT:                 [3],
             RLRobotFiniteState.MAKE_DECISION_ON_PLACING_POSITION: [0, 4, 5],
-            # RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION:   [0, 4, 5],
-            RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_1:   [0, 4, 9],
-            # RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_1:   [0, 4],
-            RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_2:   [0, 5, 9],
-            # RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_2:   [0, 5],
+            RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_1:   [0, 4, 9, 11, 12],
+            RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_2:   [0, 5, 9, 11, 12],
             RLRobotFiniteState.PLACING_OBJECT:                 [0, 6, 7],
             RLRobotFiniteState.PLACING_OBJECT_UPPER:           [6],
             RLRobotFiniteState.PLACING_OBJECT_LOWER:           [7],
-            RLRobotFiniteState.MOVING_TO_ORIGIN_POSITION:      [0, 8],
+            RLRobotFiniteState.MOVING_TO_ORIGIN_POSITION:      [0, 8, 9, 10, 11, 12, 13, 14],
             RLRobotFiniteState.WAIT_FOR_FINISH:                [0]
         }
+        
+        self.ALLOWED_ACTIONS_ROBOT3 = self.ALLOWED_ACTIONS_ROBOT2
 
         self.current_step = 0
         self.max_steps = 500000
@@ -316,9 +382,27 @@ class FsmHybridMuJoCoEnv(gym.Env):
         
     def get_action_mask(self):
         masks = np.zeros(self.action_space.n, dtype=bool)
-        allowed = self.ALLOWED_ACTIONS[self.second_robot_status]
-        masks[allowed] = True
+        
+        # 🔥 获取两个机器人的有效动作
+        robot2_allowed = self.ALLOWED_ACTIONS_ROBOT2[self.second_robot_status]
+        robot3_allowed = self.ALLOWED_ACTIONS_ROBOT3[self.third_robot_status]
+        
+        # 🔥 计算所有有效的组合动作
+        for robot2_action in robot2_allowed:
+            for robot3_action in robot3_allowed:
+                combined_action_id = robot2_action * self.robot3_action_count + robot3_action
+                if combined_action_id < self.action_space.n:
+                    masks[combined_action_id] = True
+        
         return masks
+    
+    def _decode_action(self, combined_action):
+        robot2_action = combined_action // self.robot3_action_count
+        robot3_action_offset = combined_action % self.robot3_action_count
+        
+        robot3_action = robot3_action_offset + 15
+        
+        return robot2_action, robot3_action
     
     def action_masks(self):
         """MaskablePPO期望的函数名"""
@@ -354,11 +438,35 @@ class FsmHybridMuJoCoEnv(gym.Env):
         self.second_robot_is_picking = False
         
         self.check_robot_2_forbidden_collision_counter = 0
+
+        self.stop_wait_steps_robot_2 = 0
+
+        self.prev_potential_robot_2 = 0.0
         
+        self.third_robot_status = RLRobotFiniteState.IDLE
+        
+        self.robot_3_target_position_x_y = None
+        
+        self.robot_3_random_picking_steps = None
+        self.robot_3_random_picking_count = 0
+        
+        self.robot_3_random_placing_steps = None
+        self.robot_3_random_placing_count = 0
+        
+        self.robot_3_target_placing_position = None
+
+        self.third_robot_is_picking = False
+
+        self.check_robot_3_forbidden_collision_counter = 0
+
+        self.stop_wait_steps_robot_3 = 0
+
+        self.prev_potential_robot_3 = 0.0
+
         self.data.qpos[:] = self.initial_qpos
         self.data.qvel[:] = self.initial_qvel
         self.data.ctrl[:] = self.initial_ctrl
-        
+
         if self.shared_state["stop"] is False:
             self.shared_state["stop"] = True
             self.shared_state = {"current_object_index": 0, "current_object_position": None, "stop": False, "stopped": False}
@@ -435,7 +543,7 @@ class FsmHybridMuJoCoEnv(gym.Env):
         truncated = False
         obs = self._get_obs()
         
-        reward, action_switch = self._reward_function_robot_2(action)
+        reward, action_switch = self._reward_function(action)
         
         mujoco.mj_step(self.model, self.data)
         
@@ -446,10 +554,10 @@ class FsmHybridMuJoCoEnv(gym.Env):
             
         if self._check_robot_forbidden_collision():
             # print("Robot collision with forbidden area detected! Terminating episode.")
-            reward -= 0.001
+            reward -= 0.01
             self.check_robot_2_forbidden_collision_counter += 1
-            # if self.check_robot_2_forbidden_collision_counter >= 80:
-            #     terminated = True
+            if self.check_robot_2_forbidden_collision_counter >= 800:
+                terminated = True
 
         if break_flag:
             print("Task completed successfully! Terminating episode.")
@@ -469,13 +577,14 @@ class FsmHybridMuJoCoEnv(gym.Env):
         
         info = {}
         info["action_mask"] = self.action_masks()
-        
+
         return obs, reward, terminated, truncated, info, action_switch
-    
-    def _reward_function_robot_2(self, action):
-        action_switch = False
-        
+
+    def _reward_function(self, combined_action):
         reward = 0.0
+        
+        robot2_action, robot3_action = self._decode_action(combined_action)
+        # print(f"Robot 2 action: {robot2_action}, Robot 3 action: {robot3_action}")
         
         time_penalty = 0.001
         reward -= time_penalty
@@ -511,6 +620,45 @@ class FsmHybridMuJoCoEnv(gym.Env):
         else :
             self.second_robot_is_picking = False
             
+        if self.third_robot_status in [
+            RLRobotFiniteState.PICKING_OBJECT,
+            RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION,
+            RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_1,
+            RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_2,
+            RLRobotFiniteState.MAKE_DECISION_ON_PLACING_POSITION,
+            RLRobotFiniteState.PLACING_OBJECT_UPPER,
+            RLRobotFiniteState.PLACING_OBJECT_LOWER,
+            RLRobotFiniteState.PLACING_OBJECT
+        ]:
+            self.third_robot_is_picking = True
+        else :
+            self.third_robot_is_picking = False
+            
+        action_switch_robot2 = self._process_robot2_action(robot2_action)
+        action_switch_robot3 = self._process_robot3_action(robot3_action)
+            
+        if action_switch_robot2:
+           reward += 40
+
+        potential_field_reward_robot_2 = self._calculate_potential_field_reward(robot_id=2) * 1
+        reward += potential_field_reward_robot_2
+        
+        if action_switch_robot3:
+           reward += 40
+
+        potential_field_reward_robot_3 = self._calculate_potential_field_reward(robot_id=3) * 1
+        reward += potential_field_reward_robot_3
+
+        placement_penalty = self._check_placement_violations()
+        reward += placement_penalty
+        
+        action_switch = action_switch_robot2 or action_switch_robot3
+
+        return reward, action_switch
+    
+    def _process_robot2_action(self, action):
+        action_switch = False
+            
         if self.first_robot_is_carrying or self.second_robot_is_picking:
         
             if self.second_robot_status == RLRobotFiniteState.IDLE:
@@ -524,15 +672,17 @@ class FsmHybridMuJoCoEnv(gym.Env):
                 # print(f"Robot 2 target position: {self.robot_2_target_position_x_y}")
                 
                 if action == 0:
-                    self._brake_robot2()
+                    self._brake_robot(2)
                 elif action == 2:
-                    action_switch = self._predict_navigation_action_robot_2(self.robot_2_target_position_x_y, Direction.FORWARD, 0.2)
+                    action_switch = self._predict_navigation_action_robot(self.robot_2_target_position_x_y, Direction.FORWARD, 0.2, 2)
                     if action_switch:
                         self.second_robot_status = RLRobotFiniteState.PICKING_OBJECT
                 elif action == 9:
-                    self._back_car_robot2()
-                elif action == 10:
-                    self._forward_car_robot2()
+                    self._back_car_robot(2)
+                elif action == 11:
+                    self._back_car_robot_full_left(2)
+                elif action == 12:
+                    self._back_car_robot_full_right(2)
             
             elif self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION and \
                 self.shared_state["current_object_index"] >= len(self.object_joint_ids):
@@ -540,16 +690,24 @@ class FsmHybridMuJoCoEnv(gym.Env):
             
             elif self.second_robot_status == RLRobotFiniteState.MOVING_TO_ORIGIN_POSITION:
                 if action == 0:
-                    self._brake_robot2()
+                    self._brake_robot(2)
                 elif action == 8:
-                    action_switch = self.robot_2_navigation_to_origin_place()
+                    action_switch = self.robot_2_navigation_to_origin_place(2)
                     if action_switch:
                         self.second_robot_status = RLRobotFiniteState.WAIT_FOR_FINISH
                 elif action == 9:
-                    self._back_car_robot2()
+                    self._back_car_robot(2)
                 elif action == 10:
-                    self._forward_car_robot2()
-                
+                    self._forward_car_robot(2)
+                elif action == 11:
+                    self._back_car_robot_full_left(2)
+                elif action == 12:
+                    self._back_car_robot_full_right(2)
+                elif action == 13:
+                    self._forward_car_robot_full_left(2)
+                elif action == 14:
+                    self._forward_car_robot_full_right(2)
+
             elif self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:
                 
                 left_joint_id, _, right_joint_id, _ = self._get_placed_object_info()
@@ -559,25 +717,27 @@ class FsmHybridMuJoCoEnv(gym.Env):
                     self.robot_2_target_position_x_y = self.picking_positions[1]
                 
                 if action == 0:
-                    self._brake_robot2()
+                    self._brake_robot(2)
                 elif action == 2:
-                    action_switch = self._predict_navigation_action_robot_2(self.robot_2_target_position_x_y, Direction.BACKWARD, 0.2)
+                    action_switch = self._predict_navigation_action_robot(self.robot_2_target_position_x_y, Direction.BACKWARD, 0.2, 2)
                     if action_switch:
                         self.second_robot_status = RLRobotFiniteState.PICKING_OBJECT
-                elif action == 9:
-                    self._back_car_robot2()
                 elif action == 10:
-                    self._forward_car_robot2()
-                
+                    self._forward_car_robot(2)
+                elif action == 13:
+                    self._forward_car_robot_full_left(2)
+                elif action == 14:
+                    self._forward_car_robot_full_right(2)
+
             elif self.second_robot_status == RLRobotFiniteState.PICKING_OBJECT:
                 if action == 3:
-                    action_switch = self._picking_object()
+                    action_switch = self._picking_object(2)
                 if action_switch:
                     self.second_robot_status = RLRobotFiniteState.MAKE_DECISION_ON_PLACING_POSITION
             
             elif self.second_robot_status == RLRobotFiniteState.MAKE_DECISION_ON_PLACING_POSITION:
                 if action == 0:
-                    self._brake_robot2()
+                    self._brake_robot(2)
                 elif action == 4:
                     self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_1
                 elif action == 5:
@@ -585,29 +745,37 @@ class FsmHybridMuJoCoEnv(gym.Env):
             elif self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_1:
                 
                 if action == 0:
-                    self._brake_robot2()
+                    self._brake_robot(2)
                 elif action == 4:
                     self.robot_2_target_position_x_y = self.placing_positions[0]
-                    action_switch = self._predict_navigation_action_robot_2(self.robot_2_target_position_x_y, Direction.FORWARD, 0.4)
-                    if action_switch:
-                        self.second_robot_status = RLRobotFiniteState.PLACING_OBJECT
-            elif self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_2:
-                if action == 0:
-                    self._brake_robot2()
-                elif action == 5:
-                    self.robot_2_target_position_x_y = self.placing_positions[1]
-                    action_switch = self._predict_navigation_action_robot_2(self.robot_2_target_position_x_y, Direction.FORWARD, 0.4)
+                    action_switch = self._predict_navigation_action_robot(self.robot_2_target_position_x_y, Direction.FORWARD, 0.4, 2)
                     if action_switch:
                         self.second_robot_status = RLRobotFiniteState.PLACING_OBJECT
                 elif action == 9:
-                    self._back_car_robot2()
-                elif action == 10:
-                    self._forward_car_robot2()
-            
+                    self._back_car_robot(2)
+                elif action == 11:
+                    self._back_car_robot_full_left(2)
+                elif action == 12:
+                    self._back_car_robot_full_right(2)
+            elif self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_2:
+                if action == 0:
+                    self._brake_robot(2)
+                elif action == 5:
+                    self.robot_2_target_position_x_y = self.placing_positions[1]
+                    action_switch = self._predict_navigation_action_robot(self.robot_2_target_position_x_y, Direction.FORWARD, 0.4, 2)
+                    if action_switch:
+                        self.second_robot_status = RLRobotFiniteState.PLACING_OBJECT
+                elif action == 9:
+                    self._back_car_robot(2)
+                elif action == 11:
+                    self._back_car_robot_full_left(2)
+                elif action == 12:
+                    self._back_car_robot_full_right(2)
+
             elif self.second_robot_status == RLRobotFiniteState.PLACING_OBJECT:
                 
                 if action == 0:
-                    self._brake_robot2()
+                    self._brake_robot(2)
                 elif action == 6:
                     self.second_robot_status = RLRobotFiniteState.PLACING_OBJECT_UPPER
                 elif action == 7:
@@ -615,30 +783,30 @@ class FsmHybridMuJoCoEnv(gym.Env):
             
             elif self.second_robot_status == RLRobotFiniteState.PLACING_OBJECT_UPPER:
                 if action == 6:
-                    action_switch = self._placing_object(Layer.UPPER)
-                    if action_switch:
+                    action_switch_robot_2 = self._placing_object(Layer.UPPER)
+                    if action_switch_robot_2:
                         self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION
             
             elif self.second_robot_status == RLRobotFiniteState.PLACING_OBJECT_LOWER:
                 if action == 7:
-                    action_switch = self._placing_object(Layer.LOWER)
-                    if action_switch:
+                    action_switch_robot_2 = self._placing_object(Layer.LOWER)
+                    if action_switch_robot_2:
                         self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION
             
             elif self.second_robot_status == RLRobotFiniteState.WAIT_FOR_FINISH:
                 if action == 0:
-                    self._brake_robot2()   
+                    self._brake_robot(2)   
         else:
-            self._brake_robot2()
-            
+            self._brake_robot(2)
+
         if self.shared_state["current_object_index"] >= len(self.object_joint_ids) and self.second_robot_status == RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:
-            self.target_position_x_y = [-2, 1]
-            navigation_obs = self._get_navigation_obs()
+            self.robot_2_target_position_x_y = [-2, 1]
+            navigation_obs = self._get_navigation_obs(2)
             action, _ = self.sec_robot_navigation_backward_model.predict(navigation_obs, deterministic=True)
             # print("moving to 'origin position'")
 
             robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]
-            dist_to_target = np.linalg.norm(robot_2_rover_pos - self.target_position_x_y)
+            dist_to_target = np.linalg.norm(robot_2_rover_pos - self.robot_2_target_position_x_y)
             reached = (dist_to_target < 0.20)
             if reached:
                 action = np.zeros(SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH, dtype=np.float32)
@@ -649,28 +817,191 @@ class FsmHybridMuJoCoEnv(gym.Env):
                 speed = np.linalg.norm(linear_vel)
 
                 if speed < 0.0001: 
-                    self.stop_wait_steps += 1
+                    self.stop_wait_steps_robot_2 += 1
                     
-                    if self.stop_wait_steps >= self.required_stop_steps:
+                    if self.stop_wait_steps_robot_2 >= self.required_stop_steps:
                         self.second_robot_status = RLRobotFiniteState.WAIT_FOR_FINISH
                         self.break_count += 1
                 else:
-                    self.stop_wait_steps = 0
+                    self.stop_wait_steps_robot_2 = 0
 
-            self._apply_navigation_action(action)
-        
-        if action_switch:
-           reward += 40
+            self._apply_navigation_action(action, robot_id=2)
+            
+        return action_switch
+    
+    def _process_robot3_action(self, action):
+        action_switch = False
+            
+        if self.first_robot_is_carrying or self.third_robot_is_picking:
 
-        potential_field_reward = self._calculate_potential_field_reward() * 1
-        reward += potential_field_reward
+            if self.third_robot_status == RLRobotFiniteState.IDLE:
 
-        # print(potential_field_reward)
+                left_joint_id, _, right_joint_id, _ = self._get_placed_object_info()
+                if left_joint_id is not None:
+                    self.robot_3_target_position_x_y = self.picking_positions[0]
+                elif right_joint_id is not None:
+                    self.robot_3_target_position_x_y = self.picking_positions[1]
 
-        placement_penalty = self._check_placement_violations()
-        reward += placement_penalty
+                # print(f"Robot 3 target position: {self.robot_3_target_position_x_y}")
 
-        return reward, action_switch
+                if action == 15:
+                    self._brake_robot(3)
+                elif action == 17:
+                    action_switch = self._predict_navigation_action_robot(self.robot_3_target_position_x_y, Direction.FORWARD, 0.2, 3)
+                    if action_switch:
+                        self.third_robot_status = RLRobotFiniteState.PICKING_OBJECT
+                elif action == 24:
+                    self._back_car_robot(3)
+                elif action == 26:
+                    self._back_car_robot_full_left(3)
+                elif action == 27:
+                    self._back_car_robot_full_right(3)
+            
+            elif self.third_robot_status == RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION and \
+                self.shared_state["current_object_index"] >= len(self.object_joint_ids):
+                self.third_robot_status = RLRobotFiniteState.MOVING_TO_ORIGIN_POSITION
+            
+            elif self.third_robot_status == RLRobotFiniteState.MOVING_TO_ORIGIN_POSITION:
+                if action == 15:
+                    self._brake_robot(3)
+                elif action == 23:
+                    action_switch = self.robot_2_navigation_to_origin_place(3)
+                    if action_switch:
+                        self.third_robot_status = RLRobotFiniteState.WAIT_FOR_FINISH
+                elif action == 24:
+                    self._back_car_robot(3)
+                elif action == 25:
+                    self._forward_car_robot(3)
+                elif action == 26:
+                    self._back_car_robot_full_left(3)
+                elif action == 27:
+                    self._back_car_robot_full_right(3)
+                elif action == 28:
+                    self._forward_car_robot_full_left(3)
+                elif action == 29:
+                    self._forward_car_robot_full_right(3)
+
+            elif self.third_robot_status == RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:
+                
+                left_joint_id, _, right_joint_id, _ = self._get_placed_object_info()
+                if left_joint_id is not None:
+                    self.robot_3_target_position_x_y = self.picking_positions[0]
+                elif right_joint_id is not None:
+                    self.robot_3_target_position_x_y = self.picking_positions[1]
+
+                if action == 15:
+                    self._brake_robot(3)
+                elif action == 17:
+                    action_switch = self._predict_navigation_action_robot(self.robot_3_target_position_x_y, Direction.BACKWARD, 0.2, 3)
+                    if action_switch:
+                        self.third_robot_status = RLRobotFiniteState.PICKING_OBJECT
+                elif action == 25:
+                    self._forward_car_robot(3)
+                elif action == 28:
+                    self._forward_car_robot_full_left(3)
+                elif action == 29:
+                    self._forward_car_robot_full_right(3)
+
+            elif self.third_robot_status == RLRobotFiniteState.PICKING_OBJECT:
+                if action == 18:
+                    action_switch = self._picking_object(3)
+                if action_switch:
+                    self.third_robot_status = RLRobotFiniteState.MAKE_DECISION_ON_PLACING_POSITION
+            
+            elif self.third_robot_status == RLRobotFiniteState.MAKE_DECISION_ON_PLACING_POSITION:
+                if action == 15:
+                    self._brake_robot(3)
+                elif action == 19:
+                    self.third_robot_status = RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_1
+                elif action == 20:
+                    self.third_robot_status = RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_2
+            elif self.third_robot_status == RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_1:
+
+                if action == 15:
+                    self._brake_robot(3)
+                elif action == 19:
+                    self.robot_3_target_position_x_y = self.placing_positions[0]
+                    action_switch = self._predict_navigation_action_robot(self.robot_3_target_position_x_y, Direction.FORWARD, 0.4, 3)
+                    if action_switch:
+                        self.third_robot_status = RLRobotFiniteState.PLACING_OBJECT
+                elif action == 24:
+                    self._back_car_robot(3)
+                elif action == 26:
+                    self._back_car_robot_full_left(3)
+                elif action == 27:
+                    self._back_car_robot_full_right(3)
+            elif self.third_robot_status == RLRobotFiniteState.NAVIGATE_TO_PLACING_POSITION_2:
+                if action == 15:
+                    self._brake_robot(3)
+                elif action == 20:
+                    self.robot_3_target_position_x_y = self.placing_positions[1]
+                    action_switch = self._predict_navigation_action_robot(self.robot_3_target_position_x_y, Direction.FORWARD, 0.4, 3)
+                    if action_switch:
+                        self.third_robot_status = RLRobotFiniteState.PLACING_OBJECT
+
+                elif action == 24:
+                    self._back_car_robot(3)
+                elif action == 26:
+                    self._back_car_robot_full_left(3)
+                elif action == 27:
+                    self._back_car_robot_full_right(3)
+
+            elif self.third_robot_status == RLRobotFiniteState.PLACING_OBJECT:
+
+                if action == 15:
+                    self._brake_robot(3)
+                elif action == 21:
+                    self.third_robot_status = RLRobotFiniteState.PLACING_OBJECT_UPPER
+                elif action == 22:
+                    self.third_robot_status = RLRobotFiniteState.PLACING_OBJECT_LOWER
+            
+            elif self.third_robot_status == RLRobotFiniteState.PLACING_OBJECT_UPPER:
+                if action == 21:
+                    action_switch = self._placing_object(Layer.UPPER)
+                    if action_switch:
+                        self.third_robot_status = RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION
+            
+            elif self.third_robot_status == RLRobotFiniteState.PLACING_OBJECT_LOWER:
+                if action == 22:
+                    action_switch = self._placing_object(Layer.LOWER)
+                    if action_switch:
+                        self.third_robot_status = RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION
+            
+            elif self.third_robot_status == RLRobotFiniteState.WAIT_FOR_FINISH:
+                if action == 15:
+                    self._brake_robot(3)
+        else:
+            self._brake_robot(3)
+
+        if self.shared_state["current_object_index"] >= len(self.object_joint_ids) and self.third_robot_status == RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION:
+            self.robot_3_target_position_x_y = [-2, 1]
+            navigation_obs = self._get_navigation_obs(3)
+            action, _ = self.sec_robot_navigation_backward_model.predict(navigation_obs, deterministic=True)
+            # print("moving to 'origin position'")
+
+            robot_3_rover_pos = self.data.xpos[self.robot_3_rover_id][:2]
+            dist_to_target = np.linalg.norm(robot_3_rover_pos - self.robot_3_target_position_x_y)
+            reached = (dist_to_target < 0.20)
+            if reached:
+                action = np.zeros(SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH, dtype=np.float32)
+
+                rover_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot3:centroid")
+                rover_qvel_start = self.model.jnt_dofadr[rover_joint_id]
+                linear_vel = self.data.qvel[rover_qvel_start:rover_qvel_start+3]
+                speed = np.linalg.norm(linear_vel)
+
+                if speed < 0.0001: 
+                    self.stop_wait_steps_robot_3 += 1
+
+                    if self.stop_wait_steps_robot_3 >= self.required_stop_steps:
+                        self.third_robot_status = RLRobotFiniteState.WAIT_FOR_FINISH
+                        self.break_count += 1
+                else:
+                    self.stop_wait_steps_robot_2 = 0
+
+            self._apply_navigation_action(action, robot_id=3)
+            
+        return action_switch
     
     def _check_placement_violations(self):
         penalty = 0
@@ -689,93 +1020,213 @@ class FsmHybridMuJoCoEnv(gym.Env):
         
         return penalty
 
-    def _brake_robot2(self):
-        self.data.ctrl[
-            FIRST_ROBOT_ACTION_SPACE_LENGTH :
-            FIRST_ROBOT_ACTION_SPACE_LENGTH + 1
-        ] = [0]
-        
-    def _back_car_robot2(self):
-        self.data.ctrl[
-            FIRST_ROBOT_ACTION_SPACE_LENGTH :
-            FIRST_ROBOT_ACTION_SPACE_LENGTH + 2
-        ] = [-3, 0]
-        
-    def _forward_car_robot2(self):
-        self.data.ctrl[
-            FIRST_ROBOT_ACTION_SPACE_LENGTH :
-            FIRST_ROBOT_ACTION_SPACE_LENGTH + 2
-        ] = [3, 0]
+    def _brake_robot(self, robot_id):
+        if robot_id == 2:
+            self.data.ctrl[
+                FIRST_ROBOT_ACTION_SPACE_LENGTH :
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + 1
+            ] = [0]
+        if robot_id == 3:
+            self.data.ctrl[
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH + SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH:
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH + SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH + 1
+            ] = [0]
+            
+            
+    def _back_car_robot(self, robot_id):
+        if robot_id == 2:
+            self.data.ctrl[
+                FIRST_ROBOT_ACTION_SPACE_LENGTH :
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + 2
+            ] = [-3, 0]
+        if robot_id == 3:
+            self.data.ctrl[
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH + SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH:
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH + SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH + 2
+            ] = [-3, 0]
 
-    def _apply_navigation_action(self, action):
-        self.data.ctrl[
-            FIRST_ROBOT_ACTION_SPACE_LENGTH :
-            FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH
-        ] = action
+    def _back_car_robot_full_right(self, robot_id):
+        if robot_id == 2:
+            self.data.ctrl[
+                FIRST_ROBOT_ACTION_SPACE_LENGTH :
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + 2
+            ] = [-3, -0.9]
+        if robot_id == 3:
+            self.data.ctrl[
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH + SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH:
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH + SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH + 2
+            ] = [-3, -0.9]
 
-    def _predict_navigation_action_robot_2(self, target_position, direction, reach_threshold):
+    def _back_car_robot_full_left(self, robot_id):
+        if robot_id == 2:
+            self.data.ctrl[
+                FIRST_ROBOT_ACTION_SPACE_LENGTH :
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + 2
+            ] = [-3, 0.9]
+        if robot_id == 3:
+            self.data.ctrl[
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH + SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH:
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH + SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH + 2
+            ] = [-3, 0.9]
+        
+    def _forward_car_robot(self, robot_id):
+        if robot_id == 2:
+            self.data.ctrl[
+                FIRST_ROBOT_ACTION_SPACE_LENGTH :
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + 2
+            ] = [3, 0]
+        if robot_id == 3:
+            self.data.ctrl[
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH + SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH:
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH + SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH + 2
+            ] = [3, 0]
+        
+    def _forward_car_robot_full_right(self, robot_id):
+        if robot_id == 2:
+            self.data.ctrl[
+                FIRST_ROBOT_ACTION_SPACE_LENGTH :
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + 2
+            ] = [3, -0.9]
+        if robot_id == 3:
+            self.data.ctrl[
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH + SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH:
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH + SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH + 2
+            ] = [3, -0.9]
+
+    def _forward_car_robot_full_left(self, robot_id):
+        if robot_id == 2:
+            self.data.ctrl[
+                FIRST_ROBOT_ACTION_SPACE_LENGTH :
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + 2
+            ] = [3, 0.9]
+        if robot_id == 3:
+            self.data.ctrl[
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH + SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH:
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH + SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH + 2
+            ] = [3, 0.9]
+
+    def _apply_navigation_action(self, action, robot_id):
+        if robot_id == 2:
+            self.data.ctrl[
+                FIRST_ROBOT_ACTION_SPACE_LENGTH :
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH
+            ] = action
+        if robot_id == 3:
+            self.data.ctrl[
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH + SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH:
+                FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH + SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH + THIRD_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH
+            ] = action
+
+
+    def _predict_navigation_action_robot(self, target_position, direction, reach_threshold, robot_id):
         action_switch = False
-        navigation_obs = self._get_navigation_obs()
-        
+        navigation_obs = self._get_navigation_obs(robot_id)
+
         if direction == Direction.FORWARD:
             navigation_model = self.sec_robot_navigation_forward_model
         else:
             navigation_model = self.sec_robot_navigation_backward_model
         
         action, _ = navigation_model.predict(navigation_obs, deterministic=True)
-
-        robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]
-        dist_to_target = np.linalg.norm(robot_2_rover_pos - target_position)
+        
+        
+        if robot_id == 2:
+            robot_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]
+        # if robot_id == 3:
+        else:
+            robot_rover_pos = self.data.xpos[self.robot_3_rover_id][:2]
+        dist_to_target = np.linalg.norm(robot_rover_pos - target_position)
         reached = (dist_to_target < reach_threshold)
         if reached:
             action = np.zeros(SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH, dtype=np.float32)
+            action_switch = True
             
-            rover_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot2:centroid")
-            rover_qvel_start = self.model.jnt_dofadr[rover_joint_id]
-            linear_vel = self.data.qvel[rover_qvel_start:rover_qvel_start+3]
-            speed = np.linalg.norm(linear_vel)
+            # rover_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot2:centroid")
+            # rover_qvel_start = self.model.jnt_dofadr[rover_joint_id]
+            # linear_vel = self.data.qvel[rover_qvel_start:rover_qvel_start+3]
+            # speed = np.linalg.norm(linear_vel)
 
-            if speed < 0.0001: 
-                self.stop_wait_steps += 1                
-                if self.stop_wait_steps >= self.required_stop_steps:
-                    action_switch = True
-            else:
-                self.stop_wait_steps = 0
+            # if speed < 0.0001: 
+            #     self.stop_wait_steps_robot_2 += 1                
+            #     if self.stop_wait_steps_robot_2 >= self.required_stop_steps:
+            #         action_switch = True
+            # else:
+            #     self.stop_wait_steps_robot_2 = 0
                 
         if direction == Direction.BACKWARD:
             if action[0] > 0:
                 action[0] = 0
                 
-        self._apply_navigation_action(action)
+        self._apply_navigation_action(action, robot_id)
         
         return action_switch
     
-    def _picking_object(self):
+    def _picking_object(self, robot_id):
         action_switch = False
-        left_joint_id, left_position, right_joint_id, right_position = self._get_placed_object_info()
-
-        if left_joint_id is not None:
-            self.active_position = left_position
-            self.active_joint_id = left_joint_id
-            self.side = "left"
-        elif right_joint_id is not None:
-            self.active_position = right_position
-            self.active_joint_id = right_joint_id
-            self.side = "right"
-            
-        if self.robot_2_random_picking_steps is None:
-            self.robot_2_random_picking_steps = random.randint(400, 1000)
-            
-        self.robot_2_random_picking_count += 1
         
-        if self.robot_2_random_picking_count >= self.robot_2_random_picking_steps: 
-            target_position = self.data.xpos[self.robot_2_rover_id].copy()
-            # target_position[1] += 1
-            target_position[2] += 0.05
-            self._move_object_to_position(self.active_joint_id, target_position)
-            action_switch = True
-            self.robot_2_random_picking_steps = None
-            self.robot_2_random_picking_count = 0
+        if robot_id == 2:
+            rover_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot2:centroid")
+        elif robot_id == 3:
+            rover_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot3:centroid")
+        rover_qvel_start = self.model.jnt_dofadr[rover_joint_id]
+        linear_vel = self.data.qvel[rover_qvel_start:rover_qvel_start+3]
+        speed = np.linalg.norm(linear_vel)
+        
+        robot_stopped =  False
+
+        if robot_id == 2:
+            if speed < 0.0001: 
+                self.stop_wait_steps_robot_2 += 1                
+                if self.stop_wait_steps_robot_2 >= self.required_stop_steps:
+                    robot_stopped = True
+            else:
+                self.stop_wait_steps_robot_2 = 0
+                
+        elif robot_id == 3:
+            if speed < 0.0001: 
+                self.stop_wait_steps_robot_3 += 1                
+                if self.stop_wait_steps_robot_3 >= self.required_stop_steps:
+                    robot_stopped = True
+            else:
+                self.stop_wait_steps_robot_3 = 0
+
+        if robot_stopped:
+            left_joint_id, left_position, right_joint_id, right_position = self._get_placed_object_info()
+
+            if left_joint_id is not None:
+                self.active_position = left_position
+                self.active_joint_id = left_joint_id
+                self.side = "left"
+            elif right_joint_id is not None:
+                self.active_position = right_position
+                self.active_joint_id = right_joint_id
+                self.side = "right"
+                
+            if robot_id == 2:
+                if self.robot_2_random_picking_steps is None:
+                    self.robot_2_random_picking_steps = random.randint(400, 1000)
+                self.robot_2_random_picking_count += 1
+                if self.robot_2_random_picking_count >= self.robot_2_random_picking_steps: 
+                    target_position = self.data.xpos[self.robot_2_rover_id].copy()
+                    # target_position[1] += 1
+                    target_position[2] += 0.05
+                    self._move_object_to_position(self.active_joint_id, target_position)
+                    action_switch = True
+                    self.robot_2_random_picking_steps = None
+                    self.robot_2_random_picking_count = 0
+                    
+            elif robot_id == 3:
+                if self.robot_3_random_picking_steps is None:
+                    self.robot_3_random_picking_steps = random.randint(400, 1000)
+                self.robot_3_random_picking_count += 1
+                if self.robot_3_random_picking_count >= self.robot_3_random_picking_steps:
+                    target_position = self.data.xpos[self.robot_3_rover_id].copy()
+                    # target_position[1] += 1
+                    target_position[2] += 0.05
+                    self._move_object_to_position(self.active_joint_id, target_position)
+                    action_switch = True
+                    self.robot_3_random_picking_steps = None
+                    self.robot_3_random_picking_count = 0
         
         return action_switch
     
@@ -817,33 +1268,47 @@ class FsmHybridMuJoCoEnv(gym.Env):
             
         return action_switch
     
-    def robot_2_navigation_to_origin_place(self):
+    def robot_2_navigation_to_origin_place(self, robot_id):
         action_switch = False
-        self.robot_2_target_position_x_y = self.robot_2_origin_place_x_y
-        navigation_obs = self._get_navigation_obs()
+        if robot_id == 2:
+            self.robot_2_target_position_x_y = self.robot_2_origin_place_x_y
+        elif robot_id == 3:
+            self.robot_3_target_position_x_y = self.robot_3_origin_place_x_y
+        navigation_obs = self._get_navigation_obs(robot_id)
         action, _ = self.sec_robot_navigation_backward_model.predict(navigation_obs, deterministic=True)
         # print("moving to 'origin position'")
 
-        robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]
-        dist_to_target = np.linalg.norm(robot_2_rover_pos - self.robot_2_target_position_x_y)
+        if robot_id == 2:
+            
+            robot_2_rover_pos = self.data.xpos[self.robot_2_rover_id][:2]
+        else:
+            robot_3_rover_pos = self.data.xpos[self.robot_3_rover_id][:2]
+            robot_2_rover_pos = robot_3_rover_pos
+        if robot_id == 2:
+            dist_to_target = np.linalg.norm(robot_2_rover_pos - self.robot_2_target_position_x_y)
+        else:
+            dist_to_target = np.linalg.norm(robot_2_rover_pos - self.robot_3_target_position_x_y)
         reached = (dist_to_target < 0.20)
         if reached:
             action = np.zeros(SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH, dtype=np.float32)
             
-            rover_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot2:centroid")
+            if robot_id == 2:
+                rover_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot2:centroid")
+            else:
+                rover_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot3:centroid")
             rover_qvel_start = self.model.jnt_dofadr[rover_joint_id]
             linear_vel = self.data.qvel[rover_qvel_start:rover_qvel_start+3]
             speed = np.linalg.norm(linear_vel)
 
             if speed < 0.0001: 
-                self.stop_wait_steps += 1
+                self.stop_wait_steps_robot_2 += 1
                 
-                if self.stop_wait_steps >= self.required_stop_steps:
+                if self.stop_wait_steps_robot_2 >= self.required_stop_steps:
                     action_switch = True
             else:
-                self.stop_wait_steps = 0
+                self.stop_wait_steps_robot_2 = 0
                 
-        self._apply_navigation_action(action)
+        self._apply_navigation_action(action, robot_id)
         
         return action_switch
             
@@ -894,6 +1359,11 @@ class FsmHybridMuJoCoEnv(gym.Env):
         self.robot2_recent_positions.append(robot2_pos.copy())
         if len(self.robot2_recent_positions) > 3:
             self.robot2_recent_positions.pop(0)
+            
+        robot3_pos = self.data.xpos[self.robot_3_rover_id][:2]
+        self.robot3_recent_positions.append(robot3_pos.copy())
+        if len(self.robot3_recent_positions) > 3:
+            self.robot3_recent_positions.pop(0)
     
     def _check_robot_robot_collision(self):
         """Directly detect collisions between two robots"""
@@ -908,8 +1378,9 @@ class FsmHybridMuJoCoEnv(gym.Env):
             # Detection logic
             is_robot1_involved = body1_id in self.robot1_body_ids or body2_id in self.robot1_body_ids
             is_robot2_involved = body1_id in self.robot2_body_ids or body2_id in self.robot2_body_ids
-            
-            if is_robot1_involved and is_robot2_involved:
+            is_robot3_involved = body1_id in self.robot3_body_ids or body2_id in self.robot3_body_ids
+
+            if (is_robot1_involved and is_robot2_involved) or (is_robot1_involved and is_robot3_involved) or (is_robot2_involved and is_robot3_involved):
                 geom1_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom1_id)
                 geom2_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom2_id)
                 # print(f"🚨 ROBOT-ROBOT COLLISION: {geom1_name} <-> {geom2_name}")
@@ -962,16 +1433,28 @@ class FsmHybridMuJoCoEnv(gym.Env):
         return False
         
         
-    def _get_navigation_obs(self):
-        robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]  
+    def _get_navigation_obs(self, robot_id=2):
+        if robot_id == 2:
+            robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]  
+        else:
+            robot2_pos = self.data.xpos[self.robot_3_rover_id][:2]
         
-        try:
-            robot2_body_id = self.robot_2_rover_id
-            robot2_vel = self.data.cvel[robot2_body_id][:2]  
-        except:
-            robot2_vel = np.zeros(2)
-        
-        robot2_quat = self.data.xquat[self.robot_2_rover_id]
+        if robot_id == 2:
+            try:
+                robot2_body_id = self.robot_2_rover_id
+                robot2_vel = self.data.cvel[robot2_body_id][:2]  
+            except:
+                robot2_vel = np.zeros(2)
+        else:
+            try:
+                robot2_body_id = self.robot_3_rover_id
+                robot2_vel = self.data.cvel[robot2_body_id][:2]  
+            except:
+                robot2_vel = np.zeros(2)
+        if robot_id == 2:
+            robot2_quat = self.data.xquat[self.robot_2_rover_id]
+        else:
+            robot2_quat = self.data.xquat[self.robot_3_rover_id]
         robot2_orientation = self._quaternion_to_yaw(robot2_quat)
 
         robot1_predicted_trajectory = self._predict_robot1_trajectory()
@@ -979,10 +1462,10 @@ class FsmHybridMuJoCoEnv(gym.Env):
         
         trajectory_features = self._extract_trajectory_features(robot1_predicted_trajectory, robot2_pos)
 
-        if self.robot_2_target_position_x_y is None:
-            target_pos = robot2_pos.copy()  
-        else:
+        if robot_id == 2:
             target_pos = np.array(self.robot_2_target_position_x_y)
+        else:
+            target_pos = np.array(self.robot_3_target_position_x_y)
         target_rel = target_pos - robot2_pos  
         target_distance = np.linalg.norm(target_rel) 
         target_angle = np.arctan2(target_rel[1], target_rel[0])  
@@ -1290,8 +1773,11 @@ class FsmHybridMuJoCoEnv(gym.Env):
                 placingplace1_high_plane_object_number, \
                 placingplace2_high_plane_object_number]
 
-    def _calculate_potential_field_reward(self):
-        robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
+    def _calculate_potential_field_reward(self, robot_id):
+        if robot_id == 2:
+            robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
+        elif robot_id == 3:
+            robot2_pos = self.data.xpos[self.robot_3_rover_id][:2]
         attractive_potential = 0
         if self.robot_2_target_position_x_y is not None:
             target_pos = np.array(self.robot_2_target_position_x_y)
@@ -1306,26 +1792,38 @@ class FsmHybridMuJoCoEnv(gym.Env):
         influence_distance = 3.0  # 影响范围
         if distance_to_robot_1 < influence_distance:
             repulsive_potential = 1.0 * (1/distance_to_robot_1 - 1/influence_distance)**2
+            
+        if robot_id == 2:
+            another_rl_robot_pos = self.data.xpos[self.robot_3_rover_id][:2]
+        elif robot_id == 3:
+            another_rl_robot_pos = self.data.xpos[self.robot_2_rover_id][:2]
+            
+        influence_distance_to_another_rl_robot = 1.0  # 影响范围
+        repulsive_potential_to_another_rl_robot = 0
+        distance_to_another_rl_robot = np.linalg.norm(robot2_pos - another_rl_robot_pos)
+        if distance_to_another_rl_robot < influence_distance_to_another_rl_robot:
+            repulsive_potential_to_another_rl_robot = 0.5 * (1/distance_to_another_rl_robot - 1/influence_distance_to_another_rl_robot)**2
 
         # 🔥 总势能
-        total_potential = attractive_potential + repulsive_potential
+        total_potential = attractive_potential + repulsive_potential + repulsive_potential_to_another_rl_robot
 
-        # 🔥 势能差作为奖励（鼓励势能降低）
-        if hasattr(self, 'prev_potential'):
-            potential_reward = self.prev_potential - total_potential
-            # print(f"Potential Reward: {potential_reward:.4f}, Attractive: {attractive_potential:.4f}, Repulsive: {repulsive_potential:.4f}")
-        else:
-            # print("No previous potential, initializing potential reward to 0.")
-            potential_reward = 0
-
-        self.prev_potential = total_potential
+        if robot_id == 2:
+            potential_reward = self.prev_potential_robot_2 - total_potential
+            self.prev_potential_robot_2 = total_potential
+        elif robot_id == 3:
+            potential_reward = self.prev_potential_robot_3 - total_potential
+            self.prev_potential_robot_3 = total_potential
 
         return potential_reward
-    
+
     def _get_obs(self):
         robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
         robot2_vel = self.data.cvel[self.robot_2_rover_id][:2]
         robot2_orientation = self._quaternion_to_yaw(self.data.xquat[self.robot_2_rover_id])
+        
+        robot3_pos = self.data.xpos[self.robot_3_rover_id][:2]
+        robot3_vel = self.data.cvel[self.robot_3_rover_id][:2]
+        robot3_orientation = self._quaternion_to_yaw(self.data.xquat[self.robot_3_rover_id])
         
         placingplace_object_numbers = self._get_object_number_on_each_placing_place()
         
@@ -1337,6 +1835,24 @@ class FsmHybridMuJoCoEnv(gym.Env):
                 placingplace_object_numbers_for_observation[i] = 1
             elif placingplace_object_number >= 1:
                 placingplace_object_numbers_for_observation[i] = -1 # capacity exceeded
+                
+        # get distance to self.forbidden_geoms
+        forbidden_geom_distances = []
+        if self.forbidden_geoms is not None:
+            for geom_name in self.forbidden_geoms:
+                geom_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom_name)
+                geom_pos = self.data.xpos[self.model.geom_bodyid[geom_id]]
+                
+                distance_robot2 = np.linalg.norm(robot2_pos - geom_pos[:2])
+                forbidden_geom_distances.append(distance_robot2)
+                
+                distance_robot3 = np.linalg.norm(robot3_pos - geom_pos[:2])
+                forbidden_geom_distances.append(distance_robot3)
+                    
+        
+        # 🔥 转换为NumPy数组并归一化
+        forbidden_geom_distances = np.array(forbidden_geom_distances) / self.max_distance
+    
         
         # 🔥 当前观察（25维）
         current_obs = np.concatenate([
@@ -1344,32 +1860,44 @@ class FsmHybridMuJoCoEnv(gym.Env):
             robot2_pos / self.max_position,                    # [2] 位置
             robot2_vel / self.max_speed,                       # [2] 速度 
             [robot2_orientation / np.pi],                      # [1] 朝向
-            
+
             # 目标信息 [4维]
-            self._get_target_relative_info(),                  # [3] 目标相对位置+距离
+            self._get_target_relative_info(self.robot_2_rover_id),           # [3] 目标相对位置+距离
             [1.0 if self.robot_2_target_position_x_y is not None else 0.0],  # [1] 是否有目标
+            
+            robot3_pos / self.max_position,                    # [2] robot3位置
+            robot3_vel / self.max_speed,                       # [2] robot3速度
+            [robot3_orientation / np.pi],                      # [1] robot3朝向
+            
+            self._get_target_relative_info(self.robot_3_rover_id),           # [3] 目标相对位置+距离
+            [1.0 if self.robot_3_target_position_x_y is not None else 0.0],  # [1] 是否有目标       
             
             # robot1信息 [9维]
             self._get_robot1_relative_info(),                  # [9] robot1相对位置+速度+朝向
 
             # 任务状态 [3维]
             [self.second_robot_status.value / len(RLRobotFiniteState)],  # [1] 状态
+            [self.third_robot_status.value / len(RLRobotFiniteState)],  # [1] 状态
             [1.0 if self.second_robot_is_picking else 0.0],   # [1] 是否在拾取
+            [1.0 if self.third_robot_is_picking else 0.0],   # [1] 是否在拾取
             [1.0 if self.first_robot_is_carrying else 0.0],   # [1] robot1是否在搬运
             
             # 放置位置状态 [4维]
             placingplace_object_numbers_for_observation,       # [4] 每个放置位置的物体数量
+            
+            # 禁止区域距离 [2维]
+            forbidden_geom_distances
             
         ], dtype=np.float32)
         
         # 🔥 更新历史位置
         self._update_position_history()
         
-        # 🔥 提取增强历史特征 (36维)
-        history_features = self._extract_enhanced_multi_scale_history()
-        
-        # 🔥 组合观察：25 + 36 = 61维
-        enhanced_obs = np.concatenate([current_obs, history_features])
+        # 🔥 提取增强历史特征 (54维)
+        history_features_robot2_and_robot3 = self._extract_enhanced_multi_scale_history_robot2_and_robot3()
+
+        # 🔥 组合观察：25 + 54 = 79维
+        enhanced_obs = np.concatenate([current_obs, history_features_robot2_and_robot3])
         
         return enhanced_obs
 
@@ -1382,7 +1910,8 @@ class FsmHybridMuJoCoEnv(gym.Env):
         # 获取当前两个机器人的位置
         robot1_pos = self.data.xpos[self.robot_1_rover_id][:2]
         robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
-        current_positions = np.concatenate([robot1_pos, robot2_pos])
+        robot3_pos = self.data.xpos[self.robot_3_rover_id][:2]
+        current_positions = np.concatenate([robot1_pos, robot2_pos, robot3_pos])
         
         # 添加到历史记录
         self.robot_positions_history.append(current_positions)
@@ -1391,11 +1920,11 @@ class FsmHybridMuJoCoEnv(gym.Env):
         if len(self.robot_positions_history) > 200:
             self.robot_positions_history.pop(0)
 
-    def _extract_enhanced_multi_scale_history(self):
+    def _extract_enhanced_multi_scale_history_robot2_and_robot3(self):
         """提取增强的多时间尺度历史特征"""
         
         if len(self.robot_positions_history) < 2:
-            return np.zeros(36)  # 6个时间点 × 6维特征 = 36维
+            return np.zeros(54)  # 6个时间点 × 9维特征 = 54维
         
         history_features = []
         
@@ -1410,32 +1939,38 @@ class FsmHybridMuJoCoEnv(gym.Env):
                 
                 # 🎯 计算距离变化
                 past_robot1_pos = past_positions[:2]
-                past_robot2_pos = past_positions[2:]
-                past_distance = np.linalg.norm(past_robot1_pos - past_robot2_pos)
-                
+                past_robot2_pos = past_positions[2:4]
+                past_robot3_pos = past_positions[4:]
+                past_distance_robot2 = np.linalg.norm(past_robot1_pos - past_robot2_pos)
+                past_distance_robot3 = np.linalg.norm(past_robot1_pos - past_robot3_pos)
+
                 current_robot1_pos = current_positions[:2]
-                current_robot2_pos = current_positions[2:]
-                current_distance = np.linalg.norm(current_robot1_pos - current_robot2_pos)
-                
-                distance_change = current_distance - past_distance
-                
+                current_robot2_pos = current_positions[2:4]
+                current_robot3_pos = current_positions[4:]
+                current_distance_robot2 = np.linalg.norm(current_robot1_pos - current_robot2_pos)
+                current_distance_robot3 = np.linalg.norm(current_robot1_pos - current_robot3_pos)
+
+                distance_change_robot2 = current_distance_robot2 - past_distance_robot2
+                distance_change_robot3 = current_distance_robot3 - past_distance_robot3
+
                 # 🎯 组合特征 [6维]
                 step_features = np.concatenate([
-                    past_positions / self.max_position,        # [4] 历史位置
-                    [distance_change / self.max_distance],     # [1] 距离变化
+                    past_positions / self.max_position,        # [6] 历史位置
+                    [distance_change_robot2 / self.max_distance],     # [1] 距离变化
+                    [distance_change_robot3 / self.max_distance],     # [1] 距离变化
                     [steps_back / 200.0]                       # [1] 时间权重
                 ])
                 
                 history_features.extend(step_features)
             else:
                 # 历史不够，用零填充
-                history_features.extend(np.zeros(6))
-        
-        return np.array(history_features[:36], dtype=np.float32)
+                history_features.extend(np.zeros(9))
 
-    def _get_target_relative_info(self):
+        return np.array(history_features[:54], dtype=np.float32)
+
+    def _get_target_relative_info(self, robot_rover_id):
         """获取目标相对信息"""
-        robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
+        robot2_pos = self.data.xpos[robot_rover_id][:2]
         
         if self.robot_2_target_position_x_y is not None:
             target_pos = np.array(self.robot_2_target_position_x_y)

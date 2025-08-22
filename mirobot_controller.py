@@ -30,6 +30,15 @@ class MirobotController:
         self.placing_position = None
         self.placing_layer = None
         self.waiting_timer = 0
+        
+        object_ids = self._get_object_ids(self.model)
+        
+        self.object_joint_ids = []
+        
+        for i in object_ids:
+            joint_name = f"object{i}:joint"
+            joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+            self.object_joint_ids.append((i, joint_id))
 
     def get_status(self):
         return self.state
@@ -434,6 +443,62 @@ class MirobotController:
             self.waiting_timer = 0
             return True
         return False
+    
+    def _get_object_number_on_each_placing_place(self):
+        
+        def is_on_plane(obj_pos, plane_pos, plane_radius, plane_z, z_tol=0.05):
+            dx = obj_pos[0] - plane_pos[0]
+            dy = obj_pos[1] - plane_pos[1]
+            dz = abs(obj_pos[2] - plane_z)
+            return (dx**2 + dy**2) <= plane_radius**2 and dz < z_tol
+            
+        lower_plane_positions = [[2.8, 1.0],[2.8, -1.0]]
+        lower_plane_radius = 0.23
+        lower_plane_z = 0.23
+        
+        upper_plane_positions = [[2.8, 1.0],[2.8, -1.0]]
+        upper_plane_radius = 0.15
+        upper_plane_z = 0.43
+        
+        placingplace1_low_plane_object_number = 0
+        placingplace2_low_plane_object_number = 0
+        placingplace1_high_plane_object_number = 0
+        placingplace2_high_plane_object_number = 0
+        
+        for i, joint_id in self.object_joint_ids:
+            joint_name = f"object{i}:joint"
+            qpos_adr = self.model.jnt_qposadr[joint_id]
+            obj_pos = self.data.qpos[qpos_adr : qpos_adr+3]
+            
+            if is_on_plane(obj_pos, lower_plane_positions[0], lower_plane_radius, lower_plane_z):
+                placingplace1_low_plane_object_number += 1
+            
+            elif is_on_plane(obj_pos, lower_plane_positions[1], lower_plane_radius, lower_plane_z):
+                placingplace2_low_plane_object_number += 1
+
+            elif is_on_plane(obj_pos, upper_plane_positions[0], upper_plane_radius, upper_plane_z):
+                placingplace1_high_plane_object_number += 1
+
+            elif is_on_plane(obj_pos, upper_plane_positions[1], upper_plane_radius, upper_plane_z):
+                placingplace2_high_plane_object_number += 1
+
+        return [placingplace1_low_plane_object_number, \
+                placingplace2_low_plane_object_number, \
+                placingplace1_high_plane_object_number, \
+                placingplace2_high_plane_object_number]
+        
+    def _get_object_ids(self, model):
+        object_ids = []
+        for i in range(model.njnt):
+            name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
+            if name and name.startswith("object") and name.endswith(":joint"):
+                # extract the N from the name
+                try:
+                    num = int(name.split(":")[0][6:])  # "objectN:joint" -> N
+                    object_ids.append(num)
+                except Exception:
+                    continue
+        return sorted(object_ids)
 
     def step(self, current_object_position):
         # try:
@@ -513,6 +578,8 @@ class MirobotController:
                     weights=[1.0, 0.0] 
                 )[0]
                 # self.placing_layer = Layer.UPPER
+                if self._get_object_number_on_each_placing_place()[0] > 0:
+                    self.placing_layer = Layer.UPPER
         elif self.state == FiniteState.PRE_PLACING_POSITION_TO_PLACING_POSITION and self.placing_position == Direction.RIGHT: 
             finished = self.pre_placing_position_to_placing_position(direction_flag=Direction.RIGHT)
             if finished:
@@ -521,6 +588,8 @@ class MirobotController:
                     [Layer.LOWER, Layer.UPPER],
                     weights=[1.0, 0.0] 
                 )[0]  
+                if self._get_object_number_on_each_placing_place()[1] > 0:
+                    self.placing_layer = Layer.UPPER
                 # self.placing_layer = Layer.UPPER
         elif self.state == FiniteState.PLACING_AT_LAYER and self.placing_layer == Layer.LOWER:
             finished = self.placing_at_current_layer()
