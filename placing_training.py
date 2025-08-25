@@ -42,7 +42,7 @@ def make_env(rank, seed=0):
     """Factory function to create environment"""
     def _init():
         env = gym.make(
-                "SecondRobotPickingMuJoCoEnv-v0",
+                "SecondRobotPlacingMuJoCoEnv-v0",
                 action_repeat=4
             )
         env.reset(seed=seed + rank)
