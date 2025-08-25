@@ -1,5 +1,4 @@
 import gymnasium as gym
-from simplized_hybrid_controller import SimpleHybridController
 import numpy as np
 import mujoco
 from mirobot_controller import MirobotController

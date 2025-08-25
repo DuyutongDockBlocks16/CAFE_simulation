@@ -15,7 +15,7 @@ ACTION_SPACE_REDUCTION = 14  # Number of actuators to be reduced from the action
 
 class SecondRobotMuJoCoEnv(gym.Env):
     # def __init__(self, xml_path, action_repeat=4):
-    def __init__(self, xml_path, state_filepath, action_repeat=4):
+    def __init__(self, xml_path, action_repeat=4):
         super().__init__()
 
         self.action_repeat = action_repeat

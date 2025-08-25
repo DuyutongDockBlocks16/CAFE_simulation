@@ -439,9 +439,10 @@ class SimpleHybridController:
     def run_simulation(self):
         with mujoco.viewer.launch_passive(self.model, self.data) as viewer:
             # step = 0
+            brake_flag = False
             while True:
                 # sleep(0.01)
-                break_flag, _ = self.step()
+                break_flag, _ = self.step(brake_flag)
                 # print position of rover
                 # if break_flag:
                 #     rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")

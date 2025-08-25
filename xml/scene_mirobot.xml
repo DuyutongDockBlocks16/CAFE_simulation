@@ -1,7 +1,7 @@
 <mujoco>
   <include file="mirobot_with_fork_lift_with_car_robot1.xml" />
   <include file="mirobot_with_fork_lift_with_car_robot2.xml" />
-  <include file="mirobot_with_fork_lift_with_car_robot3.xml" />
+  <!-- <include file="mirobot_with_fork_lift_with_car_robot3.xml" /> -->
   <!-- <include file="robot_husky_mobile.xml"/> -->
   <!-- <include file="rover4We-only.xml"/> -->
   <compiler autolimits="true" meshdir="Mirobot-STL" angle="radian" />
@@ -58,14 +58,29 @@
         conaffinity="1" />
     </body> -->
 
-    <geom name="placingplace1:low_plane" type="cylinder" pos="2.8 1 .23" size="0.23 0.01"
-      rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
-    <geom name="placingplace1:high_plane" type="cylinder" pos="2.8 1 .43" size="0.15 0.01"
-      rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1"  />
-    <geom name="placingplace2:low_plane" type="cylinder" pos="2.8 -1 .23" size="0.23 0.01"
-      rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
-    <geom name="placingplace2:high_plane" type="cylinder" pos="2.8 -1 .43" size="0.15 0.01"
-      rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" /> 
+    <!-- Placing Place 1 - Low Plane -->
+    <body name="placingplace1_low" pos="2.8 1 .23">
+      <geom name="placingplace1:low_plane" type="cylinder" pos="0 0 0" size="0.23 0.01"
+        rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
+    </body>
+
+    <!-- Placing Place 1 - High Plane -->
+    <body name="placingplace1_high" pos="2.8 1 .43">
+      <geom name="placingplace1:high_plane" type="cylinder" pos="0 0 0" size="0.15 0.01"
+        rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
+    </body>
+
+    <!-- Placing Place 2 - Low Plane -->
+    <body name="placingplace2_low" pos="2.8 -1 .23">
+      <geom name="placingplace2:low_plane" type="cylinder" pos="0 0 0" size="0.23 0.01"
+        rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
+    </body>
+
+    <!-- Placing Place 2 - High Plane -->
+    <body name="placingplace2_high" pos="2.8 -1 .43">
+      <geom name="placingplace2:high_plane" type="cylinder" pos="0 0 0" size="0.15 0.01"
+        rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
+    </body>
     <geom name="removed_object_carrier" type="box" pos="5 0 1.00" size="1.0 1.0 0.01"
       rgba="0.2 0.2 0.2 1" />
 

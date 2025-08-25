@@ -230,6 +230,7 @@ class HybridController:
 
         if self.first_robot_is_carrying or self.second_robot_is_picking:
         # if self.first_robot_is_carrying:
+        # if False:
             if self.second_robot_status == RLRobotFiniteState.IDLE:
                 
                 left_joint_id, _, right_joint_id, _ = self._get_placed_object_info()
@@ -409,19 +410,12 @@ class HybridController:
             
             elif self.second_robot_status == RLRobotFiniteState.PLACING_OBJECT:
                 adhere_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:adhere_winch")
-                self.data.ctrl[adhere_actuator_id] = 0.0  # 停止吸附
+                # self.data.ctrl[adhere_actuator_id] = 0.0  # 停止吸附
                 
-                self._deactivate_vacuum_constraint()
-                
-                self._apply_zero_action()
-                
-                # reset all robot2 joints to zero
-                for joint_id in self.robot_arm_ids:
-                    self.data.qpos[joint_id] = 0.0
-                    self.data.qvel[joint_id] = 0.0
+                # self._apply_zero_action()
 
-                self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION
-                # break_flag = True
+                # self.second_robot_status = RLRobotFiniteState.NAVIGATE_TO_PICKING_POSITION
+                break_flag = True
         else:
             self._brake_robot2()
 
@@ -912,6 +906,42 @@ class HybridController:
             FIRST_ROBOT_ACTION_SPACE_LENGTH + SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH +SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH
         ] = np.zeros(SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH, dtype=np.float32)
         
+        robot2_joint_names = [
+                    "robot2:Joint1",
+                    "robot2:Joint2", 
+                    "robot2:Joint3",
+                    "robot2:Joint4",
+                    "robot2:Joint5",
+                    "robot2:Joint6"
+                ]
+                 
+        for joint_name in robot2_joint_names:
+            try:
+                joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+                
+                # 🔥 使用正确的API：jnt_dofadr
+                joint_qvel_start = self.model.jnt_dofadr[joint_id]
+                
+                # 🔥 获取关节的DOF数量（通过检查下一个关节的起始位置）
+                if joint_id + 1 < self.model.njnt:
+                    next_joint_qvel_start = self.model.jnt_dofadr[joint_id + 1]
+                    joint_dof = next_joint_qvel_start - joint_qvel_start
+                else:
+                    # 最后一个关节，计算剩余的DOF
+                    joint_dof = self.model.nv - joint_qvel_start
+                
+                # 🔥 同时获取qpos的地址
+                joint_qpos_start = self.model.jnt_qposadr[joint_id]
+                
+                # 🔥 重置位置和速度
+                self.data.qpos[joint_qpos_start:joint_qpos_start + joint_dof] = 0.0
+                self.data.qvel[joint_qvel_start:joint_qvel_start + joint_dof] = 0.0
+                
+                # print(f"✅ 重置关节 {joint_name} (joint_id={joint_id}, dof={joint_dof})")
+                
+            except Exception as e:
+                print(f"❌ 重置关节 {joint_name} 失败: {e}")
+        
     def _brake_robot2(self):
         self.data.ctrl[
             FIRST_ROBOT_ACTION_SPACE_LENGTH :
@@ -1021,19 +1051,19 @@ class HybridController:
             print(f"❌ 停用约束失败: {e}")
 
 if __name__ == "__main__":
-    hybrid_controller = HybridController(
-            sec_robot_forward_model_path="models/final_model_continued_21600K_20250707_165449.zip.bak",
-            sec_robot_backward_model_path="models/final_model_continued_56000K_20250724_140118.zip.bak",
-            sec_robot_picking_model_paths=[
-                    "models/final_picking_model_3000K_20250722_192051.zip.bak",
-                    "final_picking_model_continued_13000K_20250729_102650.zip",
-                    "final_picking_model_5000K_20250731_124426.zip"
-                ],
-            # sec_robot_picking_model_path="final_picking_model_50000K_20250728_102844.zip",
-            sec_robot_placing_model_path=None
-        )
-    hybrid_controller.run_simulation()
+    # hybrid_controller = HybridController(
+    #         sec_robot_forward_model_path="models/final_model_continued_21600K_20250707_165449.zip.bak",
+    #         sec_robot_backward_model_path="models/final_model_continued_56000K_20250724_140118.zip.bak",
+    #         sec_robot_picking_model_paths=[
+    #                 "models/final_picking_model_3000K_20250722_192051.zip.bak",
+    #                 "models_bak/final_picking_model_continued_13000K_20250729_102650.zip",
+    #                 "models_bak/final_picking_model_5000K_20250731_124426.zip"
+    #             ],
+    #         # sec_robot_picking_model_path="final_picking_model_50000K_20250728_102844.zip",
+    #         sec_robot_placing_model_path=None
+    #     )
+    # hybrid_controller.run_simulation()
 
 
-    # state_file = "saved_states/robot_state_20250723_093442.pkl"
-    # view_saved_state(state_file)
+    state_file = "saved_states/robot_state_20250825_153503.pkl"
+    view_saved_state(state_file)

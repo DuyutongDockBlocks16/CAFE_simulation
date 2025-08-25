@@ -7,8 +7,8 @@ from config.env_config import Direction
 def place_object_on_table(model, data, left_object_position, right_object_position, object_joint_ids, shared_state, check_interval=0.01):
 
     placed_flag = False
-    next_object_position = random.choice([left_object_position, right_object_position])
-    # next_object_position = left_object_position
+    # next_object_position = random.choice([left_object_position, right_object_position])
+    next_object_position = left_object_position
     # next_object_position = right_object_position
     current_object_position = [0, 0, 0]
     i = 0
