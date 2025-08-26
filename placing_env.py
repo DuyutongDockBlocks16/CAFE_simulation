@@ -344,7 +344,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             print("✅ 任务完成！物体已成功吸附。")
         
         # 🎯 时间惩罚
-        time_penalty = -0.01
+        time_penalty = -0.005
         total_reward += time_penalty
         
         # 🎯 碰撞检测
@@ -362,7 +362,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
     def _calculate_object_dropped(self):
         object_height = self.data.xpos[self.object_body_id][2]
         
-        if self.initial_object_height is not None and object_height < self.initial_object_height - 0.1:
+        if self.initial_object_height is not None and object_height < self.initial_object_height - 0.05:
             return True
 
         return False
