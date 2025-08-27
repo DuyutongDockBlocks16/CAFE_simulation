@@ -422,7 +422,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         # print("Checking for collisions...")
         if self._check_robot_forbidden_collision():
             print("Robot2 collision with forbidden area detected, applying penalty.")
-            return -self.reward_weights["collision_penalty"], True
+            return -20, True
         
         return 0.0, False
     
