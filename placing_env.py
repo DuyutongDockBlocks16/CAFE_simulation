@@ -75,6 +75,13 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         # print all positions
         print(f"Object initial position: {self.object_initial_position}")
         print(f"Placing place2 high plane body position: {self.placing_place2_high_plane_body_position}")
+        
+        self.target_position_final = self.placing_place2_high_plane_body_position.copy()
+        self.target_position_pre = self.placing_place2_high_plane_body_position.copy()
+        self.target_position_pre[0] -= 0.3
+        self.target_position_pre[0] += 0.05
+        
+        self.current_target_position = 0 # 0: pre, 1: final
 
         obs = self._get_obs()
         # print("Observation shape:", obs.shape)
@@ -121,12 +128,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             "placingplace2:low_plane", "placingplace2:high_plane",
         ]
         
-        self.target_position_final = self.placing_place2_high_plane_body_position.copy()
-        self.target_position_pre = self.placing_place2_high_plane_body_position.copy()
-        self.target_position_pre[0] -= 0.3
-        self.target_position_pre[0] += 0.05
-        
-        self.current_target_position = 0 # 0: pre, 1: final
+
 
     def reset(self, seed=None, options=None):
         self.data.qpos[:] = self.initial_qpos
