@@ -117,9 +117,16 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             
         self.forbidden_geoms = [
             "wall_front", "wall_back", "wall_left", "wall_right",
-            "pickingplace:table0",
-            "pickingplace:table2"
+            "placingplace1:low_plane", "placingplace1:high_plane",
+            "placingplace2:low_plane", "placingplace2:high_plane",
         ]
+        
+        self.target_position_final = self.placing_place2_high_plane_body_position.copy()
+        self.target_position_pre = self.placing_place2_high_plane_body_position.copy()
+        self.target_position_pre[0] -= 0.3
+        self.target_position_pre[0] += 0.05
+        
+        self.current_target_position = 0 # 0: pre, 1: final
 
     def reset(self, seed=None, options=None):
         self.data.qpos[:] = self.initial_qpos
@@ -131,6 +138,8 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         
         self.previous_center_distance = None
         
+        self.current_target_position = 0 # 0: pre, 1: final
+        
         mujoco.mj_forward(self.model, self.data)
 
         return self._get_obs(), {}
@@ -140,9 +149,10 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         # 🎯 基础信息
         object_pos = self.data.xpos[self.object_body_id].copy()
         
-        target_position = self.placing_place2_high_plane_body_position.copy()
-        target_position[2] += 0.05
-        target_position[0] -= 0.05
+        if self.current_target_position == 0:
+            target_position = self.target_position_pre
+        else:
+            target_position = self.target_position_final
 
         # 🎯 计算contact_site到目标的信息
         object_to_target_rel = target_position - object_pos
@@ -313,11 +323,17 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         
         # 🎯 获取目标位置
         object_pos = self.data.xpos[self.object_body_id].copy()
-        target_position = self.placing_place2_high_plane_body_position.copy()
-        target_position[2] += 0.05
         
-        # 🎯 计算contact_site到目标的距离
+        
+        if self.current_target_position == 0:
+            target_position = self.target_position_pre
+        else:
+            target_position = self.target_position_final
+        
         object_to_target_distance = np.linalg.norm(target_position - object_pos)
+        if object_to_target_distance < 0.05 and self.current_target_position == 0:
+            print("Reached pre-position, moving to final target position.")
+            self.current_target_position = 1
         
         # 🎯 初始化奖励
         total_reward = 0.0
@@ -332,7 +348,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         if self.is_on_plane(object_pos, self.placing_place2_high_plane_body_position[:2], self.placing_place_radius, self.placing_place2_high_plane_body_position[2]):
             total_reward = 0.0
             self.stable_steps += 1
-            total_reward += 10.0
+            total_reward += 1.0
         else:
             self.stable_steps = 0
         
@@ -340,8 +356,8 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         task_completed = False
         if self.stable_steps >= self.required_stable_steps:
             task_completed = True
-            total_reward += 50
-            print("✅ 任务完成！物体已成功吸附。")
+            total_reward += 40.0
+            print("✅ 任务完成！")
         
         # 🎯 时间惩罚
         time_penalty = -0.005
@@ -400,186 +416,9 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             return reward
         return 0.0
 
-    def _calculate_approach_reward(self, distance):
-        # """接近阶段奖励"""
-        # # 🎯 距离越近奖励越高
-        # approach_reward = -distance * 5
-        
-        # # 🎯 适中速度奖励
-        # vacuum_sphere_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:vacuum_sphere")
-        # vacuum_vel = self.data.cvel[vacuum_sphere_body_id][:3]
-        # speed = np.linalg.norm(vacuum_vel)
-        
-        # if distance > 0.05: 
-        #     optimal_speed = 0.1  
-        #     speed_reward = -abs(speed - optimal_speed) * 1
-        # else:  # 接近时需要减速
-        #     speed_reward = -speed * 5
-        
-        # return approach_reward + speed_reward
-        return 0.0
-
-    def _calculate_alignment_reward(self):
-        """对齐阶段奖励"""
-        standard_quaternions = np.array([-0.707, 0.0, 0.707, 0.0])
-
-        robot2_vacuum_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:vacuum_sphere")
-        robot2_vacuum_quat = self.data.xquat[robot2_vacuum_body_id]
-
-        orientation_similarity = np.abs(np.dot(robot2_vacuum_quat, standard_quaternions))
-        
-        
-        # 🎯 扩展的精度奖励阶梯
-        if orientation_similarity > 0.995:    # 约5度内 - 完美对齐
-            precision_reward = 1.0 * self.reward_weights["alignment"]
-        elif orientation_similarity > 0.99:   # 约8度内 - 优秀对齐
-            precision_reward = 0.5 * self.reward_weights["alignment"]
-        elif orientation_similarity > 0.98:   # 约11度内 - 良好对齐
-            precision_reward = 0.2 * self.reward_weights["alignment"]
-        elif orientation_similarity > 0.95:   # 约18度内 - 可接受对齐
-            precision_reward = 0.1 * self.reward_weights["alignment"]
-        elif orientation_similarity > 0.9:    # 约26度内 - 一般对齐
-            precision_reward = -1 * self.reward_weights["alignment"]
-        elif orientation_similarity > 0.8:    # 约37度内 - 较差对齐
-            precision_reward = -1 * self.reward_weights["alignment"]
-        elif orientation_similarity > 0.7:    # 约46度内 - 差对齐
-            precision_reward = -1 * self.reward_weights["alignment"]
-        elif orientation_similarity > 0.5:    # 约60度内 - 很差对齐
-            precision_reward = -1 * self.reward_weights["alignment"]
-        else:                                  # 大于60度 - 最差对齐
-            precision_reward = -1.0 * self.reward_weights["alignment"]
-
-        # print(f"对齐精度奖励: {precision_reward:.3f}, robot2_vacuum_quat: {robot2_vacuum_quat}")
-
-        return precision_reward 
-
-    def _calculate_suction_reward(self, distance):
-        """吸附阶段奖励"""
-        # 🎯 距离足够近时激活吸附
-        if distance < self.suction_threshold:
-            suction_reward = 100.0
-            
-            try:
-                adhere_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:adhere_winch")
-                adhere_control = self.data.ctrl[adhere_actuator_id]
-                
-                if adhere_control > 0.6:  # 吸附激活
-                    suction_reward += 50.0
-                    print(f"🔗 真空吸附激活: {adhere_control:.3f}")
-                else:
-                    print(f"⚠️ 真空吸附未激活: {adhere_control:.3f}")
-                    
-            except Exception as e:
-                print(f"❌ 检查真空吸附控制信号时出错: {e}")
-                
-        else:
-            suction_reward = -distance * 0.2  # 距离太远的惩罚
-        
-        # 🎯 稳定性奖励
-        vacuum_sphere_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:vacuum_sphere")
-        vacuum_vel = self.data.cvel[vacuum_sphere_body_id][:3]
-        speed = np.linalg.norm(vacuum_vel)
-        
-        stability_reward = -speed * 0.1  # 吸附时需要稳定
-        
-        return suction_reward + stability_reward
-
-    def _calculate_grasp_reward(self, distance):
-        """抓取阶段奖励"""
-        grasp_reward = 0.0
-        
-        # 🎯 保持在抓取范围内
-        if distance < self.grasp_threshold:
-            self.grasp_stable_steps += 1
-            grasp_reward += 20.0  # 每步保持奖励
-
-            if adhere_control > 0.6:  # 吸附激活
-                suction_reward += 50.0
-            
-            # 🎯 连续稳定奖励
-            if self.grasp_stable_steps >= self.required_grasp_steps:
-                grasp_reward += 200.0
-                grasp_stable = True
-            else:
-                grasp_stable = False
-                
-            print(f"🤏 抓取稳定: {self.grasp_stable_steps}/{self.required_grasp_steps}")
-        else:
-            # 🎯 离开抓取范围重置
-            if self.grasp_stable_steps > 0:
-                print(f"❌ 抓取失败，重置计数器")
-            self.grasp_stable_steps = 0
-            grasp_reward -= 50.0
-            grasp_stable = False
-        
-        return grasp_reward, grasp_stable
-
-    def _calculate_lift_reward(self, object_position):
-
-        task_completed = False
-        completion_reward = 0.0
-        lift_reward = 0.0
-        suction_reward = 0.0
-
-        adhere_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:adhere_winch")
-        adhere_control = self.data.ctrl[adhere_actuator_id]
-
-        suction_is_not_activated = False
-
-        if adhere_control == 1.0:  # 吸附激活
-            suction_reward += 1.0
-            print(f"🔗 真空吸附激活: {adhere_control:.3f}")
-
-            current_height = object_position[2]
-            lift_height = current_height - 0.29696562
-        
-            lift_reward = min(lift_height * 100.0, 8.0)
-            print(f"提升高度: {lift_height:.6f}m, 奖励: {lift_reward:.2f}")
-            if lift_reward > 0.0:
-                suction_reward += 1.0
-                print(f"🔗 真空吸附激活,且物体提升: {adhere_control:.3f}")
-
-            # 检查是否保持在提升高度
-            if self.lift_height_low_bound < lift_height and lift_height < self.lift_height_high_bound:
-                self.lift_stable_steps += 1
-                # lift_reward += 2.0  # 每步保持提升奖励
-                lift_reward += 10.0  # 每步保持提升奖励
-                
-                # 连续稳定提升奖励
-                if self.lift_stable_steps >= self.required_lift_steps:
-                    completion_reward = self.reward_weights["final_completion"]
-                    task_completed = True
-                    print(f"任务完成! 提升高度: {lift_height:.6f}m, 稳定步数: {self.lift_stable_steps}")
-                else:
-                    completion_reward = 0.0
-                    task_completed = False
-                    print(f"提升稳定: {self.lift_stable_steps}/{self.required_lift_steps} (高度: {lift_height:.6f}m)")
-            elif lift_height > self.lift_height_high_bound:
-                print(f"提升高度超出范围 (高度: {lift_height:.6f}m)")
-                suction_reward = 0.0
-                lift_reward = 0.0
-                self.lift_stable_steps = 0
-                completion_reward = 0.0
-                task_completed = False
-            else:
-                # 高度不足，重置计数器
-                if self.lift_stable_steps > 0:
-                    print(f"提升高度不足或者超出，重置计数器 (高度: {lift_height:.6f}m)")
-                self.lift_stable_steps = 0
-                completion_reward = 0.0
-                task_completed = False
-
-        else:
-            suction_is_not_activated = True
-            print("❌ 真空吸附未激活，无法提升物体")
-            suction_reward -= 1.0
-            print(f"⚠️ 真空吸附未激活: {adhere_control:.3f}")
-        
-        return lift_reward + completion_reward + suction_reward, task_completed, suction_is_not_activated
-
     def _calculate_collision_penalty(self):
         # print("Checking for collisions...")
-        if self._check_robot_forbidden_collision() or self._check_vacuum_sphere_collision_with_rover_body():
+        if self._check_robot_forbidden_collision():
             print("Robot2 collision with forbidden area detected, applying penalty.")
             return -self.reward_weights["collision_penalty"], True
         

@@ -9,7 +9,7 @@ import time
 import os
 from datetime import datetime
 from config.env_config import Direction, Layer, FiniteState
-from config.training_config import PICKING_MODEL_NAME, SUCCESS_THRESHOLD
+from config.training_config import PICKING_MODEL_NAME, SUCCESS_THRESHOLD, PLACING_MODEL_NAME
 from callbacks.episode_data_collector import EpisodeBatchCollector
 from callbacks.success_check_point_saver import SuccessCheckpointCallback
 from callbacks.training_renderer import RenderCallback
