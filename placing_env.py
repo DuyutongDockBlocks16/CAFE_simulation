@@ -208,6 +208,11 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         max_position = 3.0
         max_distance = 1.0
         max_speed = 15.0
+
+        if self.is_on_plane(object_pos, self.placing_place2_high_plane_body_position[:2], self.placing_place_radius, self.placing_place2_high_plane_body_position[2]):
+            on_plane_flag = 1.0
+        else:
+            on_plane_flag = 0.0
         
         # 🎯 简化的观测空间
         observation = np.concatenate([
@@ -215,7 +220,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             object_pos / max_position,                                    # [3] - 机器人位置
             
             self.placing_place2_high_plane_body_position / max_position,  # [3] - 目标位置
-            self.placing_place_radius / max_position,                # [1] - 目标区域半径
+            [self.placing_place_radius / max_position],                # [1] - 目标区域半径
             
             # 控制信号
             [adhere_control],                                            # [1] - 吸附控制
@@ -230,11 +235,12 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             [object_to_target_distance / max_distance],                 # [1] - 距离
             [object_to_target_angle_xy / np.pi],                        # [1] - 水平角度
             [object_to_target_angle_z / np.pi],                         # [1] - 垂直角度
+            
+            vacuum_sphere_pos / max_position,                            # [3] - vacuum_sphere位置
+            vacuum_sphere_vel / max_speed,
+            vacuum_sphere_quat,
 
-            # vacuum sphere朝向（用于对齐任务）
-            vacuum_sphere_quat,                                          # [4] - 朝向四元数
-
-            self.is_on_plane(object_pos, self.placing_place2_high_plane_body_position[:2], self.placing_place_radius, self.placing_place2_high_plane_body_position[2])
+            [on_plane_flag],                                            # [1] - 是否在目标区域内（0或1）
 
         ], dtype=np.float32)
         
