@@ -344,6 +344,9 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
 
     def _calculate_reward(self):
         """简化的奖励函数 - 使用vacuum_contact_site"""
+        # 🎯 初始化奖励
+        total_reward = 0.0
+        dropped = False
         
         # 🎯 获取目标位置
         object_pos = self.data.xpos[self.object_body_id].copy()
@@ -352,15 +355,12 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         
         object_to_target_distance = np.linalg.norm(target_position - object_pos)
         if object_to_target_distance < 0.05:
-            print("Reached pre-position, moving to final target position.")
+            print("Reached pre-position, moving to next target position.")
             self.current_target_position += 1
             if self.current_target_position > 2:
                 self.current_target_position = 2
             self.previous_center_distance = None  # 重置距离以防奖励异常
-        
-        # 🎯 初始化奖励
-        total_reward = 0.0
-        dropped = False
+            total_reward += 30.0  # 到达预设位置奖励    
         
         # 🎯 距离奖励 - 核心驱动力
         distance_reward = max(self._calculate_distance_reward(object_to_target_distance), -100)
