@@ -98,9 +98,9 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             low=-np.inf, high=np.inf, shape=obs.shape, dtype=np.float32
         )
 
-        self.low_bounds = np.array([0, 0, -1.565, 0.0, 0.0], dtype=np.float32)
+        self.low_bounds = np.array([-10, 0, -1.565, 0.0, 0.0], dtype=np.float32)
         # self.low_bounds = np.array([-1.0, -1.919, -0.611, -1.565, -3.142, -0.2], dtype=np.float32)
-        self.high_bounds = np.array([0, 1.222, 1.40, 0.0, 0.0], dtype=np.float32)
+        self.high_bounds = np.array([10, 1.222, 1.40, 0.0, 0.0], dtype=np.float32)
 
         num_actuators = self.model.nu
 

@@ -185,7 +185,7 @@ def placing_model_training_parallel(load_model_path=None, num_envs=8):
         model = PPO.load(load_model_path, env=env)
 
         model.ent_coef = 0.1
-        model.learning_rate = 1e-4
+        model.learning_rate = 3e-4
 
         print(f"✅ Successfully loaded model from: {load_model_path}")
         print(f"🔄 Using {num_envs} parallel environments")
@@ -205,12 +205,12 @@ def placing_model_training_parallel(load_model_path=None, num_envs=8):
         print(f"🔄 Using {num_envs} parallel environments")
         
         model = PPO("MlpPolicy", env, verbose=1, 
-                    learning_rate=1e-4,     
+                    learning_rate=3e-4,     
                     n_steps=2048,           # 调整为并行环境合适的值
                     batch_size=256,          
-                    n_epochs=8,            
+                    n_epochs=10,            
                     ent_coef=0.02,          
-                    clip_range=0.15,          
+                    clip_range=0.2,          
                     gae_lambda=0.95,         
                     vf_coef=1.0,            
                     # max_grad_norm=0.3,
