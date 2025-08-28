@@ -98,9 +98,9 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             low=-np.inf, high=np.inf, shape=obs.shape, dtype=np.float32
         )
 
-        self.low_bounds = np.array([-10, 0, -1.565, 0.0, 0.0], dtype=np.float32)
+        self.low_bounds = np.array([0, 0, -1.565, 0.0, 0.0], dtype=np.float32)
         # self.low_bounds = np.array([-1.0, -1.919, -0.611, -1.565, -3.142, -0.2], dtype=np.float32)
-        self.high_bounds = np.array([10, 1.222, 1.40, 0.0, 0.0], dtype=np.float32)
+        self.high_bounds = np.array([0, 1.222, 1.40, 0.0, 0.0], dtype=np.float32)
 
         num_actuators = self.model.nu
 
@@ -353,7 +353,11 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         
         target_position = self.target_position_list[self.current_target_position]
         
-        object_to_target_distance = np.linalg.norm(target_position - object_pos)
+        object_xz = np.array([object_pos[0], object_pos[2]])
+        target_xz = np.array([target_position[0], target_position[2]])
+        
+        object_to_target_distance = np.linalg.norm(target_xz - object_xz)
+        
         if object_to_target_distance < 0.05:
             print("Reached pre-position, moving to next target position.")
             self.current_target_position += 1
