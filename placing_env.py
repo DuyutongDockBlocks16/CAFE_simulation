@@ -160,12 +160,14 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         # 🎯 基础信息
         object_pos = self.data.xpos[self.object_body_id].copy()
         
-        if self.current_target_position == 0:
-            target_position = self.target_position_pre_0
-        elif self.current_target_position == 1:
-            target_position = self.target_position_pre_1
-        else:
-            target_position = self.target_position_final
+        # if self.current_target_position == 0:
+        #     target_position = self.target_position_pre_0
+        # elif self.current_target_position == 1:
+        #     target_position = self.target_position_pre_1
+        # else:
+        #     target_position = self.target_position_final
+        
+        target_position = self.target_position_list[self.current_target_position]
 
         # 🎯 计算contact_site到目标的信息
         object_to_target_rel = target_position - object_pos
@@ -391,16 +393,16 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         total_reward += time_penalty
         
         # 🎯 碰撞检测
-        collision_penalty, collision_detected = self._calculate_collision_penalty()
-        # print(f"Collision detected: {collision_detected}, applying penalty: {collision_penalty:.2f}")
-        total_reward += collision_penalty
+        # collision_penalty, collision_detected = self._calculate_collision_penalty()
+        # # print(f"Collision detected: {collision_detected}, applying penalty: {collision_penalty:.2f}")
+        # total_reward += collision_penalty
         
         object_dropped = self._calculate_object_dropped()
         if object_dropped:
             dropped = True
             total_reward -= 20
             
-        return total_reward, task_completed, collision_detected, dropped
+        return total_reward, task_completed, False, dropped
     
     def _calculate_object_dropped(self):
         object_height = self.data.xpos[self.object_body_id][2]
