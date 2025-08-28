@@ -77,11 +77,20 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         print(f"Placing place2 high plane body position: {self.placing_place2_high_plane_body_position}")
         
         self.target_position_final = self.placing_place2_high_plane_body_position.copy()
-        self.target_position_pre = self.placing_place2_high_plane_body_position.copy()
-        self.target_position_pre[0] -= 0.3
-        self.target_position_pre[0] += 0.05
-        
-        self.current_target_position = 0 # 0: pre, 1: final
+        self.target_position_pre_0 = self.placing_place2_high_plane_body_position.copy()
+        self.target_position_pre_0[0] -= 0.4
+        self.target_position_pre_0[2] -= 0.1
+        self.target_position_pre_1 = self.placing_place2_high_plane_body_position.copy()
+        self.target_position_pre_1[0] -= 0.2
+        self.target_position_pre_1[2] += 0.1
+
+        self.target_position_list = [
+            self.target_position_pre_0,
+            self.target_position_pre_1,
+            self.target_position_final
+        ]
+
+        self.current_target_position = 0 # 0: pre0, 1: pre1, 2: final
 
         obs = self._get_obs()
         # print("Observation shape:", obs.shape)
@@ -110,8 +119,8 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             "robot2:link3",         
             "robot2:link4",         
             "robot2:link5",         
-            "robot2:link6",         
-            "robot2:vacuum_sphere"
+            # "robot2:link6",         
+            # "robot2:vacuum_sphere"
         ]
         
         self.robot2_body_ids = []
@@ -152,7 +161,9 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         object_pos = self.data.xpos[self.object_body_id].copy()
         
         if self.current_target_position == 0:
-            target_position = self.target_position_pre
+            target_position = self.target_position_pre_0
+        elif self.current_target_position == 1:
+            target_position = self.target_position_pre_1
         else:
             target_position = self.target_position_final
 
@@ -203,6 +214,9 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             # 基础位置和朝向信息
             object_pos / max_position,                                    # [3] - 机器人位置
             
+            self.placing_place2_high_plane_body_position / max_position,  # [3] - 目标位置
+            self.placing_place_radius / max_position,                # [1] - 目标区域半径
+            
             # 控制信号
             [adhere_control],                                            # [1] - 吸附控制
             [joint1_control],                                            # [1] - 关节1控制
@@ -219,7 +233,9 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
 
             # vacuum sphere朝向（用于对齐任务）
             vacuum_sphere_quat,                                          # [4] - 朝向四元数
-            
+
+            self.is_on_plane(object_pos, self.placing_place2_high_plane_body_position[:2], self.placing_place_radius, self.placing_place2_high_plane_body_position[2])
+
         ], dtype=np.float32)
         
         return observation
@@ -326,16 +342,15 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         # 🎯 获取目标位置
         object_pos = self.data.xpos[self.object_body_id].copy()
         
-        
-        if self.current_target_position == 0:
-            target_position = self.target_position_pre
-        else:
-            target_position = self.target_position_final
+        target_position = self.target_position_list[self.current_target_position]
         
         object_to_target_distance = np.linalg.norm(target_position - object_pos)
-        if object_to_target_distance < 0.05 and self.current_target_position == 0:
+        if object_to_target_distance < 0.05:
             print("Reached pre-position, moving to final target position.")
-            self.current_target_position = 1
+            self.current_target_position += 1
+            if self.current_target_position > 2:
+                self.current_target_position = 2
+            self.previous_center_distance = None  # 重置距离以防奖励异常
         
         # 🎯 初始化奖励
         total_reward = 0.0
