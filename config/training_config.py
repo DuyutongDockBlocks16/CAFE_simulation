@@ -6,6 +6,6 @@ PICKING_MODEL_NAME = "final_picking_model_5000K_20250731_124426.zip"
 # PICKING_MODEL_NAME = "final_picking_model_3000K_20250726_163849.zip"
 DRIVER_MODEL_NAME = "final_driver_model_continued_12000K_20250820_201438.zip"
 
-PLACING_MODEL_NAME = "models_bak/final_placing_model_10000K_20250828_153409.zip"
+PLACING_MODEL_NAME = "models_bak/final_placing_model_10000K_20250829_113315.zip"
 
 SUCCESS_THRESHOLD = 10000
