@@ -210,6 +210,25 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         max_position = 3.0
         max_distance = 1.0
         max_speed = 15.0
+        
+        # 🔥 边缘安全信息计算
+        placing_center = self.placing_place2_high_plane_body_position[:2]
+        placing_z = self.placing_place2_high_plane_body_position[2]
+        object_to_center_distance = np.linalg.norm(object_pos[:2] - placing_center)
+        edge_distance = object_to_center_distance - self.placing_place_radius
+        
+        # 🔥 高度相关信息
+        height_threshold = placing_z + 0.05
+        object_height = object_pos[2]
+        height_above_plate = object_height - placing_z
+        
+        # 🔥 边缘检测激活状态
+        edge_detection_active = object_height <= height_threshold
+        
+        # 🔥 边缘安全状态
+        safety_margin = 0.05
+        is_safe_distance = edge_distance > safety_margin
+        is_below_plate = object_height < placing_z
 
         if self.is_on_plane(object_pos, self.placing_place2_high_plane_body_position[:2], self.placing_place_radius, self.placing_place2_high_plane_body_position[2]):
             on_plane_flag = 1.0
@@ -241,6 +260,13 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             vacuum_sphere_pos / max_position,                            # [3] - vacuum_sphere位置
             vacuum_sphere_vel / max_speed,
             vacuum_sphere_quat,
+            
+            [object_to_center_distance / max_position],                  # [1] - 到托盘中心距离
+            [edge_distance / max_position],                              # [1] - 边缘距离（正值=超出，负值=内部）
+            [height_above_plate / 0.2],                                  # [1] - 相对托盘高度（归一化到20cm）
+            [float(edge_detection_active)],                              # [1] - 边缘检测是否激活
+            [float(is_safe_distance)],                                   # [1] - 是否在安全距离
+            [float(is_below_plate)],                                     # [1] - 是否在托盘下方
 
             [on_plane_flag],                                            # [1] - 是否在目标区域内（0或1）
 
@@ -372,6 +398,14 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         distance_reward = max(self._calculate_distance_reward(object_to_target_distance), -100)
         total_reward += distance_reward
         self.previous_center_distance = object_to_target_distance
+        
+        placing_center = self.placing_place2_high_plane_body_position[:2]
+        object_to_center_distance = np.linalg.norm(object_pos[:2] - placing_center)
+        edge_distance = object_to_center_distance - self.placing_place_radius
+    
+        # 🔥 基于高度的边缘安全奖励
+        edge_safety_reward = self._calculate_edge_safety_reward(edge_distance, object_pos)
+        total_reward += edge_safety_reward
         
         # if object is on plane
         if self.is_on_plane(object_pos, self.placing_place2_high_plane_body_position[:2], self.placing_place_radius, self.placing_place2_high_plane_body_position[2]):
@@ -551,3 +585,22 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             print(f"   总对齐奖励: {total_alignment_reward:.2f}")
         
         return total_alignment_reward
+    
+    def _calculate_edge_safety_reward(self, edge_distance, object_pos):
+        
+        placing_z = self.placing_place2_high_plane_body_position[2]  # 托盘高度
+        object_height = object_pos[2]  # 物体高度
+        height_threshold = placing_z + 0.05  # 触发高度：托盘高度 + 5cm
+        
+        if object_height > height_threshold:
+            # 物体在安全高度，不进行边缘检查
+            return 0.0
+        
+        # 🎯 物体接近托盘，开始边缘安全检查
+        safety_margin = 0.05  # 5cm安全边距
+
+        if edge_distance > safety_margin:
+            # 🟢 安全区域
+            return 0.0
+        else:
+            return -0.005
