@@ -350,6 +350,6 @@ if __name__ == "__main__":
     placing_env = gym.make("SecondRobotPlacingMuJoCoEnv-v0")
     # placing_model_training(placing_env, load_model_path=PLACING_MODEL_NAME)
     # placing_model_training(placing_env)
-    # placing_model_training_parallel()
+    placing_model_training_parallel()
     # placing_model_training_parallel(load_model_path=PLACING_MODEL_NAME)
-    placing_model_implementation(placing_env)
+    # placing_model_implementation(placing_env)
