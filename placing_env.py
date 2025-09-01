@@ -407,12 +407,12 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         edge_safety_reward = self._calculate_edge_safety_reward(edge_distance, object_pos)
         total_reward += edge_safety_reward
         
-        if self.current_step % 200 == 0:
-            print(f"📊 奖励分解 (Step {self.current_step}):")
-            print(f"   距离奖励: {distance_reward:.3f}")
-            print(f"   边缘奖励: {edge_safety_reward:.3f}")
-            print(f"   当前阶段: {self.current_target_position} (0=pre0, 1=pre1, 2=final)")
-            print(f"   到目标距离: {object_to_target_distance*100:.1f}cm")
+        # if self.current_step % 200 == 0:
+        #     print(f"📊 奖励分解 (Step {self.current_step}):")
+        #     print(f"   距离奖励: {distance_reward:.3f}")
+        #     print(f"   边缘奖励: {edge_safety_reward:.3f}")
+        #     print(f"   当前阶段: {self.current_target_position} (0=pre0, 1=pre1, 2=final)")
+        #     print(f"   到目标距离: {object_to_target_distance*100:.1f}cm")
             
         # if object is on plane
         if self.is_on_plane(object_pos, self.placing_place2_high_plane_body_position[:2], self.placing_place_radius, self.placing_place2_high_plane_body_position[2]):
