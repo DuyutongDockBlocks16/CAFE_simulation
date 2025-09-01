@@ -79,7 +79,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         self.target_position_final = self.placing_place2_high_plane_body_position.copy()
         self.target_position_pre_0 = self.placing_place2_high_plane_body_position.copy()
         self.target_position_pre_0[0] -= 0.4
-        self.target_position_pre_0[2] -= 0.1
+        self.target_position_pre_0[2] -= 0.15
         self.target_position_pre_1 = self.placing_place2_high_plane_body_position.copy()
         self.target_position_pre_1[0] -= 0.2
         self.target_position_pre_1[2] += 0.1
@@ -407,12 +407,12 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         edge_safety_reward = self._calculate_edge_safety_reward(edge_distance, object_pos)
         total_reward += edge_safety_reward
         
-        # if self.current_step % 200 == 0:
-        #     print(f"📊 奖励分解 (Step {self.current_step}):")
-        #     print(f"   距离奖励: {distance_reward:.3f}")
-        #     print(f"   边缘奖励: {edge_safety_reward:.3f}")
-        #     print(f"   当前阶段: {self.current_target_position} (0=pre0, 1=pre1, 2=final)")
-        #     print(f"   到目标距离: {object_to_target_distance*100:.1f}cm")
+        if self.current_step % 200 == 0:
+            print(f"📊 奖励分解 (Step {self.current_step}):")
+            print(f"   距离奖励: {distance_reward:.3f}")
+            print(f"   边缘奖励: {edge_safety_reward:.3f}")
+            print(f"   当前阶段: {self.current_target_position} (0=pre0, 1=pre1, 2=final)")
+            print(f"   到目标距离: {object_to_target_distance*100:.1f}cm")
             
         # if object is on plane
         if self.is_on_plane(object_pos, self.placing_place2_high_plane_body_position[:2], self.placing_place_radius, self.placing_place2_high_plane_body_position[2]):
@@ -521,12 +521,6 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         
         return False
 
-    def _get_suction_direction(self, quat):
-        rotation_matrix = self._quaternion_to_rotation_matrix(quat)
-        local_direction = np.array([0, 0, -1])
-        world_direction = rotation_matrix @ local_direction
-        return world_direction
-
     def _get_task_stage_info(self):
         """获取任务阶段信息（用于调试）"""
         info = {
@@ -608,6 +602,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
 
         if edge_distance > safety_margin:
             # 🟢 安全区域
-            return 0.0
+            return 0.01
         else:
-            return -0.05
+            penalty = (safety_margin - edge_distance) * 2.0 + 0.05 # 距离越近惩罚越大
+            return -penalty

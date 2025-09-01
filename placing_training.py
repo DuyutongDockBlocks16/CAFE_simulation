@@ -185,7 +185,7 @@ def placing_model_training_parallel(load_model_path=None, num_envs=8):
         model = PPO.load(load_model_path, env=env)
 
         model.ent_coef = 0.1
-        model.learning_rate = 3e-4
+        model.learning_rate = 1e-4
 
         print(f"✅ Successfully loaded model from: {load_model_path}")
         print(f"🔄 Using {num_envs} parallel environments")
@@ -205,7 +205,7 @@ def placing_model_training_parallel(load_model_path=None, num_envs=8):
         print(f"🔄 Using {num_envs} parallel environments")
         
         model = PPO("MlpPolicy", env, verbose=1, 
-                    learning_rate=3e-4,     
+                    learning_rate=1e-4,     
                     n_steps=2048,           # 调整为并行环境合适的值
                     batch_size=256,          
                     n_epochs=10,            
@@ -223,10 +223,10 @@ def placing_model_training_parallel(load_model_path=None, num_envs=8):
 
     ent_scheduler = EntCoefficientScheduler(
         initial_ent_coef=0.02,  
-        final_ent_coef=0.02,  
+        # final_ent_coef=0.02,  
         # initial_ent_coef=0.1,  
         # final_ent_coef=0.1,           
-        # final_ent_coef=0.0005,          
+        final_ent_coef=0.0005,          
         total_timesteps=total_additional_steps,
         schedule_type='exponential',    
         verbose=1
@@ -350,6 +350,6 @@ if __name__ == "__main__":
     placing_env = gym.make("SecondRobotPlacingMuJoCoEnv-v0")
     # placing_model_training(placing_env, load_model_path=PLACING_MODEL_NAME)
     # placing_model_training(placing_env)
-    placing_model_training_parallel()
+    # placing_model_training_parallel()
     # placing_model_training_parallel(load_model_path=PLACING_MODEL_NAME)
-    # placing_model_implementation(placing_env)
+    placing_model_implementation(placing_env)
