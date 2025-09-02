@@ -5,13 +5,14 @@ from first_robot_controller.mirobot_controller import MirobotController, Directi
 from util_threads.object_remover import remove_object_on_plane
 from util_threads.object_placer import place_object_on_table
 from util_threads.object_remover_step_counter import remove_object_on_plane_with_step_counter
+from utils.mujoco_object_color_randomiser import randomize_materials_at_runtime
 import threading
 import time
 import numpy as np
 import random
 
 def get_data_and_model():
-    model = mujoco.MjModel.from_xml_path("xml/scene_mirobot.xml")
+    model = mujoco.MjModel.from_xml_path("xml/collab_mirobot.xml")
     data = mujoco.MjData(model)
     time_step = 0.005
     model.opt.timestep = time_step  
@@ -80,6 +81,8 @@ def main():
     right_object_position = [-1, -2.5, 0.28]
 
     model, data = get_data_and_model()
+    
+    randomize_materials_at_runtime(model)
 
     object_ids = get_object_ids(model)
     object_joint_ids = []
@@ -98,26 +101,26 @@ def main():
     start_object_placer_thread(model, data, object_joint_ids, left_object_position, right_object_position, shared_state)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
-        controller = MirobotController(model, data, left_object_position, right_object_position)
+        # controller = MirobotController(model, data, left_object_position, right_object_position)
         
-        step = 0
-        while True:
-            status = controller.get_status()
-            # print(f"Current object index: {shared_state['current_object_index']}")
-            if shared_state["current_object_index"] >= len(object_joint_ids) and status == FiniteState.IDLE:
-                print("All objects have been placed. Exit")
-                break
+        # step = 0
+        # while True:
+        #     status = controller.get_status()
+        #     # print(f"Current object index: {shared_state['current_object_index']}")
+        #     if shared_state["current_object_index"] >= len(object_joint_ids) and status == FiniteState.IDLE:
+        #         print("All objects have been placed. Exit")
+        #         break
 
-            controller.step(shared_state["current_object_position"])
+        #     controller.step(shared_state["current_object_position"])
 
-            mujoco.mj_step(model, data)
-            step += 1
+        #     mujoco.mj_step(model, data)
+        #     step += 1
 
-            if not np.all(np.isfinite(data.qacc)) or np.any(np.abs(data.qacc) > 1e7):
-                print("QACC error detected! Simulation unstable, exiting loop.")
-                break
+        #     if not np.all(np.isfinite(data.qacc)) or np.any(np.abs(data.qacc) > 1e7):
+        #         print("QACC error detected! Simulation unstable, exiting loop.")
+        #         break
                 
-            viewer.sync()
+        #     viewer.sync()
 
         while viewer.is_running():
             mujoco.mj_step(model, data)

@@ -2,7 +2,7 @@ import gymnasium as gym
 import numpy as np
 import mujoco
 import mujoco.viewer
-from mirobot_controller import MirobotController 
+from first_robot_controller.mirobot_controller import MirobotController 
 import threading
 from util_threads.object_remover import remove_object_on_plane
 from util_threads.object_placer import place_object_on_table

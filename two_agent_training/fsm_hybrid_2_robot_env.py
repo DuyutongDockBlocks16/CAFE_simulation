@@ -1,7 +1,7 @@
 import gymnasium as gym
 import numpy as np
 import mujoco
-from mirobot_controller import MirobotController
+from first_robot_controller.mirobot_controller import MirobotController
 from config.env_config import Direction, Layer, FiniteState, RLRobotFiniteState
 import concurrent.futures
 from util_threads.object_placer import place_object_on_table

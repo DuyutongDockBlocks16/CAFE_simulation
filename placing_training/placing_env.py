@@ -79,7 +79,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         self.target_position_final = self.placing_place2_high_plane_body_position.copy()
         self.target_position_pre_0 = self.placing_place2_high_plane_body_position.copy()
         self.target_position_pre_0[0] -= 0.4
-        self.target_position_pre_0[2] -= 0.15
+        self.target_position_pre_0[2] -= 0.12
         self.target_position_pre_1 = self.placing_place2_high_plane_body_position.copy()
         self.target_position_pre_1[0] -= 0.2
         self.target_position_pre_1[2] += 0.1
@@ -448,7 +448,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
     def _calculate_object_dropped(self):
         object_height = self.data.xpos[self.object_body_id][2]
         
-        if self.initial_object_height is not None and object_height < self.initial_object_height - 0.05:
+        if self.initial_object_height is not None and object_height < 0.27:
             return True
 
         return False

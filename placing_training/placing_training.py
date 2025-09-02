@@ -1,3 +1,10 @@
+import sys
+import os
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir) 
+sys.path.insert(0, parent_dir)
+
 import gymnasium as gym
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor, DummyVecEnv
@@ -25,7 +32,7 @@ gym.register(
     id="SecondRobotPlacingMuJoCoEnv-v0",
     entry_point="placing_env:SecondRobotPlacingMuJoCoEnv",
     kwargs={
-        "xml_path": "xml/scene_mirobot.xml",
+        "xml_path": "../xml/scene_mirobot.xml",
         # "state_filepaths": [
         #     "saved_states/robot_state_20250726_154225.pkl", 
         #     # "saved_states/robot_state_20250721_151909.pkl"
@@ -34,7 +41,7 @@ gym.register(
         # "state_filepath": "saved_states/robot_state_20250726_154225.pkl"
         # "state_filepath": "saved_states/robot_state_20250728_173657.pkl"
         # "state_filepath": "saved_states/robot_state_20250728_191655.pkl"
-        "state_filepath": "saved_states/robot_state_20250825_153503.pkl"
+        "state_filepath": "../saved_states/robot_state_20250825_153503.pkl"
     }
 )
 
@@ -52,7 +59,7 @@ def make_env(rank, seed=0):
 
 def placing_model_training(env, load_model_path=None):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = f"./logs/placing_episode_data_{timestamp}.jsonl"
+    output_file = f"../logs/placing_episode_data_{timestamp}.jsonl"
 
     episode_collector = EpisodeBatchCollector(
         output_file=output_file,
@@ -164,7 +171,7 @@ def placing_model_training_parallel(load_model_path=None, num_envs=8):
     env = VecMonitor(env)
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = f"./logs/placing_episode_data_{timestamp}.jsonl"
+    output_file = f"../logs/placing_episode_data_{timestamp}.jsonl"
 
     episode_collector = EpisodeBatchCollector(
         output_file=output_file,

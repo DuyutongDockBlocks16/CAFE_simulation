@@ -8,7 +8,7 @@ from datetime import datetime
 from config.env_config import Direction, Layer, FiniteState, RLRobotFiniteState
 from utils.mujoco_state_saver import save_mujoco_state_to_file
 from utils.mujoco_state_loader import load_mujoco_state_from_file, restore_mujoco_state, view_saved_state
-from mirobot_controller import MirobotController
+from first_robot_controller.mirobot_controller import MirobotController
 from util_threads.object_remover import remove_object_on_plane
 from util_threads.object_placer import place_object_on_table
 from util_threads.object_remover_step_counter import remove_object_on_plane_with_step_counter

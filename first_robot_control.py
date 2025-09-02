@@ -1,6 +1,6 @@
 import mujoco
 import mujoco.viewer
-from mirobot_controller import MirobotController, Direction, Layer
+from first_robot_controller.mirobot_controller import MirobotController, Direction, Layer
 from util_threads.object_remover import remove_object_on_plane
 from util_threads.object_placer import place_object_on_table
 import threading
