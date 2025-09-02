@@ -29,6 +29,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
     def __init__(self, xml_path, state_filepath, action_repeat=4):
         super().__init__()
         self.max_steps = 8000
+        self.current_step = 0
         
         self.previous_center_distance = None
 
@@ -91,6 +92,15 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         ]
 
         self.current_target_position = 0 # 0: pre0, 1: pre1, 2: final
+        
+        self.current_phase = "HORIZONTAL_ESCAPE"  # 初始阶段
+        self.phase_start_step = 0
+        self.previous_height = None  # 用于计算下降速度
+        self.previous_horizontal_pos = None  # 用于水平稳定性检查
+        
+        # 🔥 阶段切换的调试信息
+        self.phase_history = []  # 记录阶段切换历史
+
 
         obs = self._get_obs()
         # print("Observation shape:", obs.shape)
@@ -151,6 +161,17 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         
         self.current_target_position = 0 # 0: pre, 1: final
         
+        self.current_phase = "HORIZONTAL_ESCAPE"
+        self.phase_start_step = 0
+        self.previous_height = None
+        self.previous_horizontal_pos = None
+        self.phase_history = []
+        
+        # 🔥 初始化高度信息
+        object_pos = self.data.xpos[self.object_body_id].copy()
+        self.previous_height = object_pos[2] - self.placing_place2_high_plane_body_position[2]
+        self.previous_horizontal_pos = object_pos[:2].copy()
+        
         mujoco.mj_forward(self.model, self.data)
 
         return self._get_obs(), {}
@@ -159,13 +180,6 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
     def _get_obs(self):
         # 🎯 基础信息
         object_pos = self.data.xpos[self.object_body_id].copy()
-        
-        # if self.current_target_position == 0:
-        #     target_position = self.target_position_pre_0
-        # elif self.current_target_position == 1:
-        #     target_position = self.target_position_pre_1
-        # else:
-        #     target_position = self.target_position_final
         
         target_position = self.target_position_list[self.current_target_position]
 
@@ -234,42 +248,84 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             on_plane_flag = 1.0
         else:
             on_plane_flag = 0.0
+            
+        plate_center = self.placing_place2_high_plane_body_position[:2]
+        plate_z = self.placing_place2_high_plane_body_position[2]
+        plate_radius = self.placing_place_radius
+        
+        horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
+        escape_distance = horizontal_distance - plate_radius
+        height_above_plate = object_pos[2] - plate_z
+        
+        # 🔥 阶段编码（独热编码）
+        phase_encoding = [0.0, 0.0, 0.0, 0.0]  # [ESCAPE, LIFTING, APPROACH, DESCENT]
+        if self.current_phase == "HORIZONTAL_ESCAPE":
+            phase_encoding[0] = 1.0
+        elif self.current_phase == "VERTICAL_LIFTING":
+            phase_encoding[1] = 1.0
+        elif self.current_phase == "HORIZONTAL_APPROACH":
+            phase_encoding[2] = 1.0
+        elif self.current_phase == "PRECISION_DESCENT":
+            phase_encoding[3] = 1.0
+        
+        # 🔥 阶段进度指示器
+        if self.current_phase == "HORIZONTAL_ESCAPE":
+            stage_progress = min(1.0, max(0.0, escape_distance / 0.08))
+        elif self.current_phase == "VERTICAL_LIFTING":
+            stage_progress = min(1.0, max(0.0, height_above_plate / 0.20))
+        elif self.current_phase == "HORIZONTAL_APPROACH":
+            stage_progress = min(1.0, max(0.0, (0.15 - horizontal_distance) / 0.10))
+        else:  # PRECISION_DESCENT
+            target_height = 0.02
+            stage_progress = min(1.0, max(0.0, (0.10 - abs(height_above_plate - target_height)) / 0.08))
+        
+        # 🔥 运动趋势信息
+        if self.previous_horizontal_pos is not None:
+            horizontal_velocity = np.linalg.norm(object_pos[:2] - self.previous_horizontal_pos)
+            horizontal_velocity_normalized = min(1.0, horizontal_velocity / 0.02)  # 2cm/step为最大
+        else:
+            horizontal_velocity_normalized = 0.0
+        
+        if self.previous_height is not None:
+            vertical_velocity = (object_pos[2] - self.placing_place2_high_plane_body_position[2]) - self.previous_height
+            vertical_velocity_normalized = np.clip(vertical_velocity / 0.01, -1.0, 1.0)  # 1cm/step为最大
+        else:
+            vertical_velocity_normalized = 0.0
         
         # 🎯 简化的观测空间
         observation = np.concatenate([
-            # 基础位置和朝向信息
-            object_pos / max_position,                                    # [3] - 机器人位置
+            object_pos / max_position,                                    # [3]
+            self.placing_place2_high_plane_body_position / max_position,  # [3]
+            [self.placing_place_radius / max_position],                   # [1]
             
-            self.placing_place2_high_plane_body_position / max_position,  # [3] - 目标位置
-            [self.placing_place_radius / max_position],                # [1] - 目标区域半径
+            # 控制信号 [6]
+            [adhere_control, joint1_control, joint2_control, 
+            joint3_control, joint4_control, joint5_control],
             
-            # 控制信号
-            [adhere_control],                                            # [1] - 吸附控制
-            [joint1_control],                                            # [1] - 关节1控制
-            [joint2_control],                                            # [1] - 关节2控制
-            [joint3_control],                                            # [1] - 关节3控制
-            [joint4_control],                                            # [1] - 关节4控制
-            [joint5_control],                                            # [1] - 关节5控制
-
-            # 🎯 核心：object到目标的信息
-            object_to_target_rel / max_distance,                        # [3] - 相对位置
-            [object_to_target_distance / max_distance],                 # [1] - 距离
-            [object_to_target_angle_xy / np.pi],                        # [1] - 水平角度
-            [object_to_target_angle_z / np.pi],                         # [1] - 垂直角度
+            # 目标导航信息 [6]
+            object_to_target_rel / max_distance,                         # [3]
+            [object_to_target_distance / max_distance],                  # [1]
+            [object_to_target_angle_xy / np.pi],                         # [1]
+            [object_to_target_angle_z / np.pi],                          # [1]
             
-            vacuum_sphere_pos / max_position,                            # [3] - vacuum_sphere位置
-            vacuum_sphere_vel / max_speed,
-            vacuum_sphere_quat,
+            # vacuum sphere信息 [10]
+            vacuum_sphere_pos / max_position,                            # [3]
+            vacuum_sphere_vel / max_speed,                               # [6]
+            vacuum_sphere_quat,                                          # [7]  
             
-            [object_to_center_distance / max_position],                  # [1] - 到托盘中心距离
-            [edge_distance / max_position],                              # [1] - 边缘距离（正值=超出，负值=内部）
-            [height_above_plate / 0.2],                                  # [1] - 相对托盘高度（归一化到20cm）
-            [float(edge_detection_active)],                              # [1] - 边缘检测是否激活
-            [float(is_safe_distance)],                                   # [1] - 是否在安全距离
-            [float(is_below_plate)],                                     # [1] - 是否在托盘下方
-
-            [on_plane_flag],                                            # [1] - 是否在目标区域内（0或1）
-
+            # 🔥 阶段管理信息 [11维]
+            phase_encoding,                                              # [4] - 当前阶段独热编码
+            [stage_progress],                                            # [1] - 阶段进度
+            [escape_distance / 0.2],                                     # [1] - 脱离距离
+            [height_above_plate / 0.3],                                  # [1] - 相对高度
+            [horizontal_distance / 0.2],                                 # [1] - 水平距离
+            [horizontal_velocity_normalized],                            # [1] - 水平速度
+            [vertical_velocity_normalized],                              # [1] - 垂直速度
+            [float(self.current_step - self.phase_start_step) / 100.0],  # [1] - 阶段持续时间
+            
+            # 成功指示器 [1]
+            [on_plane_flag],                                            # [1]
+            
         ], dtype=np.float32)
         
         return observation
@@ -371,79 +427,149 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             self.viewer.sync()
 
     def _calculate_reward(self):
-        """简化的奖励函数 - 使用vacuum_contact_site"""
-        # 🎯 初始化奖励
         total_reward = 0.0
         dropped = False
         
-        # 🎯 获取目标位置
+        # 🎯 获取基础信息
         object_pos = self.data.xpos[self.object_body_id].copy()
+        plate_center = self.placing_place2_high_plane_body_position[:2]
+        plate_z = self.placing_place2_high_plane_body_position[2]
+        plate_radius = self.placing_place_radius
         
-        target_position = self.target_position_list[self.current_target_position]
+        # 🔥 更新当前阶段
+        current_phase = self.get_current_phase(object_pos, plate_center, plate_z, plate_radius)
         
-        object_xz = np.array([object_pos[0], object_pos[2]])
-        target_xz = np.array([target_position[0], target_position[2]])
-        
-        object_to_target_distance = np.linalg.norm(target_xz - object_xz)
-        
-        if object_to_target_distance < 0.05:
-            print("Reached pre-position, moving to next target position.")
-            self.current_target_position += 1
-            if self.current_target_position > 2:
-                self.current_target_position = 2
-            self.previous_center_distance = None  # 重置距离以防奖励异常
-            total_reward += 30.0  # 到达预设位置奖励    
-        
-        # 🎯 距离奖励 - 核心驱动力
-        distance_reward = max(self._calculate_distance_reward(object_to_target_distance), -100)
-        total_reward += distance_reward
-        self.previous_center_distance = object_to_target_distance
-        
-        placing_center = self.placing_place2_high_plane_body_position[:2]
-        object_to_center_distance = np.linalg.norm(object_pos[:2] - placing_center)
-        edge_distance = object_to_center_distance - self.placing_place_radius
-    
-        # 🔥 基于高度的边缘安全奖励
-        edge_safety_reward = self._calculate_edge_safety_reward(edge_distance, object_pos)
-        total_reward += edge_safety_reward
-        
-        # if self.current_step % 200 == 0:
-        #     print(f"📊 奖励分解 (Step {self.current_step}):")
-        #     print(f"   距离奖励: {distance_reward:.3f}")
-        #     print(f"   边缘奖励: {edge_safety_reward:.3f}")
-        #     print(f"   当前阶段: {self.current_target_position} (0=pre0, 1=pre1, 2=final)")
-        #     print(f"   到目标距离: {object_to_target_distance*100:.1f}cm")
+        # 🔥 阶段特定奖励
+        if current_phase == "HORIZONTAL_ESCAPE":
+            phase_reward = self.horizontal_escape_phase_reward(object_pos, plate_center, plate_radius)
+            status = "🔄 水平脱离"
+        elif current_phase == "VERTICAL_LIFTING":
+            phase_reward = self.vertical_lifting_phase_reward(object_pos, plate_center, plate_z, plate_radius)
+            status = "⬆️ 垂直抬升"
+        elif current_phase == "HORIZONTAL_APPROACH":
+            phase_reward = self.horizontal_approach_phase_reward(object_pos, plate_center, plate_z)
+            status = "➡️ 水平接近"
+        else:  # PRECISION_DESCENT
+            phase_reward = self.precision_descent_phase_reward(object_pos, plate_center, plate_z)
+            status = "⬇️ 精确下降"
             
-        # if object is on plane
-        if self.is_on_plane(object_pos, self.placing_place2_high_plane_body_position[:2], self.placing_place_radius, self.placing_place2_high_plane_body_position[2]):
-            total_reward = 0.0
+        phase_reward = phase_reward * 0.1
+        
+        total_reward += phase_reward
+        
+        # 🔥 阶段完成奖励（鼓励快速通过前期阶段）
+        stage_completion_reward = self._calculate_stage_completion_reward(current_phase, object_pos, plate_center, plate_z, plate_radius)
+        total_reward += stage_completion_reward
+        
+        # 🔥 全局安全检查
+        safety_reward = self._calculate_global_safety_reward(object_pos, plate_center, plate_z, plate_radius)
+        total_reward += safety_reward
+        
+        # 🔥 最终放置检测
+        if self.is_on_plane(object_pos, plate_center, plate_radius, plate_z):
+            total_reward = 5.0  # 重置为稳定奖励
             self.stable_steps += 1
-            total_reward += 1.0
+            if self.current_step % 20 == 0:
+                print(f"🎯 稳定放置: {self.stable_steps}/{self.required_stable_steps}")
         else:
             self.stable_steps = 0
         
-        # 🎯 任务完成检测
-        task_completed = False
+        # 🔥 任务完成检测
         if self.stable_steps >= self.required_stable_steps:
-            task_completed = True
-            total_reward += 40.0
-            print("✅ 任务完成！")
+            total_reward += 50.0
+            print("🎉 任务完成！")
+            return total_reward, True, False, dropped
         
-        # 🎯 时间惩罚
-        time_penalty = -0.005
+        # 🔥 基础惩罚
+        time_penalty = -0.01  # 时间惩罚，鼓励快速完成
         total_reward += time_penalty
         
-        # 🎯 碰撞检测
-        # collision_penalty, collision_detected = self._calculate_collision_penalty()
-        # # print(f"Collision detected: {collision_detected}, applying penalty: {collision_penalty:.2f}")
-        # total_reward += collision_penalty
-        
-        object_dropped = self._calculate_object_dropped()
-        if object_dropped:
+        # 🔥 掉落检测
+        if self._calculate_object_dropped():
             dropped = True
-            total_reward -= 20
+            total_reward -= 30.0
+            print("💥 物体掉落!")
+        
+        # 🔥 更新历史信息
+        self.previous_height = object_pos[2] - plate_z
+        self.previous_horizontal_pos = object_pos[:2].copy()
+        
+        # # 🔥 调试信息
+        # if self.current_step % 150 == 0:
+        #     horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
+        #     escape_distance = horizontal_distance - plate_radius
+        #     height_above_plate = object_pos[2] - plate_z
             
-        return total_reward, task_completed, False, dropped
+        #     print(f"📊 Step {self.current_step}: {status}")
+        #     print(f"   阶段奖励: {phase_reward:.2f} | 完成奖励: {stage_completion_reward:.2f}")
+        #     print(f"   脱离距离: {escape_distance*100:.1f}cm | 高度: {height_above_plate*100:.1f}cm")
+        #     print(f"   水平距中心: {horizontal_distance*100:.1f}cm")
+        #     print(f"   总奖励: {total_reward:.2f}")
+        
+        return total_reward, False, False, dropped
+
+    def _calculate_stage_completion_reward(self, current_phase, object_pos, plate_center, plate_z, plate_radius):
+        """阶段完成奖励 - 鼓励快速进入下一阶段"""
+        
+        horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
+        escape_distance = horizontal_distance - plate_radius
+        height_above_plate = object_pos[2] - plate_z
+        
+        completion_reward = 0.0
+        
+        if current_phase == "HORIZONTAL_ESCAPE":
+            # 鼓励快速脱离到安全距离
+            if escape_distance > 0.08:
+                completion_reward = 2.0  # 已完全脱离
+            elif escape_distance > 0.05:
+                completion_reward = 1.0  # 接近完成
+                
+        elif current_phase == "VERTICAL_LIFTING":
+            # 鼓励达到安全高度
+            if height_above_plate > 0.18:
+                completion_reward = 2.0  # 接近完成抬升
+            elif height_above_plate > 0.12:
+                completion_reward = 1.0  # 抬升进行中
+                
+        elif current_phase == "HORIZONTAL_APPROACH":
+            # 鼓励接近目标中心
+            if horizontal_distance < 0.05:
+                completion_reward = 3.0  # 非常接近
+            elif horizontal_distance < 0.08:
+                completion_reward = 1.5  # 接近目标
+                
+        elif current_phase == "PRECISION_DESCENT":
+            # 鼓励精确下降
+            if 0.01 <= height_above_plate <= 0.03:
+                completion_reward = 4.0  # 理想高度
+            elif height_above_plate < 0.08:
+                completion_reward = 2.0  # 正在下降
+        
+        return completion_reward
+
+    def _calculate_global_safety_reward(self, object_pos, plate_center, plate_z, plate_radius):
+        """全局安全奖励 - 适用于所有阶段"""
+        
+        safety_reward = 0.0
+        # 🔥 防止物体掉落到过低位置
+        critical_height = plate_z - 0.15  # 盘子下方15cm为危险线
+        if object_pos[2] < critical_height:
+            height_danger = (critical_height - object_pos[2]) * 50
+            safety_reward -= height_danger
+        
+        # 🔥 防止在不合适的阶段进入危险区域
+        height_above_plate = object_pos[2] - plate_z
+        horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
+        
+        # 如果高度太低但还没到精确下降阶段，给予惩罚
+        if (height_above_plate < 0.08 and 
+            self.current_phase != "PRECISION_DESCENT" and 
+            horizontal_distance > 0.05):
+            safety_reward -= 5.0  # 危险下降惩罚
+            
+        safety_reward = safety_reward * 0.1
+        
+        return safety_reward
     
     def _calculate_object_dropped(self):
         object_height = self.data.xpos[self.object_body_id][2]
@@ -530,62 +656,6 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             "grasp_stable_steps": self.grasp_stable_steps
         }
         return info
-
-    def _new_calculate_progressive_alignment_reward(self):
-        """对齐阶段奖励 - 同时鼓励接近和对正"""
-        
-        # 🎯 朝向奖励
-        standard_quaternions = np.array([-0.707, 0.0, 0.707, 0.0])
-        robot2_vacuum_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:vacuum_sphere")
-        robot2_vacuum_quat = self.data.xquat[robot2_vacuum_body_id]
-        orientation_similarity = np.abs(np.dot(robot2_vacuum_quat, standard_quaternions))
-        
-        # 🎯 位置信息
-        body_id = self.model.jnt_bodyid[self.active_joint_id]
-        object_position = self.data.xpos[body_id]
-        alignment_target_position = object_position.copy()
-        alignment_target_position[2] += 0.0085
-        
-        sphere_center, _ = self._get_vacuum_sphere_center()
-        
-        # 🎯 关键改进：分别计算高度和XY距离
-        height_diff = abs(sphere_center[2] - alignment_target_position[2])
-        xy_distance = np.sqrt((sphere_center[0] - alignment_target_position[0])**2 + 
-                            (sphere_center[1] - alignment_target_position[1])**2)
-        
-        # 🎯 高度奖励（垂直对齐）
-        height_reward = max(0, (self.suction_height_threshold * 3 - height_diff) / (self.suction_height_threshold * 3)) * 20
-        
-        # 🎯 XY位置奖励（水平对齐）
-        xy_reward = max(0, (self.suction_radius_threshold * 3 - xy_distance) / (self.suction_radius_threshold * 3)) * 20
-        
-        # 🎯 朝向奖励（但要求距离足够近才给高奖励）
-        distance_factor = max(0, 1.0 - (height_diff + xy_distance) / 0.02)  # 距离越近因子越大
-        
-        if orientation_similarity > 0.995:
-            orientation_reward = 30.0 * (1.0 + distance_factor)  # 近距离时朝向奖励翻倍
-        elif orientation_similarity > 0.99:
-            orientation_reward = 15.0 * (1.0 + distance_factor * 0.5)
-        elif orientation_similarity > 0.98:
-            orientation_reward = 8.0
-        elif orientation_similarity > 0.95:
-            orientation_reward = 3.0
-        else:
-            orientation_reward = -5.0  # 朝向太差给惩罚
-        
-        # 🎯 组合奖励：三个维度都重要
-        total_alignment_reward = (height_reward + xy_reward + orientation_reward) * self.reward_weights["alignment"] / 100.0
-        
-        # 🎯 调试信息
-        if self.current_step % 100 == 0:
-            print(f"🎯 对齐奖励分解:")
-            print(f"   朝向相似度: {orientation_similarity:.4f} -> 奖励: {orientation_reward:.2f}")
-            print(f"   高度差: {height_diff*1000:.1f}mm -> 奖励: {height_reward:.2f}")
-            print(f"   XY距离: {xy_distance*1000:.1f}mm -> 奖励: {xy_reward:.2f}")
-            print(f"   距离因子: {distance_factor:.3f}")
-            print(f"   总对齐奖励: {total_alignment_reward:.2f}")
-        
-        return total_alignment_reward
     
     def _calculate_edge_safety_reward(self, edge_distance, object_pos):
         
@@ -606,3 +676,135 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         else:
             penalty = (safety_margin - edge_distance) * 2.0 + 0.05 # 距离越近惩罚越大
             return -penalty
+        
+    def horizontal_escape_phase_reward(self, object_pos, plate_center, plate_radius):
+        
+        horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
+        escape_distance = horizontal_distance - plate_radius
+        
+        if escape_distance > 0.08:  
+            return 5.0  
+        elif escape_distance > 0.05:
+            return 3.0  
+        elif escape_distance > 0.02:
+            return 1.0  
+        elif escape_distance > 0:
+            return 0.5  
+        else:
+            penetration = abs(escape_distance)
+            return -2.0 * (1.0 + penetration * 10) 
+
+    def vertical_lifting_phase_reward(self, object_pos, plate_center, plate_z, plate_radius):
+        horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
+        escape_distance = horizontal_distance - plate_radius
+        height_above_plate = object_pos[2] - plate_z
+        
+        if escape_distance < 0.05:
+            return -5.0
+        
+        target_safe_height = 0.20  
+        
+        if height_above_plate > target_safe_height:
+            return 3.0  
+        elif height_above_plate > target_safe_height * 0.8:
+            return 2.0  
+        elif height_above_plate > target_safe_height * 0.5:
+            return 1.0  
+        else:
+            return 0.2  
+        
+    def horizontal_approach_phase_reward(self, object_pos, plate_center, plate_z):
+        height_above_plate = object_pos[2] - plate_z
+        horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
+        
+        min_safe_height = 0.15 
+        if height_above_plate < min_safe_height:
+            return -8.0  
+        
+        if horizontal_distance < 0.08:  
+            return 5.0
+        elif horizontal_distance < 0.15:  
+            return 1.0 * (0.15 - horizontal_distance) / 0.07
+        else:
+            return -0.5  
+        
+    def precision_descent_phase_reward(self, object_pos, plate_center, plate_z):
+        horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
+        height_above_plate = object_pos[2] - plate_z
+        
+        if horizontal_distance < 0.08:
+            return -3.0 
+        
+        descent_reward = 0.0
+        
+        if 0.01 <= height_above_plate <= 0.025:
+            descent_reward = 8.0
+        elif height_above_plate < 0.05:
+            descent_reward = 4.0
+        elif height_above_plate < 0.10:
+            descent_reward = 2.0
+        else:
+            descent_reward = 0.5
+
+        if hasattr(self, 'previous_height'):
+            descent_rate = self.previous_height - height_above_plate
+            if 0.002 <= descent_rate <= 0.008:  
+                speed_bonus = 2.0
+            elif descent_rate > 0.015:  
+                speed_bonus = -5.0
+            else:
+                speed_bonus = 0.0
+        else:
+            speed_bonus = 0.0
+            
+        self.previous_height = height_above_plate
+
+        return descent_reward + speed_bonus
+
+    def get_current_phase(self, object_pos, plate_center, plate_z, plate_radius):
+        
+        horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
+        escape_distance = horizontal_distance - plate_radius
+        height_above_plate = object_pos[2] - plate_z
+        
+        # 🔥 阶段判断逻辑（严格按照顺序）
+        if escape_distance <= 0.05:
+            # 🔴 还在盘子覆盖范围内或太接近，必须先脱离
+            new_phase = "HORIZONTAL_ESCAPE"
+            condition = f"脱离距离{escape_distance*100:.1f}cm ≤ 5cm"
+            
+        elif height_above_plate < 0.15:
+            # 🟡 已脱离但高度不够，需要抬升
+            new_phase = "VERTICAL_LIFTING"
+            condition = f"高度{height_above_plate*100:.1f}cm < 15cm"
+            
+        elif horizontal_distance > 0.08:
+            # 🟦 高度足够但需要水平接近目标
+            new_phase = "HORIZONTAL_APPROACH"
+            condition = f"水平距离{horizontal_distance*100:.1f}cm > 8cm"
+            
+        else:
+            # 🟢 可以开始精确下降
+            new_phase = "PRECISION_DESCENT"
+            condition = f"已对准，开始下降"
+        
+        # 🔥 阶段切换检测和记录
+        if new_phase != self.current_phase:
+            duration = self.current_step - self.phase_start_step
+            print(f"🎯 阶段切换: {self.current_phase} -> {new_phase}")
+            print(f"   切换原因: {condition}")
+            print(f"   持续步数: {duration}")
+            
+            # 记录阶段历史
+            self.phase_history.append({
+                'from_phase': self.current_phase,
+                'to_phase': new_phase,
+                'step': self.current_step,
+                'duration': duration,
+                'condition': condition
+            })
+            
+            self.current_phase = new_phase
+            self.phase_start_step = self.current_step
+        
+        return new_phase
