@@ -480,15 +480,17 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             print("🎉 任务完成！")
             return total_reward, True, False, dropped
         
-        # 🔥 基础惩罚
-        time_penalty = -0.01  # 时间惩罚，鼓励快速完成
-        total_reward += time_penalty
+        # # 🔥 基础惩罚
+        # time_penalty = -0.01  # 时间惩罚，鼓励快速完成
+        # total_reward += time_penalty
         
         # 🔥 掉落检测
         if self._calculate_object_dropped():
             dropped = True
-            total_reward -= 30.0
+            total_reward -= 500.0
             print("💥 物体掉落!")
+        else:
+            total_reward += 0.1 # 物体未掉落小奖励
         
         # 🔥 更新历史信息
         self.previous_height = object_pos[2] - plate_z
