@@ -717,7 +717,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         plate_thickness = 0.01 
         distance_to_plate_bottom = abs(height_above_plate) - plate_thickness/2
 
-        print(distance_to_plate_bottom)
+        # print(distance_to_plate_bottom)
 
         # 🔥 如果太接近盘子底部，强烈惩罚
         if distance_to_plate_bottom < 0.05:  # 距离盘子底部小于5cm
