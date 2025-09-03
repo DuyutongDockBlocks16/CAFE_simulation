@@ -26,7 +26,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
                 print(f"❌ 设置{actuator_name}失败: {e}")
     
     
-    def __init__(self, xml_path, state_filepath, action_repeat=4):
+    def __init__(self, xml_path, state_filepath, action_repeat=1):
         super().__init__()
         self.max_steps = 8000
         self.current_step = 0
@@ -491,6 +491,11 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             print("💥 物体掉落!")
         else:
             total_reward += 0.1 # 物体未掉落小奖励
+            
+        if self._object_detached_from_end_effector():
+            dropped = True
+            total_reward -= 500.0
+            print("💥 物体脱离末端执行器!")
         
         # 🔥 更新历史信息
         self.previous_height = object_pos[2] - plate_z
@@ -509,6 +514,28 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         #     print(f"   总奖励: {total_reward:.2f}")
         
         return total_reward, False, False, dropped
+    
+    def _object_detached_from_end_effector(self):
+        robot2_vacuum_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:vacuum_sphere")
+
+        object_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, self.object_body_name)
+        
+        for i in range(self.data.ncon):
+            contact = self.data.contact[i]
+            geom1_id = contact.geom1
+            geom2_id = contact.geom2
+            
+            # 🔥 获取几何体对应的body ID
+            body1_id = self.model.geom_bodyid[geom1_id]
+            body2_id = self.model.geom_bodyid[geom2_id]
+            
+            # 🔥 检查是否是rover和vacuum sphere之间的碰撞
+            if ((body1_id == robot2_vacuum_id and body2_id == object_body_id) or
+                (body1_id == object_body_id and body2_id == robot2_vacuum_id)):
+                
+                return False
+        
+        return True
 
     def _calculate_stage_completion_reward(self, current_phase, object_pos, plate_center, plate_z, plate_radius):
         """阶段完成奖励 - 鼓励快速进入下一阶段"""
@@ -684,17 +711,43 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
         escape_distance = horizontal_distance - plate_radius
         
-        if escape_distance > 0.08:  
-            return 5.0  
+        plate_z = self.placing_place2_high_plane_body_position[2]
+        height_above_plate = object_pos[2] - plate_z
+        
+        plate_thickness = 0.01 
+        distance_to_plate_bottom = abs(height_above_plate) - plate_thickness/2
+
+        print(distance_to_plate_bottom)
+
+        # 🔥 如果太接近盘子底部，强烈惩罚
+        if distance_to_plate_bottom < 0.05:  # 距离盘子底部小于5cm
+            height_danger_penalty = -10.0 * (0.05 - distance_to_plate_bottom) / 0.05
+            # print(f"   ⚠️ 太接近盘子底部! 惩罚: {height_danger_penalty:.2f}")
+        elif distance_to_plate_bottom < 0.07:  # 距离盘子底部小于7cm
+            height_danger_penalty = -5.0
+            # print(f"   ⚠️ 接近盘子底部，小心!")
+        elif distance_to_plate_bottom < 0.08:  # 距离盘子底部小于9cm
+            height_danger_penalty = -3.0
+            # print(f"   ⚠️ 较为接近盘子底部")
+        else:
+            height_danger_penalty = 0.0  # 距离足够安全
+            # print(f"   ✅ 距离盘子底部安全")
+        
+        if escape_distance > 0.08:
+            base_escape_reward = 5.0
         elif escape_distance > 0.05:
-            return 3.0  
+            base_escape_reward = 3.0
         elif escape_distance > 0.02:
-            return 1.0  
+            base_escape_reward = 1.0
         elif escape_distance > 0:
-            return 0.5  
+            base_escape_reward = 0.5
         else:
             penetration = abs(escape_distance)
-            return -2.0 * (1.0 + penetration * 10) 
+            base_escape_reward = -2.0 * (1.0 + penetration * 10)
+            
+        total_reward = base_escape_reward + height_danger_penalty
+        
+        return total_reward
 
     def vertical_lifting_phase_reward(self, object_pos, plate_center, plate_z, plate_radius):
         horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
@@ -770,11 +823,11 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         height_above_plate = object_pos[2] - plate_z
         
         # 🔥 阶段判断逻辑（严格按照顺序）
-        if escape_distance <= 0.05:
+        if escape_distance <= 0.08:
             # 🔴 还在盘子覆盖范围内或太接近，必须先脱离
             new_phase = "HORIZONTAL_ESCAPE"
-            condition = f"脱离距离{escape_distance*100:.1f}cm ≤ 5cm"
-            
+            condition = f"脱离距离{escape_distance*100:.1f}cm ≤ 8cm"
+
         elif height_above_plate < 0.15:
             # 🟡 已脱离但高度不够，需要抬升
             new_phase = "VERTICAL_LIFTING"

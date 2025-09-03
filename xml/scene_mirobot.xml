@@ -69,6 +69,10 @@
       <geom name="placingplace1:high_plane" type="cylinder" pos="0 0 0" size="0.15 0.01"
         rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
     </body>
+    <!-- <body name="placingplace1_high" pos="0 0 .43">
+      <geom name="placingplace1:high_plane" type="cylinder" pos="0 0 0" size="0.5 0.01"
+        rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
+    </body> -->
 
     <!-- Placing Place 2 - Low Plane -->
     <body name="placingplace2_low" pos="2.8 -1 .23">
@@ -81,6 +85,16 @@
       <geom name="placingplace2:high_plane" type="cylinder" pos="0 0 0" size="0.15 0.01"
         rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
     </body>
+
+    <!-- <body name="placingplace3_high" pos="2.55 -1 .43">
+      <geom name="placingplace3:high_plane" type="cylinder" pos="0 0 0" size="0.01 0.01"
+        rgba="1.0 0.2 0.2 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
+    </body> -->
+    <!-- <body name="placingplace3_high" pos="2.56 -1.09 .43">
+      <geom name="placingplace3:high_plane" type="cylinder" pos="0 0 0" size="0.01 0.01"
+        rgba="1.0 0.2 0.2 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
+    </body> -->
+
     <geom name="removed_object_carrier" type="box" pos="5 0 1.00" size="1.0 1.0 0.01"
       rgba="0.2 0.2 0.2 1" />
 
