@@ -393,8 +393,20 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         
         self.current_step += 1
         
+        # Track cumulative reward
+        if not hasattr(self, 'cumulative_reward'):
+            self.cumulative_reward = 0.0
+        
+        self.cumulative_reward += reward
+        
         # info = self._get_info()
-        info = {}
+        info = {
+            'cumulative_reward': self.cumulative_reward,
+            'step_reward': reward,
+            'current_phase': self.current_phase
+        }
+        
+        # print(f"Step {self.current_step} | Step Reward: {reward:.2f} | Cumulative Reward: {self.cumulative_reward:.2f}")
         
         return obs, reward, terminated, truncated, info
 
@@ -721,23 +733,38 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         total_reward = 0.0
         
         # 🔥 水平脱离进步奖励
-        if hasattr(self, 'previous_escape_distance') and self.previous_escape_distance is not None:
-            escape_progress = escape_distance - self.previous_escape_distance
-            if escape_progress > 0:  # 脱离距离增加（远离盘子）
-                horizontal_progress_reward = escape_progress * 100.0  # 放大奖励
-                # print(f"   ✅ 水平脱离进步: +{escape_progress*100:.1f}cm, 奖励: +{horizontal_progress_reward:.2f}")
-            else:  # 脱离距离减少（接近盘子）
-                horizontal_progress_reward = escape_progress * 50.0  # 较小的惩罚
-                # print(f"   ❌ 水平脱离倒退: {escape_progress*100:.1f}cm, 惩罚: {horizontal_progress_reward:.2f}")
-            total_reward += horizontal_progress_reward
+        # if hasattr(self, 'previous_escape_distance') and self.previous_escape_distance is not None:
+        #     escape_progress = escape_distance - self.previous_escape_distance
+        #     if escape_progress > 0:  # 脱离距离增加（远离盘子）
+        #         horizontal_progress_reward = escape_progress * 100.0  # 放大奖励
+        #         # print(f"   ✅ 水平脱离进步: +{escape_progress*100:.1f}cm, 奖励: +{horizontal_progress_reward:.2f}")
+        #     else:  # 脱离距离减少（接近盘子）
+        #         horizontal_progress_reward = escape_progress * 50.0  # 较小的惩罚
+        #         # print(f"   ❌ 水平脱离倒退: {escape_progress*100:.1f}cm, 惩罚: {horizontal_progress_reward:.2f}")
+        #     total_reward += horizontal_progress_reward
         
         # 🔥 危险区域额外惩罚（保留一些绝对约束）
-        if distance_to_plate_bottom < 0.05:  # 极度危险
-            danger_penalty = -5.0
+        if distance_to_plate_bottom < 0.03:  # 极度危险
+            danger_penalty = -0.5
             total_reward += danger_penalty
             # print(f"   🚨 极度危险区域惩罚: {danger_penalty:.2f}")
+            
+        rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
+        rover_pos = self.data.xpos[rover_body_id][:2]
         
-        # 🔥 更新历史数据 - 关键修复！
+        current_distance_to_rover = np.linalg.norm(object_pos[:2] - rover_pos)
+        
+        if hasattr(self, 'previous_distance_to_rover') and self.previous_distance_to_rover is not None:
+            rover_approach_progress = self.previous_distance_to_rover - current_distance_to_rover
+            if rover_approach_progress > 0: 
+                rover_direction_reward = rover_approach_progress * 80.0
+            else:
+                rover_direction_reward = rover_approach_progress * 80.0
+            
+            total_reward += rover_direction_reward
+        
+        # 更新小车距离历史
+        self.previous_distance_to_rover = current_distance_to_rover
         self.previous_escape_distance = escape_distance
         self.previous_plate_bottom_distance = distance_to_plate_bottom  # 这里确保变量被设置
         
