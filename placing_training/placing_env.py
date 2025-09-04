@@ -498,21 +498,21 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
 
         
         # 🔥 调试信息
-        if self.current_step % 1 == 0:
-            horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
-            escape_distance = horizontal_distance - plate_radius
-            height_above_plate = object_pos[2] - plate_z
+        # if self.current_step % 1 == 0:
+        #     horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
+        #     escape_distance = horizontal_distance - plate_radius
+        #     height_above_plate = object_pos[2] - plate_z
             
-            plate_thickness = 0.01 
-            distance_to_plate_bottom = abs(height_above_plate) - plate_thickness/2
+        #     plate_thickness = 0.01 
+        #     distance_to_plate_bottom = abs(height_above_plate) - plate_thickness/2
             
-            print(f"📊 Step {self.current_step}: {status}")
-            print(f"   阶段奖励: {phase_reward:.2f} | 完成奖励: {stage_completion_reward:.2f}")
-            print(f"   脱离距离: {escape_distance*100:.1f}cm | 高度: {height_above_plate*100:.1f}cm")
-            print(f"   水平距中心: {horizontal_distance*100:.1f}cm")
-            print(f"   距离盘底: {distance_to_plate_bottom*100:.1f}cm")
-            print(f"   当前阶段奖励: {phase_reward:.2f}")
-            print(f"   总奖励: {total_reward:.2f}")
+        #     print(f"📊 Step {self.current_step}: {status}")
+        #     print(f"   阶段奖励: {phase_reward:.2f} | 完成奖励: {stage_completion_reward:.2f}")
+        #     print(f"   脱离距离: {escape_distance*100:.1f}cm | 高度: {height_above_plate*100:.1f}cm")
+        #     print(f"   水平距中心: {horizontal_distance*100:.1f}cm")
+        #     print(f"   距离盘底: {distance_to_plate_bottom*100:.1f}cm")
+        #     print(f"   当前阶段奖励: {phase_reward:.2f}")
+        #     print(f"   总奖励: {total_reward:.2f}")
         
         return total_reward, False, False, dropped
     
