@@ -453,17 +453,13 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             phase_reward = self.precision_descent_phase_reward(object_pos, plate_center, plate_z)
             status = "⬇️ 精确下降"
             
-        phase_reward = phase_reward * 0.1
+        phase_reward = phase_reward * 1
         
         total_reward += phase_reward
         
         # 🔥 阶段完成奖励（鼓励快速通过前期阶段）
         stage_completion_reward = self._calculate_stage_completion_reward(current_phase, object_pos, plate_center, plate_z, plate_radius)
         total_reward += stage_completion_reward
-        
-        # 🔥 全局安全检查
-        safety_reward = self._calculate_global_safety_reward(object_pos, plate_center, plate_z, plate_radius)
-        total_reward += safety_reward
         
         # 🔥 最终放置检测
         if self.is_on_plane(object_pos, plate_center, plate_radius, plate_z):
@@ -487,31 +483,36 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         # 🔥 掉落检测
         if self._calculate_object_dropped():
             dropped = True
-            total_reward -= 500.0
+            total_reward -= 50.0
             print("💥 物体掉落!")
-        else:
-            total_reward += 0.1 # 物体未掉落小奖励
             
         if self._object_detached_from_end_effector():
             dropped = True
-            total_reward -= 500.0
+            total_reward -= 50.0
             print("💥 物体脱离末端执行器!")
         
         # 🔥 更新历史信息
         self.previous_height = object_pos[2] - plate_z
         self.previous_horizontal_pos = object_pos[:2].copy()
         
-        # # 🔥 调试信息
-        # if self.current_step % 150 == 0:
-        #     horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
-        #     escape_distance = horizontal_distance - plate_radius
-        #     height_above_plate = object_pos[2] - plate_z
+
+        
+        # 🔥 调试信息
+        if self.current_step % 1 == 0:
+            horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
+            escape_distance = horizontal_distance - plate_radius
+            height_above_plate = object_pos[2] - plate_z
             
-        #     print(f"📊 Step {self.current_step}: {status}")
-        #     print(f"   阶段奖励: {phase_reward:.2f} | 完成奖励: {stage_completion_reward:.2f}")
-        #     print(f"   脱离距离: {escape_distance*100:.1f}cm | 高度: {height_above_plate*100:.1f}cm")
-        #     print(f"   水平距中心: {horizontal_distance*100:.1f}cm")
-        #     print(f"   总奖励: {total_reward:.2f}")
+            plate_thickness = 0.01 
+            distance_to_plate_bottom = abs(height_above_plate) - plate_thickness/2
+            
+            print(f"📊 Step {self.current_step}: {status}")
+            print(f"   阶段奖励: {phase_reward:.2f} | 完成奖励: {stage_completion_reward:.2f}")
+            print(f"   脱离距离: {escape_distance*100:.1f}cm | 高度: {height_above_plate*100:.1f}cm")
+            print(f"   水平距中心: {horizontal_distance*100:.1f}cm")
+            print(f"   距离盘底: {distance_to_plate_bottom*100:.1f}cm")
+            print(f"   当前阶段奖励: {phase_reward:.2f}")
+            print(f"   总奖励: {total_reward:.2f}")
         
         return total_reward, False, False, dropped
     
@@ -707,7 +708,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             return -penalty
         
     def horizontal_escape_phase_reward(self, object_pos, plate_center, plate_radius):
-        
+    
         horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
         escape_distance = horizontal_distance - plate_radius
         
@@ -716,36 +717,29 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         
         plate_thickness = 0.01 
         distance_to_plate_bottom = abs(height_above_plate) - plate_thickness/2
-
-        # print(distance_to_plate_bottom)
-
-        # 🔥 如果太接近盘子底部，强烈惩罚
-        if distance_to_plate_bottom < 0.05:  # 距离盘子底部小于5cm
-            height_danger_penalty = -10.0 * (0.05 - distance_to_plate_bottom) / 0.05
-            # print(f"   ⚠️ 太接近盘子底部! 惩罚: {height_danger_penalty:.2f}")
-        elif distance_to_plate_bottom < 0.07:  # 距离盘子底部小于7cm
-            height_danger_penalty = -5.0
-            # print(f"   ⚠️ 接近盘子底部，小心!")
-        elif distance_to_plate_bottom < 0.08:  # 距离盘子底部小于9cm
-            height_danger_penalty = -3.0
-            # print(f"   ⚠️ 较为接近盘子底部")
-        else:
-            height_danger_penalty = 0.0  # 距离足够安全
-            # print(f"   ✅ 距离盘子底部安全")
         
-        if escape_distance > 0.08:
-            base_escape_reward = 5.0
-        elif escape_distance > 0.05:
-            base_escape_reward = 3.0
-        elif escape_distance > 0.02:
-            base_escape_reward = 1.0
-        elif escape_distance > 0:
-            base_escape_reward = 0.5
-        else:
-            penetration = abs(escape_distance)
-            base_escape_reward = -2.0 * (1.0 + penetration * 10)
-            
-        total_reward = base_escape_reward + height_danger_penalty
+        total_reward = 0.0
+        
+        # 🔥 水平脱离进步奖励
+        if hasattr(self, 'previous_escape_distance') and self.previous_escape_distance is not None:
+            escape_progress = escape_distance - self.previous_escape_distance
+            if escape_progress > 0:  # 脱离距离增加（远离盘子）
+                horizontal_progress_reward = escape_progress * 100.0  # 放大奖励
+                # print(f"   ✅ 水平脱离进步: +{escape_progress*100:.1f}cm, 奖励: +{horizontal_progress_reward:.2f}")
+            else:  # 脱离距离减少（接近盘子）
+                horizontal_progress_reward = escape_progress * 50.0  # 较小的惩罚
+                # print(f"   ❌ 水平脱离倒退: {escape_progress*100:.1f}cm, 惩罚: {horizontal_progress_reward:.2f}")
+            total_reward += horizontal_progress_reward
+        
+        # 🔥 危险区域额外惩罚（保留一些绝对约束）
+        if distance_to_plate_bottom < 0.05:  # 极度危险
+            danger_penalty = -5.0
+            total_reward += danger_penalty
+            # print(f"   🚨 极度危险区域惩罚: {danger_penalty:.2f}")
+        
+        # 🔥 更新历史数据 - 关键修复！
+        self.previous_escape_distance = escape_distance
+        self.previous_plate_bottom_distance = distance_to_plate_bottom  # 这里确保变量被设置
         
         return total_reward
 
