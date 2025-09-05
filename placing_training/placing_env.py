@@ -108,7 +108,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             low=-np.inf, high=np.inf, shape=obs.shape, dtype=np.float32
         )
 
-        self.low_bounds = np.array([0, 0, -1.565, 0.0, 0.0], dtype=np.float32)
+        self.low_bounds = np.array([0, -0.611, -1.565, 0.0, 0.0], dtype=np.float32)
         # self.low_bounds = np.array([-1.0, -1.919, -0.611, -1.565, -3.142, -0.2], dtype=np.float32)
         self.high_bounds = np.array([0, 1.222, 1.40, 0.0, 0.0], dtype=np.float32)
 
@@ -205,9 +205,8 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         
         joint2_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint2")
         joint2_control_raw = self.data.ctrl[joint2_actuator_id]
-        joint2_control = (joint2_control_raw - (0)) / (1.222 - (0)) * 2 - 1
-        # joint2_control = (joint2_control_raw - (-0.611)) / (1.222 - (-0.611)) * 2 - 1
-        
+        joint2_control = (joint2_control_raw - (-0.611)) / (1.222 - (-0.611)) * 2 - 1
+
         joint3_actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "robot2:Joint3")
         joint3_control_raw = self.data.ctrl[joint3_actuator_id]
         joint3_control = (joint3_control_raw - (-1.565)) / (1.40 - (-1.565)) * 2 - 1
@@ -240,7 +239,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         edge_detection_active = object_height <= height_threshold
         
         # 🔥 边缘安全状态
-        safety_margin = 0.05
+        safety_margin = 0.02
         is_safe_distance = edge_distance > safety_margin
         is_below_plate = object_height < placing_z
 
@@ -316,12 +315,15 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             # 🔥 阶段管理信息 [11维]
             phase_encoding,                                              # [4] - 当前阶段独热编码
             [stage_progress],                                            # [1] - 阶段进度
-            [escape_distance / 0.2],                                     # [1] - 脱离距离
-            [height_above_plate / 0.3],                                  # [1] - 相对高度
-            [horizontal_distance / 0.2],                                 # [1] - 水平距离
+            [escape_distance / 1.0],                                     # [1] - 脱离距离
+            [height_above_plate / 1.0],                                  # [1] - 相对高度
+            [horizontal_distance / 1.0],                                 # [1] - 水平距离
             [horizontal_velocity_normalized],                            # [1] - 水平速度
             [vertical_velocity_normalized],                              # [1] - 垂直速度
             [float(self.current_step - self.phase_start_step) / 100.0],  # [1] - 阶段持续时间
+            
+            [is_safe_distance],
+            [is_below_plate],
             
             # 成功指示器 [1]
             [on_plane_flag],                                            # [1]
@@ -364,7 +366,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         terminated = False
         truncated = False
         
-        self.data.ctrl[ACTION_SPACE_REDUCTION:ACTION_SPACE_REDUCTION+len(real_action)] = real_action
+        # self.data.ctrl[ACTION_SPACE_REDUCTION:ACTION_SPACE_REDUCTION+len(real_action)] = real_action
         
         mujoco.mj_step(self.model, self.data)
         
@@ -743,11 +745,12 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         #         # print(f"   ❌ 水平脱离倒退: {escape_progress*100:.1f}cm, 惩罚: {horizontal_progress_reward:.2f}")
         #     total_reward += horizontal_progress_reward
         
-        # 🔥 危险区域额外惩罚（保留一些绝对约束）
-        if distance_to_plate_bottom < 0.03:  # 极度危险
-            danger_penalty = -0.5
-            total_reward += danger_penalty
-            # print(f"   🚨 极度危险区域惩罚: {danger_penalty:.2f}")
+        if escape_distance < 0.02:
+            # 🔥 危险区域额外惩罚（保留一些绝对约束）
+            if distance_to_plate_bottom < 0.03:  # 极度危险
+                danger_penalty = -1.0
+                total_reward += danger_penalty
+                # print(f"   🚨 极度危险区域惩罚: {danger_penalty:.2f}")
             
         rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
         rover_pos = self.data.xpos[rover_body_id][:2]
