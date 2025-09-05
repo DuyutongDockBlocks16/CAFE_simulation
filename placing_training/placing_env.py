@@ -366,7 +366,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         terminated = False
         truncated = False
         
-        # self.data.ctrl[ACTION_SPACE_REDUCTION:ACTION_SPACE_REDUCTION+len(real_action)] = real_action
+        self.data.ctrl[ACTION_SPACE_REDUCTION:ACTION_SPACE_REDUCTION+len(real_action)] = real_action
         
         mujoco.mj_step(self.model, self.data)
         
