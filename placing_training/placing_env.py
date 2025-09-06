@@ -28,7 +28,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
     
     def __init__(self, xml_path, state_filepath, action_repeat=1):
         super().__init__()
-        self.max_steps = 8000
+        self.max_steps = 32000
         self.current_step = 0
         
         self.previous_center_distance = None
@@ -101,7 +101,10 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         # 🔥 阶段切换的调试信息
         self.phase_history = []  # 记录阶段切换历史
 
-
+        self.escape_completed = False
+        self.lifting_completed = False
+        self.approach_completed = False
+        
         obs = self._get_obs()
         # print("Observation shape:", obs.shape)
         self.observation_space = gym.spaces.Box(
@@ -147,8 +150,6 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             "placingplace2:low_plane", "placingplace2:high_plane",
         ]
         
-
-
     def reset(self, seed=None, options=None):
         self.data.qpos[:] = self.initial_qpos
         self.data.qvel[:] = self.initial_qvel
@@ -166,6 +167,10 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         self.previous_height = None
         self.previous_horizontal_pos = None
         self.phase_history = []
+        
+        self.escape_completed = False
+        self.lifting_completed = False
+        self.approach_completed = False
         
         # 🔥 初始化高度信息
         object_pos = self.data.xpos[self.object_body_id].copy()
@@ -451,7 +456,10 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         plate_radius = self.placing_place_radius
         
         # 🔥 更新当前阶段
-        current_phase = self.get_current_phase(object_pos, plate_center, plate_z, plate_radius)
+        current_phase, phase_switch = self.get_current_phase(object_pos, plate_center, plate_z, plate_radius)
+        
+        if phase_switch:
+            total_reward += 20
         
         # 🔥 阶段特定奖励
         if current_phase == "HORIZONTAL_ESCAPE":
@@ -491,8 +499,8 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             return total_reward, True, False, dropped
         
         # # 🔥 基础惩罚
-        # time_penalty = -0.01  # 时间惩罚，鼓励快速完成
-        # total_reward += time_penalty
+        time_penalty = -0.001  # 时间惩罚，鼓励快速完成
+        total_reward += time_penalty
         
         # 🔥 掉落检测
         if self._calculate_object_dropped():
@@ -778,41 +786,59 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         escape_distance = horizontal_distance - plate_radius
         height_above_plate = object_pos[2] - plate_z
         
-        if escape_distance < 0.05:
-            return -5.0
+        total_reward = 0.0
         
-        target_safe_height = 0.20  
+        if escape_distance < 0.01:
+            return -1.0
+
+        target_safe_height = 0.06
+
+        distance_to_target_height = abs(height_above_plate - target_safe_height)
+    
+        if hasattr(self, 'previous_distance_to_target_height') and self.previous_distance_to_target_height is not None:
+            target_approach_progress = self.previous_distance_to_target_height - distance_to_target_height
+            
+            if target_approach_progress > 0:  # 接近目标高度
+                target_approach_reward = target_approach_progress * 80.0
+                total_reward += target_approach_reward
+            else:  # 远离目标高度
+                target_approach_reward = target_approach_progress * 40.0
+                total_reward += target_approach_reward
+            
+        self.previous_distance_to_target_height = distance_to_target_height
         
-        if height_above_plate > target_safe_height:
-            return 3.0  
-        elif height_above_plate > target_safe_height * 0.8:
-            return 2.0  
-        elif height_above_plate > target_safe_height * 0.5:
-            return 1.0  
-        else:
-            return 0.2  
+        return total_reward
         
     def horizontal_approach_phase_reward(self, object_pos, plate_center, plate_z):
         height_above_plate = object_pos[2] - plate_z
         horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
         
-        min_safe_height = 0.15 
+        min_safe_height = 0.03 
         if height_above_plate < min_safe_height:
-            return -8.0  
+            return -1.0  
         
-        if horizontal_distance < 0.08:  
-            return 5.0
-        elif horizontal_distance < 0.15:  
-            return 1.0 * (0.15 - horizontal_distance) / 0.07
-        else:
-            return -0.5  
+        total_reward = 0.0
+    
+        # 🔥 水平接近进步奖励
+        if hasattr(self, 'previous_horizontal_approach_distance') and self.previous_horizontal_approach_distance is not None:
+            approach_progress = self.previous_horizontal_approach_distance - horizontal_distance
+            
+            if approach_progress > 0:  # 接近目标中心
+                approach_progress_reward = approach_progress * 120.0  # 奖励接近
+                total_reward += approach_progress_reward
+            else:  # 远离目标中心
+                approach_progress_reward = approach_progress * 60.0  # 惩罚远离
+                total_reward += approach_progress_reward
+        
+        self.previous_horizontal_approach_distance = horizontal_distance
+        return total_reward
         
     def precision_descent_phase_reward(self, object_pos, plate_center, plate_z):
         horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
         height_above_plate = object_pos[2] - plate_z
         
         if horizontal_distance < 0.08:
-            return -3.0 
+            return -1.0 
         
         descent_reward = 0.0
         
@@ -841,34 +867,45 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         return descent_reward + speed_bonus
 
     def get_current_phase(self, object_pos, plate_center, plate_z, plate_radius):
-        
+    
         horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
         escape_distance = horizontal_distance - plate_radius
         height_above_plate = object_pos[2] - plate_z
         
-        # 🔥 阶段判断逻辑（严格按照顺序）
-        if escape_distance <= 0.08:
-            # 🔴 还在盘子覆盖范围内或太接近，必须先脱离
-            new_phase = "HORIZONTAL_ESCAPE"
-            condition = f"脱离距离{escape_distance*100:.1f}cm ≤ 8cm"
-
-        elif height_above_plate < 0.15:
-            # 🟡 已脱离但高度不够，需要抬升
-            new_phase = "VERTICAL_LIFTING"
-            condition = f"高度{height_above_plate*100:.1f}cm < 15cm"
+        # 🔥 检查各阶段完成条件
+        if not self.escape_completed and escape_distance > 0.05:
+            self.escape_completed = True
+            print("✅ 水平脱离阶段完成！")
             
-        elif horizontal_distance > 0.08:
-            # 🟦 高度足够但需要水平接近目标
+        if not self.lifting_completed and height_above_plate > 0.06 and self.escape_completed:
+            self.lifting_completed = True
+            print("✅ 垂直抬升阶段完成！")
+            
+        if not self.approach_completed and horizontal_distance < 0.06 and self.lifting_completed:
+            self.approach_completed = True
+            print("✅ 水平接近阶段完成！")
+        
+        # 🔥 基于完成标志的不可逆阶段判断
+        if not self.escape_completed:
+            new_phase = "HORIZONTAL_ESCAPE"
+            condition = f"水平脱离中，脱离距离{escape_distance*100:.1f}cm (需要>5cm)"
+            
+        elif not self.lifting_completed:
+            new_phase = "VERTICAL_LIFTING"
+            condition = f"垂直抬升中，高度{height_above_plate*100:.1f}cm (需要>12cm)"
+            
+        elif not self.approach_completed:
             new_phase = "HORIZONTAL_APPROACH"
-            condition = f"水平距离{horizontal_distance*100:.1f}cm > 8cm"
+            condition = f"水平接近中，距离{horizontal_distance*100:.1f}cm (需要<6cm)"
             
         else:
-            # 🟢 可以开始精确下降
             new_phase = "PRECISION_DESCENT"
-            condition = f"已对准，开始下降"
+            condition = f"精确下降中，高度{height_above_plate*100:.1f}cm"
         
+        phase_switch = False
         # 🔥 阶段切换检测和记录
         if new_phase != self.current_phase:
+            phase_switch = True
             duration = self.current_step - self.phase_start_step
             print(f"🎯 阶段切换: {self.current_phase} -> {new_phase}")
             print(f"   切换原因: {condition}")
@@ -886,4 +923,4 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             self.current_phase = new_phase
             self.phase_start_step = self.current_step
         
-        return new_phase
+        return new_phase, phase_switch

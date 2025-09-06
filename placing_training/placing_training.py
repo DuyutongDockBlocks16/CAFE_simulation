@@ -226,14 +226,14 @@ def placing_model_training_parallel(load_model_path=None, num_envs=8):
 
     # total_additional_steps = 16_000_000
     # total_additional_steps = 500_000
-    total_additional_steps = 10_000_000
+    total_additional_steps = 50_000_000
 
     ent_scheduler = EntCoefficientScheduler(
         initial_ent_coef=0.02,  
-        # final_ent_coef=0.02,  
+        final_ent_coef=0.02,  
         # initial_ent_coef=0.1,  
         # final_ent_coef=0.1,           
-        final_ent_coef=0.0005,          
+        # final_ent_coef=0.0005,          
         total_timesteps=total_additional_steps,
         schedule_type='exponential',    
         verbose=1
