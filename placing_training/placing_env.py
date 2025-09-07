@@ -70,7 +70,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         self.placing_place2_high_plane_body_position = self.data.xpos[self.placing_place2_high_plane_body_id].copy()
         self.placing_place_radius = 0.15
 
-        self.required_stable_steps = 20
+        self.required_stable_steps = 5
         self.stable_steps = 0
         
         # print all positions
@@ -459,7 +459,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         current_phase, phase_switch = self.get_current_phase(object_pos, plate_center, plate_z, plate_radius)
         
         if phase_switch:
-            total_reward += 20
+            total_reward += 100
         
         # 🔥 阶段特定奖励
         if current_phase == "HORIZONTAL_ESCAPE":
@@ -480,14 +480,14 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         total_reward += phase_reward
         
         # 🔥 阶段完成奖励（鼓励快速通过前期阶段）
-        stage_completion_reward = self._calculate_stage_completion_reward(current_phase, object_pos, plate_center, plate_z, plate_radius)
-        total_reward += stage_completion_reward
+        # stage_completion_reward = self._calculate_stage_completion_reward(current_phase, object_pos, plate_center, plate_z, plate_radius)
+        # total_reward += stage_completion_reward
         
         # 🔥 最终放置检测
         if self.is_on_plane(object_pos, plate_center, plate_radius, plate_z):
             total_reward = 5.0  # 重置为稳定奖励
             self.stable_steps += 1
-            if self.current_step % 20 == 0:
+            if self.current_step % 40 == 0:
                 print(f"🎯 稳定放置: {self.stable_steps}/{self.required_stable_steps}")
         else:
             self.stable_steps = 0
@@ -499,8 +499,8 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             return total_reward, True, False, dropped
         
         # # 🔥 基础惩罚
-        time_penalty = -0.001  # 时间惩罚，鼓励快速完成
-        total_reward += time_penalty
+        # time_penalty = -0.001  # 时间惩罚，鼓励快速完成
+        # total_reward += time_penalty
         
         # 🔥 掉落检测
         if self._calculate_object_dropped():
@@ -516,8 +516,6 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         # 🔥 更新历史信息
         self.previous_height = object_pos[2] - plate_z
         self.previous_horizontal_pos = object_pos[:2].copy()
-        
-
         
         # 🔥 调试信息
         # if self.current_step % 1 == 0:
@@ -598,30 +596,6 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
                 completion_reward = 2.0  # 正在下降
         
         return completion_reward
-
-    def _calculate_global_safety_reward(self, object_pos, plate_center, plate_z, plate_radius):
-        """全局安全奖励 - 适用于所有阶段"""
-        
-        safety_reward = 0.0
-        # 🔥 防止物体掉落到过低位置
-        critical_height = plate_z - 0.15  # 盘子下方15cm为危险线
-        if object_pos[2] < critical_height:
-            height_danger = (critical_height - object_pos[2]) * 50
-            safety_reward -= height_danger
-        
-        # 🔥 防止在不合适的阶段进入危险区域
-        height_above_plate = object_pos[2] - plate_z
-        horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
-        
-        # 如果高度太低但还没到精确下降阶段，给予惩罚
-        if (height_above_plate < 0.08 and 
-            self.current_phase != "PRECISION_DESCENT" and 
-            horizontal_distance > 0.05):
-            safety_reward -= 5.0  # 危险下降惩罚
-            
-        safety_reward = safety_reward * 0.1
-        
-        return safety_reward
     
     def _calculate_object_dropped(self):
         object_height = self.data.xpos[self.object_body_id][2]
@@ -708,26 +682,6 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             "grasp_stable_steps": self.grasp_stable_steps
         }
         return info
-    
-    def _calculate_edge_safety_reward(self, edge_distance, object_pos):
-        
-        placing_z = self.placing_place2_high_plane_body_position[2]  # 托盘高度
-        object_height = object_pos[2]  # 物体高度
-        height_threshold = placing_z + 0.05  # 触发高度：托盘高度 + 5cm
-        
-        if object_height > height_threshold:
-            # 物体在安全高度，不进行边缘检查
-            return 0.0
-        
-        # 🎯 物体接近托盘，开始边缘安全检查
-        safety_margin = 0.05  # 5cm安全边距
-
-        if edge_distance > safety_margin:
-            # 🟢 安全区域
-            return 0.01
-        else:
-            penalty = (safety_margin - edge_distance) * 2.0 + 0.05 # 距离越近惩罚越大
-            return -penalty
         
     def horizontal_escape_phase_reward(self, object_pos, plate_center, plate_radius):
     
@@ -742,21 +696,10 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         
         total_reward = 0.0
         
-        # 🔥 水平脱离进步奖励
-        # if hasattr(self, 'previous_escape_distance') and self.previous_escape_distance is not None:
-        #     escape_progress = escape_distance - self.previous_escape_distance
-        #     if escape_progress > 0:  # 脱离距离增加（远离盘子）
-        #         horizontal_progress_reward = escape_progress * 100.0  # 放大奖励
-        #         # print(f"   ✅ 水平脱离进步: +{escape_progress*100:.1f}cm, 奖励: +{horizontal_progress_reward:.2f}")
-        #     else:  # 脱离距离减少（接近盘子）
-        #         horizontal_progress_reward = escape_progress * 50.0  # 较小的惩罚
-        #         # print(f"   ❌ 水平脱离倒退: {escape_progress*100:.1f}cm, 惩罚: {horizontal_progress_reward:.2f}")
-        #     total_reward += horizontal_progress_reward
-        
         if escape_distance < 0.02:
             # 🔥 危险区域额外惩罚（保留一些绝对约束）
             if distance_to_plate_bottom < 0.03:  # 极度危险
-                danger_penalty = -1.0
+                danger_penalty = -0.05
                 total_reward += danger_penalty
                 # print(f"   🚨 极度危险区域惩罚: {danger_penalty:.2f}")
             
@@ -789,7 +732,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         total_reward = 0.0
         
         if escape_distance < 0.01:
-            return -1.0
+            return -0.05
 
         target_safe_height = 0.06
 
@@ -802,7 +745,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
                 target_approach_reward = target_approach_progress * 80.0
                 total_reward += target_approach_reward
             else:  # 远离目标高度
-                target_approach_reward = target_approach_progress * 40.0
+                target_approach_reward = target_approach_progress * 80.0
                 total_reward += target_approach_reward
             
         self.previous_distance_to_target_height = distance_to_target_height
@@ -815,7 +758,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         
         min_safe_height = 0.03 
         if height_above_plate < min_safe_height:
-            return -1.0  
+            return -0.05 
         
         total_reward = 0.0
     
@@ -824,10 +767,10 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
             approach_progress = self.previous_horizontal_approach_distance - horizontal_distance
             
             if approach_progress > 0:  # 接近目标中心
-                approach_progress_reward = approach_progress * 120.0  # 奖励接近
+                approach_progress_reward = approach_progress * 80.0  # 奖励接近
                 total_reward += approach_progress_reward
             else:  # 远离目标中心
-                approach_progress_reward = approach_progress * 60.0  # 惩罚远离
+                approach_progress_reward = approach_progress * 80.0  # 惩罚远离
                 total_reward += approach_progress_reward
         
         self.previous_horizontal_approach_distance = horizontal_distance
@@ -837,34 +780,25 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
         height_above_plate = object_pos[2] - plate_z
         
-        if horizontal_distance < 0.08:
-            return -1.0 
+        # 基础安全检查
+        if horizontal_distance > 0.08:
+            return -0.05 
         
-        descent_reward = 0.0
+        total_reward = 0.0
+        target_height = 0.02  # 目标高度2cm
         
-        if 0.01 <= height_above_plate <= 0.025:
-            descent_reward = 8.0
-        elif height_above_plate < 0.05:
-            descent_reward = 4.0
-        elif height_above_plate < 0.10:
-            descent_reward = 2.0
-        else:
-            descent_reward = 0.5
-
-        if hasattr(self, 'previous_height'):
-            descent_rate = self.previous_height - height_above_plate
-            if 0.002 <= descent_rate <= 0.008:  
-                speed_bonus = 2.0
-            elif descent_rate > 0.015:  
-                speed_bonus = -5.0
-            else:
-                speed_bonus = 0.0
-        else:
-            speed_bonus = 0.0
+        # 🔥 高度进步奖励 - 简单版本
+        if hasattr(self, 'previous_descent_height') and self.previous_descent_height is not None:
+            height_progress = self.previous_descent_height - height_above_plate
             
-        self.previous_height = height_above_plate
-
-        return descent_reward + speed_bonus
+            # 下降奖励，上升惩罚
+            height_progress_reward = height_progress * 80.0
+            total_reward += height_progress_reward
+        
+        # 🔥 更新历史数据
+        self.previous_descent_height = height_above_plate
+        
+        return total_reward
 
     def get_current_phase(self, object_pos, plate_center, plate_z, plate_radius):
     
