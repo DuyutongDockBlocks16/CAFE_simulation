@@ -28,7 +28,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
     
     def __init__(self, xml_path, state_filepath, action_repeat=1):
         super().__init__()
-        self.max_steps = 8000
+        self.max_steps = 32000
         self.current_step = 0
         
         self.previous_center_distance = None
@@ -459,7 +459,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         current_phase, phase_switch = self.get_current_phase(object_pos, plate_center, plate_z, plate_radius)
         
         if phase_switch:
-            total_reward += 1
+            total_reward += 100
         
         # 🔥 阶段特定奖励
         if current_phase == "HORIZONTAL_ESCAPE":
@@ -479,9 +479,13 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         
         total_reward += phase_reward
         
+        # 🔥 阶段完成奖励（鼓励快速通过前期阶段）
+        # stage_completion_reward = self._calculate_stage_completion_reward(current_phase, object_pos, plate_center, plate_z, plate_radius)
+        # total_reward += stage_completion_reward
+        
         # 🔥 最终放置检测
         if self.is_on_plane(object_pos, plate_center, plate_radius, plate_z):
-            total_reward = 1.0  # 重置为稳定奖励
+            total_reward = 5.0  # 重置为稳定奖励
             self.stable_steps += 1
             if self.current_step % 40 == 0:
                 print(f"🎯 稳定放置: {self.stable_steps}/{self.required_stable_steps}")
@@ -490,19 +494,23 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         
         # 🔥 任务完成检测
         if self.stable_steps >= self.required_stable_steps:
-            total_reward += 1.0
+            total_reward += 50.0
             print("🎉 任务完成！")
             return total_reward, True, False, dropped
+        
+        # # 🔥 基础惩罚
+        # time_penalty = -0.001  # 时间惩罚，鼓励快速完成
+        # total_reward += time_penalty
         
         # 🔥 掉落检测
         if self._calculate_object_dropped():
             dropped = True
-            total_reward -= 1.0
+            total_reward -= 50.0
             print("💥 物体掉落!")
             
         if self._object_detached_from_end_effector():
             dropped = True
-            total_reward -= 1.0
+            total_reward -= 50.0
             print("💥 物体脱离末端执行器!")
         
         # 🔥 更新历史信息
@@ -510,7 +518,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         self.previous_horizontal_pos = object_pos[:2].copy()
         
         # 🔥 调试信息
-        # if self.current_step % 20 == 0:
+        # if self.current_step % 1 == 0:
         #     horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
         #     escape_distance = horizontal_distance - plate_radius
         #     height_above_plate = object_pos[2] - plate_z
@@ -519,7 +527,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         #     distance_to_plate_bottom = abs(height_above_plate) - plate_thickness/2
             
         #     print(f"📊 Step {self.current_step}: {status}")
-        #     print(f"   阶段奖励: {phase_reward:.2f}")
+        #     print(f"   阶段奖励: {phase_reward:.2f} | 完成奖励: {stage_completion_reward:.2f}")
         #     print(f"   脱离距离: {escape_distance*100:.1f}cm | 高度: {height_above_plate*100:.1f}cm")
         #     print(f"   水平距中心: {horizontal_distance*100:.1f}cm")
         #     print(f"   距离盘底: {distance_to_plate_bottom*100:.1f}cm")
@@ -549,6 +557,45 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
                 return False
         
         return True
+
+    def _calculate_stage_completion_reward(self, current_phase, object_pos, plate_center, plate_z, plate_radius):
+        """阶段完成奖励 - 鼓励快速进入下一阶段"""
+        
+        horizontal_distance = np.linalg.norm(object_pos[:2] - plate_center)
+        escape_distance = horizontal_distance - plate_radius
+        height_above_plate = object_pos[2] - plate_z
+        
+        completion_reward = 0.0
+        
+        if current_phase == "HORIZONTAL_ESCAPE":
+            # 鼓励快速脱离到安全距离
+            if escape_distance > 0.08:
+                completion_reward = 2.0  # 已完全脱离
+            elif escape_distance > 0.05:
+                completion_reward = 1.0  # 接近完成
+                
+        elif current_phase == "VERTICAL_LIFTING":
+            # 鼓励达到安全高度
+            if height_above_plate > 0.18:
+                completion_reward = 2.0  # 接近完成抬升
+            elif height_above_plate > 0.12:
+                completion_reward = 1.0  # 抬升进行中
+                
+        elif current_phase == "HORIZONTAL_APPROACH":
+            # 鼓励接近目标中心
+            if horizontal_distance < 0.05:
+                completion_reward = 3.0  # 非常接近
+            elif horizontal_distance < 0.08:
+                completion_reward = 1.5  # 接近目标
+                
+        elif current_phase == "PRECISION_DESCENT":
+            # 鼓励精确下降
+            if 0.01 <= height_above_plate <= 0.03:
+                completion_reward = 4.0  # 理想高度
+            elif height_above_plate < 0.08:
+                completion_reward = 2.0  # 正在下降
+        
+        return completion_reward
     
     def _calculate_object_dropped(self):
         object_height = self.data.xpos[self.object_body_id][2]
@@ -652,9 +699,8 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         if escape_distance < 0.02:
             # 🔥 危险区域额外惩罚（保留一些绝对约束）
             if distance_to_plate_bottom < 0.06:  # 极度危险
-                danger_penalty = -0.05
+                danger_penalty = -0.5
                 total_reward += danger_penalty
-                return total_reward
                 # print(f"   🚨 极度危险区域惩罚: {danger_penalty:.2f}")
             
         rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
