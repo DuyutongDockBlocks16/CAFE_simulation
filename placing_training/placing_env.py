@@ -28,7 +28,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
     
     def __init__(self, xml_path, state_filepath, action_repeat=1):
         super().__init__()
-        self.max_steps = 32000
+        self.max_steps = 8000
         self.current_step = 0
         
         self.previous_center_distance = None
