@@ -226,7 +226,7 @@ def placing_model_training_parallel(load_model_path=None, num_envs=8):
 
     # total_additional_steps = 16_000_000
     # total_additional_steps = 500_000
-    total_additional_steps = 50_000_000
+    total_additional_steps = 20_000_000
 
     ent_scheduler = EntCoefficientScheduler(
         initial_ent_coef=0.02,  
@@ -316,11 +316,11 @@ def placing_model_implementation(env):
     obs, info = env.reset()
 
     env.render()
-    sleep(5)
+    sleep(10)
 
     for _ in range(200000000000):
         env.render()  # Render at every step
-        # sleep(0.1)
+        sleep(0.01)
         action, _ = model.predict(obs, deterministic=True)
         # save all action to file
         # with open("picking_obs_log.txt", "a") as f:
