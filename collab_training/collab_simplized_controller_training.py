@@ -234,7 +234,7 @@ def driver_model_training_parallel(load_model_path=None, num_envs=8):
 
     # total_additional_steps = 160_000_000
     # total_additional_steps = 500_000
-    total_additional_steps = 6_000_000
+    total_additional_steps = 60_000_000
 
     ent_scheduler = EntCoefficientScheduler(
         initial_ent_coef=0.02,  
@@ -379,8 +379,8 @@ def driver_model_training_parallel(load_model_path=None, num_envs=8):
     
 if __name__ == "__main__":
     driver_env = gym.make("CollabHybridMuJoCoEnv-v0")
-    driver_model_training(driver_env)
+    # driver_model_training(driver_env)
     # driver_model_training(driver_env, load_model_path=DRIVER_MODEL_NAME)
     # driver_model_training_parallel(load_model_path=DRIVER_MODEL_NAME, num_envs=14)
-    # driver_model_training_parallel(load_model_path=None, num_envs=8)
+    driver_model_training_parallel(load_model_path=None, num_envs=14)
     # driver_model_test_single_episode(driver_env)
