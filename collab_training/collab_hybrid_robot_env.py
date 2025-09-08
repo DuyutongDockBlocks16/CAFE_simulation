@@ -94,29 +94,22 @@ class CollabHybridMuJoCoEnv(gym.Env):
                 continue
             
         self.robot_2_origin_place_x_y = [-2, 1]
-        
         self.robot2_recent_positions = []
-        
         self.robot_2_target_position_x_y = None
-        
         self.robot_2_random_picking_steps = None
         self.robot_2_random_picking_count = 0
-        
         self.robot_2_random_placing_steps = None
         self.robot_2_random_placing_count = 0
-        
         self.robot_2_target_placing_position = None
-        
         self.robot_2_is_picking = False
         self.robot_2_is_placing = False
         self.robot_2_is_placing_upper = False
         self.robot_2_is_placing_lower = False
         self.robot_2_stopped = False
-        
         self.robot_2_is_carrying_object = False
         self.robot_2_carrying_object_color = None
-        
         self.check_robot_2_forbidden_collision_counter = 0
+        self.robot_2_stop_wait_steps = 0
 
         # Robot2 setup end
         
@@ -152,29 +145,22 @@ class CollabHybridMuJoCoEnv(gym.Env):
                 continue
             
         self.robot_3_origin_place_x_y = [-2, -1]
-        
         self.robot3_recent_positions = []
-        
         self.robot_3_target_position_x_y = None
-        
         self.robot_3_random_picking_steps = None
         self.robot_3_random_picking_count = 0
-        
         self.robot_3_random_placing_steps = None
         self.robot_3_random_placing_count = 0
-        
         self.robot_3_target_placing_position = None
-
         self.robot_3_is_picking = False
         self.robot_3_is_placing = False
         self.robot_3_is_placing_upper = False
         self.robot_3_is_placing_lower = False
         self.robot_3_stopped = False
-        
         self.robot_3_is_carrying_object = False
         self.robot_3_carrying_object_color = None
-
         self.check_robot_3_forbidden_collision_counter = 0
+        self.robot_3_stop_wait_steps = 0
 
         # Robot3 setup end
         
@@ -318,32 +304,27 @@ class CollabHybridMuJoCoEnv(gym.Env):
         self.current_step = 0
         
         self.robot_2_target_position_x_y = None
-        
         self.robot_2_random_picking_steps = None
         self.robot_2_random_picking_count = 0
-        
         self.robot_2_random_placing_steps = None
         self.robot_2_random_placing_count = 0
-        
         self.robot_2_target_placing_position = None
         self.robot_2_is_picking = False
         self.robot_2_is_placing = False
         self.robot_2_stopped = False
-        
         self.robot_2_is_carrying_object = False
+        self.robot_2_stop_wait_steps = 0
         
         self.robot_3_target_position_x_y = None
-        
         self.robot_3_random_picking_steps = None
         self.robot_3_random_picking_count = 0
-        
         self.robot_3_random_placing_steps = None
         self.robot_3_random_placing_count = 0
-        
         self.robot_3_target_placing_position = None
         self.robot_3_is_picking = False
         self.robot_3_is_placing = False
         self.robot_3_stopped = False
+        self.robot_3_stop_wait_steps = 0
         
         self.robot_3_is_carrying_object = False
         
@@ -771,6 +752,7 @@ class CollabHybridMuJoCoEnv(gym.Env):
                 self.robot_2_is_placing_upper = False
                 self.robot_2_random_placing_steps = None
                 self.robot_2_random_placing_count = 0
+                self.robot_2_stop_wait_steps = 0
                 
         elif agent_robot == AgentRobot.ROBOT3:
             if self.robot_3_random_placing_steps is None:
@@ -809,6 +791,7 @@ class CollabHybridMuJoCoEnv(gym.Env):
                 self.robot_3_is_placing_upper = False
                 self.robot_3_random_placing_steps = None
                 self.robot_3_random_placing_count = 0
+                self.robot_3_stop_wait_steps = 0
       
     def _get_placed_object_info(self):
         left_joint_id = None
