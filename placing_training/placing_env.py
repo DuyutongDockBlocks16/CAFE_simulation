@@ -28,7 +28,7 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
     
     def __init__(self, xml_path, state_filepath, action_repeat=1):
         super().__init__()
-        self.max_steps = 8000
+        self.max_steps = 32000
         self.current_step = 0
         
         self.previous_center_distance = None
@@ -698,8 +698,8 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         
         if escape_distance < 0.02:
             # 🔥 危险区域额外惩罚（保留一些绝对约束）
-            if distance_to_plate_bottom < 0.06:  # 极度危险
-                danger_penalty = -0.5
+            if distance_to_plate_bottom < 0.03:  # 极度危险
+                danger_penalty = -0.05
                 total_reward += danger_penalty
                 # print(f"   🚨 极度危险区域惩罚: {danger_penalty:.2f}")
             
