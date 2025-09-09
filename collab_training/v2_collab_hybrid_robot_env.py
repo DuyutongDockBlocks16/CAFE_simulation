@@ -426,6 +426,9 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         else:
             # print("Invalid action attempted, applying no-op instead.")
             self._process_action(0, self.agent_robot)
+        
+        if self.current_step % 10 == 0:
+            print("action:", action)
 
         reward = self._reward_function_robot_2()
 
@@ -433,17 +436,17 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
 
         if self._check_robot_robot_collision():
             print("Robot-robot collision detected! Terminating episode.")
-            reward -= 40
+            reward -= 4
             terminated = True
             
         if self._check_robot_2_forbidden_collision():
             print("Robot collision with forbidden area detected! Terminating episode.")
-            reward -= 40
+            reward -= 4
             terminated = True
             
         if self._check_robot_3_forbidden_collision():
             print("Robot collision with forbidden area detected! Terminating episode.")
-            reward -= 40
+            reward -= 4
             terminated = True
             
         if break_flag:

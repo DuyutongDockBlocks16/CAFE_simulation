@@ -33,8 +33,8 @@
     </body>
 
     <!-- left object -->
-    <!-- <geom name="pickingplace:table0" type="box" pos="1.0 -2.5 .27" size=".02 0.01 0.01"
-      rgba="0.7 0.5 0.3 1" /> -->
+    <geom name="pickingplace:table0" type="box" pos="1.0 -2.5 .27" size=".02 0.01 0.01"
+      rgba="0.7 0.5 0.3 1" />
     <!-- <geom name="pickingplace:table1" type="box" pos="1.02 -2.5 .27" size="0.005 0.005 0.005"
       rgba="0.7 0.5 0.3 1" /> -->
 
@@ -46,8 +46,8 @@
     </body> -->
 
     <!-- right object -->
-    <!-- <geom name="pickingplace:table2" type="box" pos="-1.0 -2.5 .27" size=".02 0.01 0.01"
-      rgba="0.7 0.5 0.3 1" /> -->
+    <geom name="pickingplace:table2" type="box" pos="-1.0 -2.5 .27" size=".02 0.01 0.01"
+      rgba="0.7 0.5 0.3 1" />
     <!-- <geom name="pickingplace:table3" type="box" pos="-0.98 -2.5 .27" size="0.005 0.005 0.005"
       rgba="0.7 0.5 0.3 1" /> -->
 
@@ -59,32 +59,32 @@
     </body> -->
 
     <!-- Placing Place 1 - Low Plane -->
-    <!-- <body name="placingplace1_low" pos="2.8 1 .23">
+    <body name="placingplace1_low" pos="2.8 1 .23">
       <geom name="placingplace1:low_plane" type="cylinder" pos="0 0 0" size="0.23 0.01"
         rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
-    </body> -->
+    </body>
 
     <!-- Placing Place 1 - High Plane -->
-    <!-- <body name="placingplace1_high" pos="2.8 1 .43">
+    <body name="placingplace1_high" pos="2.8 1 .43">
       <geom name="placingplace1:high_plane" type="cylinder" pos="0 0 0" size="0.15 0.01"
         rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
-    </body> -->
+    </body>
     <!-- <body name="placingplace1_high" pos="0 0 .43">
       <geom name="placingplace1:high_plane" type="cylinder" pos="0 0 0" size="0.5 0.01"
         rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
     </body> -->
 
     <!-- Placing Place 2 - Low Plane -->
-    <!-- <body name="placingplace2_low" pos="2.8 -1 .23">
+    <body name="placingplace2_low" pos="2.8 -1 .23">
       <geom name="placingplace2:low_plane" type="cylinder" pos="0 0 0" size="0.23 0.01"
         rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
-    </body> -->
+    </body>
 
     <!-- Placing Place 2 - High Plane -->
-    <!-- <body name="placingplace2_high" pos="2.8 -1 .43">
+    <body name="placingplace2_high" pos="2.8 -1 .43">
       <geom name="placingplace2:high_plane" type="cylinder" pos="0 0 0" size="0.15 0.01"
         rgba="0.7 0.5 0.3 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
-    </body> -->
+    </body>
 
     <!-- <body name="placingplace3_high" pos="2.55 -1 .43">
       <geom name="placingplace3:high_plane" type="cylinder" pos="0 0 0" size="0.01 0.01"
@@ -94,8 +94,8 @@
       <geom name="placingplace3:high_plane" type="cylinder" pos="0 0 0" size="0.01 0.01"
         rgba="1.0 0.2 0.2 1" friction="10 0.1 0.01" solimp="0.99 0.99 0.001" solref="0.002 1" />
     </body> -->
-<!-- 
-    <geom name="removed_object_carrier" type="box" pos="5 0 1.00" size="1.0 1.0 0.01"
+
+    <!-- <geom name="removed_object_carrier" type="box" pos="5 0 1.00" size="1.0 1.0 0.01"
       rgba="0.2 0.2 0.2 1" /> -->
 
     <!-- <geom name="pickingplace:table4" type="box" pos="0.18 -0.02 .45" size="0.005 0.005 0.005"
@@ -109,19 +109,19 @@
     friction="1 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.002 1" contype="1" conaffinity="1"/>
     </body> -->
 
-    <!-- <geom name="wall_front" type="box" pos="0 4 0.5" size="3 0.1 0.5" rgba="0.5 0.5 0.5 1"
+    <geom name="wall_front" type="box" pos="0 3 0.5" size="3 0.1 0.5" rgba="0.5 0.5 0.5 1"
       contype="1" conaffinity="1" />
 
-    <geom name="wall_back" type="box" pos="0 -4 0.5" size="3 0.1 0.5" rgba="0.5 0.5 0.5 1"
+    <geom name="wall_back" type="box" pos="0 -3 0.5" size="3 0.1 0.5" rgba="0.5 0.5 0.5 1"
       contype="1" conaffinity="1" />
 
-    <geom name="wall_left" type="box" pos="-3 0 0.5" size="0.1 4 0.5" rgba="0.5 0.5 0.5 1"
+    <geom name="wall_left" type="box" pos="-3 0 0.5" size="0.1 3 0.5" rgba="0.5 0.5 0.5 1"
       contype="1" conaffinity="1" />
 
-    <geom name="wall_right" type="box" pos="3 0 0.5" size="0.1 4 0.5" rgba="0.5 0.5 0.5 1"
+    <geom name="wall_right" type="box" pos="3 0 0.5" size="0.1 3 0.5" rgba="0.5 0.5 0.5 1"
       contype="1" conaffinity="1" />
 
-    <geom name="object_carrier" type="box" pos="-0.6 -3.5 1.00" size=".5 0.01 0.01"
+    <!-- <geom name="object_carrier" type="box" pos="-0.6 -3.5 1.00" size=".5 0.01 0.01"
       rgba="0.7 0.5 0.3 1" />
 
     <body name="object0" pos="-1.1 -3.5 1.28">

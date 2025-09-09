@@ -386,7 +386,7 @@ def driver_model_implementation(env):
 
     for _ in range(200000000000):
         env.render()  # Render at every step
-        sleep(0.01)
+        # sleep(0.01)
         action, _ = model.predict(obs, deterministic=True)
         # save all action to file
         # with open("picking_obs_log.txt", "a") as f:
@@ -424,6 +424,6 @@ if __name__ == "__main__":
     # driver_model_training(driver_env)
     # driver_model_training(driver_env, load_model_path=DRIVER_MODEL_NAME)
     # driver_model_training_parallel(load_model_path=DRIVER_MODEL_NAME, num_envs=14)
-    driver_model_training_parallel(load_model_path=None, num_envs=14)
+    # driver_model_training_parallel(load_model_path=None, num_envs=14)
     # driver_model_test_single_episode(driver_env)
-    # driver_model_implementation(driver_env)
+    driver_model_implementation(driver_env)
