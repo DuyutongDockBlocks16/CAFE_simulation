@@ -427,8 +427,8 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
             # print("Invalid action attempted, applying no-op instead.")
             self._process_action(0, self.agent_robot)
         
-        if self.current_step % 10 == 0:
-            print("action:", action)
+        # if self.current_step % 10 == 0:
+        #     print("action:", action)
 
         reward = self._reward_function_robot_2()
 
