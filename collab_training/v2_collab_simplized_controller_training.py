@@ -41,8 +41,8 @@ import torch
 # from sb3_contrib.common.wrappers import ActionMasker
 
 gym.register(
-    id="CollabHybridMuJoCoEnv-v0",
-    entry_point="collab_hybrid_robot_env:CollabHybridMuJoCoEnv",
+    id="V2CollabHybridMuJoCoEnv-v0",
+    entry_point="v2_collab_hybrid_robot_env:V2CollabHybridMuJoCoEnv",
     # kwargs={
     #     "xml_path": "xml/scene_mirobot.xml",
     #     "state_filepath": "saved_states/robot_state_20250723_093442.pkl"
@@ -53,7 +53,7 @@ def make_env(rank, seed=0):
     """Factory function to create environment"""
     def _init():
         env = gym.make(
-            "CollabHybridMuJoCoEnv-v0"
+            "V2CollabHybridMuJoCoEnv-v0"
             )
         env.reset(seed=seed + rank)
         return env
@@ -420,10 +420,10 @@ def driver_model_implementation(env):
                 last_time = now
     
 if __name__ == "__main__":
-    driver_env = gym.make("CollabHybridMuJoCoEnv-v0")
-    # driver_model_training(driver_env)
+    driver_env = gym.make("V2CollabHybridMuJoCoEnv-v0")
+    driver_model_training(driver_env)
     # driver_model_training(driver_env, load_model_path=DRIVER_MODEL_NAME)
     # driver_model_training_parallel(load_model_path=DRIVER_MODEL_NAME, num_envs=14)
     # driver_model_training_parallel(load_model_path=None, num_envs=14)
     # driver_model_test_single_episode(driver_env)
-    driver_model_implementation(driver_env)
+    # driver_model_implementation(driver_env)

@@ -38,7 +38,7 @@ class ObjectColor:
         elif np.allclose(color_array, cls.YELLOW):
             return "YELLOW"
 
-class CollabHybridMuJoCoEnv(gym.Env):
+class V2CollabHybridMuJoCoEnv(gym.Env):
     
     def _get_data_and_model(self):
         model = mujoco.MjModel.from_xml_path("../xml/collab_mirobot.xml")
@@ -202,13 +202,25 @@ class CollabHybridMuJoCoEnv(gym.Env):
         ]
         # General setup end
         
+        # ACTIONS = {
+        #     0: "drive 0",
+        #     1: "drive 3",
+        #     2: "drive -3",
+        #     3: "steer 0",
+        #     4: "steer -0.9",
+        #     5: "steer 0.9",
+        #     6: "pick",
+        #     7: "place upper",
+        #     8: "place lower"
+        # }
+        
         ACTIONS = {
-            0: "drive 0",
-            1: "drive 3",
-            2: "drive -3",
-            3: "steer 0",
-            4: "steer -0.9",
-            5: "steer 0.9",
+            0: "do nothing",
+            1: "forward",
+            2: "backward",
+            3: "left",
+            4: "right",
+            5: "do nothing",
             6: "pick",
             7: "place upper",
             8: "place lower"
@@ -420,14 +432,14 @@ class CollabHybridMuJoCoEnv(gym.Env):
             terminated = True
             
         if self._check_robot_2_forbidden_collision():
-            # print("Robot collision with forbidden area detected! Terminating episode.")
-            reward -= 0.01
-            # terminated = True
+            print("Robot collision with forbidden area detected! Terminating episode.")
+            reward -= 40
+            terminated = True
             
         if self._check_robot_3_forbidden_collision():
-            # print("Robot collision with forbidden area detected! Terminating episode.")
-            reward -= 0.01
-            # terminated = True
+            print("Robot collision with forbidden area detected! Terminating episode.")
+            reward -= 40
+            terminated = True
             
         if break_flag:
             print("Task completed successfully! Terminating episode.")
@@ -467,17 +479,17 @@ class CollabHybridMuJoCoEnv(gym.Env):
         action_reward = 0
         
         if action == 0:
-            self._forward_robot(0, agent_robot)
+            self.move_robot(0, 0, agent_robot)
         elif action == 1:
-            self._forward_robot(3, agent_robot)
+            self.move_robot(0.0005, 0, agent_robot)
         elif action == 2:
-            self._forward_robot(-3, agent_robot)
+            self.move_robot(-0.0005, 0, agent_robot)
         elif action == 3:
-            self._steer_robot(0, agent_robot)
+            self.move_robot(0, 0.0005, agent_robot)
         elif action == 4: 
-            self._steer_robot(-0.9, agent_robot)
+            self.move_robot(0, -0.0005, agent_robot)
         elif action == 5: 
-            self._steer_robot(0.9, agent_robot)
+            self.move_robot(0, 0, agent_robot)
         elif action == 6:
             self._robot_picking(agent_robot)
             action_reward += 20
@@ -490,6 +502,31 @@ class CollabHybridMuJoCoEnv(gym.Env):
 
         return action_reward
 
+    def move_robot(self, x_offset_value, y_offset_value, agent_robot):
+        if agent_robot == AgentRobot.ROBOT2:
+            rover_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot2:centroid")
+            qpos_adr = self.model.jnt_qposadr[rover_joint_id]
+            
+            current_pos = self.data.qpos[qpos_adr:qpos_adr+3].copy()
+            current_pos[0] += x_offset_value  # x
+            current_pos[1] += y_offset_value  # y
+            self.data.qpos[qpos_adr:qpos_adr+3] = current_pos
+            
+            qvel_adr = self.model.jnt_dofadr[rover_joint_id]
+            self.data.qvel[qvel_adr:qvel_adr+6] = 0.0
+            
+        elif agent_robot == AgentRobot.ROBOT3:
+            rover_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot3:centroid")
+            qpos_adr = self.model.jnt_qposadr[rover_joint_id]
+            
+            current_pos = self.data.qpos[qpos_adr:qpos_adr+3].copy()
+            current_pos[0] += x_offset_value
+            current_pos[1] += y_offset_value
+            self.data.qpos[qpos_adr:qpos_adr+3] = current_pos
+            
+            qvel_adr = self.model.jnt_dofadr[rover_joint_id]
+            self.data.qvel[qvel_adr:qvel_adr+6] = 0.0
+    
     def _check_action_validity(self, action):
         if action in [0, 1, 2, 3, 4, 5]:
             if self.agent_robot == AgentRobot.ROBOT2:

@@ -76,39 +76,39 @@ def start_object_placer_thread(model, data, object_joint_ids, left_object_positi
     ).start()
 
 def main():
-    left_object_position = [1, -2.5, 0.28]
-    right_object_position = [-1, -2.5, 0.28]
+    # left_object_position = [1, -2.5, 0.28]
+    # right_object_position = [-1, -2.5, 0.28]
 
     model, data = get_data_and_model()
 
-    object_ids = get_object_ids(model)
-    object_joint_ids = []
-    for i in object_ids:
-        joint_name = f"object{i}:joint"
-        try:
-            joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
-            object_joint_ids.append((i, joint_id))
-        except Exception:
-            print(f"Joint {joint_name} not found in main thread")
+    # object_ids = get_object_ids(model)
+    # object_joint_ids = []
+    # for i in object_ids:
+    #     joint_name = f"object{i}:joint"
+    #     try:
+    #         joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+    #         object_joint_ids.append((i, joint_id))
+    #     except Exception:
+    #         print(f"Joint {joint_name} not found in main thread")
 
     # Start the asynchronous thread
-    start_object_remover_threads(model, data, object_joint_ids)
+    # start_object_remover_threads(model, data, object_joint_ids)
 
-    shared_state = {"current_object_index": None, "current_object_position": None, "stop": False, "stopped": True}
-    start_object_placer_thread(model, data, object_joint_ids, left_object_position, right_object_position, shared_state)
+    # shared_state = {"current_object_index": None, "current_object_position": None, "stop": False, "stopped": True}
+    # start_object_placer_thread(model, data, object_joint_ids, left_object_position, right_object_position, shared_state)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
-        controller = MirobotController(model, data, left_object_position, right_object_position)
+        # controller = MirobotController(model, data, left_object_position, right_object_position)
         
         step = 0
         while True:
-            status = controller.get_status()
+            # status = controller.get_status()
             # print(f"Current object index: {shared_state['current_object_index']}")
-            if shared_state["current_object_index"] >= len(object_joint_ids) and status == FiniteState.IDLE:
-                print("All objects have been placed. Exit")
-                break
+            # if shared_state["current_object_index"] >= len(object_joint_ids) and status == FiniteState.IDLE:
+            #     print("All objects have been placed. Exit")
+            #     break
 
-            controller.step(shared_state["current_object_position"])
+            # controller.step(shared_state["current_object_position"])
 
             mujoco.mj_step(model, data)
             step += 1
