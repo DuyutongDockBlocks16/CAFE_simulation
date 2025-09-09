@@ -47,7 +47,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         model.opt.timestep = time_step  
         return model, data
     
-    def __init__(self, action_repeat=100):
+    def __init__(self, action_repeat=1):
         super().__init__()
         self.action_repeat = action_repeat
         
@@ -108,8 +108,10 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         self.robot_2_stopped = False
         self.robot_2_is_carrying_object = False
         self.robot_2_carrying_object_color = None
+        self.robot_2_carrying_object_id = None
         self.check_robot_2_forbidden_collision_counter = 0
         self.robot_2_stop_wait_steps = 0
+        
 
         # Robot2 setup end
         
@@ -159,6 +161,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         self.robot_3_stopped = False
         self.robot_3_is_carrying_object = False
         self.robot_3_carrying_object_color = None
+        self.robot_3_carrying_object_id = None
         self.check_robot_3_forbidden_collision_counter = 0
         self.robot_3_stop_wait_steps = 0
 
@@ -229,7 +232,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         self.action_space = gym.spaces.Discrete(len(ACTIONS))
 
         self.current_step = 0
-        self.max_steps = 500000
+        self.max_steps = 5000
         
         self.object_geoms = [
             "object0_geom", "object1_geom", "object2_geom", "object3_geom",
@@ -325,6 +328,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         self.robot_2_is_placing = False
         self.robot_2_stopped = False
         self.robot_2_is_carrying_object = False
+        self.robot_3_carrying_object_id = None
         self.robot_2_stop_wait_steps = 0
         
         self.robot_3_target_position_x_y = None
@@ -337,6 +341,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         self.robot_3_is_placing = False
         self.robot_3_stopped = False
         self.robot_3_is_carrying_object = False
+        self.robot_3_carrying_object_id = None
         self.robot_3_stop_wait_steps = 0
         
         self.data.qpos[:] = self.initial_qpos
@@ -466,7 +471,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         
         reward -= 0.001  # Small step penalty to encourage efficiency
         
-        potential_field_reward = self._calculate_potential_field_reward() * 1
+        potential_field_reward = self._calculate_potential_field_reward() * 10
         # print("Potential field reward:", potential_field_reward)
         reward += potential_field_reward
 
@@ -481,16 +486,17 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         if action == 0:
             self.move_robot(0, 0, agent_robot)
         elif action == 1:
-            self.move_robot(0.0005, 0, agent_robot)
+            self.move_robot(0.05, 0, agent_robot)
         elif action == 2:
-            self.move_robot(-0.0005, 0, agent_robot)
+            self.move_robot(-0.05, 0, agent_robot)
         elif action == 3:
-            self.move_robot(0, 0.0005, agent_robot)
+            self.move_robot(0, 0.05, agent_robot)
         elif action == 4: 
-            self.move_robot(0, -0.0005, agent_robot)
+            self.move_robot(0, -0.05, agent_robot)
         elif action == 5: 
             self.move_robot(0, 0, agent_robot)
         elif action == 6:
+            print("Picking action executed")
             self._robot_picking(agent_robot)
             action_reward += 20
         elif action == 7:
@@ -515,6 +521,11 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
             qvel_adr = self.model.jnt_dofadr[rover_joint_id]
             self.data.qvel[qvel_adr:qvel_adr+6] = 0.0
             
+            if self.robot_2_is_carrying_object and self.robot_2_carrying_object_id is not None:
+                target_position = self.data.xpos[self.robot_2_rover_id].copy()
+                target_position[2] += 0.02
+                self._move_object_to_position(self.robot_2_carrying_object_id, target_position)
+            
         elif agent_robot == AgentRobot.ROBOT3:
             rover_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot3:centroid")
             qpos_adr = self.model.jnt_qposadr[rover_joint_id]
@@ -526,7 +537,12 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
             
             qvel_adr = self.model.jnt_dofadr[rover_joint_id]
             self.data.qvel[qvel_adr:qvel_adr+6] = 0.0
-    
+            
+            if self.robot_3_is_carrying_object and self.robot_3_carrying_object_id is not None:
+                target_position = self.data.xpos[self.robot_3_rover_id].copy()
+                target_position[2] += 0.02
+                self._move_object_to_position(self.robot_3_carrying_object_id, target_position)
+
     def _check_action_validity(self, action):
         if action in [0, 1, 2, 3, 4, 5]:
             if self.agent_robot == AgentRobot.ROBOT2:
@@ -538,32 +554,14 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         
         if action == 6:
             if self.agent_robot == AgentRobot.ROBOT2:
-                if self.robot_2_is_picking or self.robot_2_is_carrying_object:
+                if self.robot_2_is_carrying_object:
                     return False
             elif self.agent_robot == AgentRobot.ROBOT3:
-                if self.robot_2_is_picking or self.robot_3_is_carrying_object:
+                if self.robot_3_is_carrying_object:
                     return False
-                
-        if action == 6:        
-            left_joint_id, left_position, right_joint_id, right_position = self._get_placed_object_info()
-
-            if left_joint_id is not None:
-                self.active_position = left_position
-                self.active_joint_id = left_joint_id
-                self.side = "left"
-            elif right_joint_id is not None:
-                self.active_position = right_position
-                self.active_joint_id = right_joint_id
-                self.side = "right"
-                
-            if self.agent_robot == AgentRobot.ROBOT2:
-                robot_position = self.data.xpos[self.robot_2_rover_id][:2]
-            elif self.agent_robot == AgentRobot.ROBOT3:
-                robot_position = self.data.xpos[self.robot_3_rover_id][:2]
-
-            distance_to_object = np.linalg.norm(self.active_position[:2] - robot_position)
             
-            if distance_to_object > 0.15:
+        if action == 6:        
+            if self._can_robot_pick() is False:
                 return False
         
         if action in [7, 8]:
@@ -575,15 +573,11 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
                     return False
         
         if action in [7, 8]:
-            if self.agent_robot == AgentRobot.ROBOT2:
-                robot_position = self.data.xpos[self.robot_2_rover_id][:2]
-            elif self.agent_robot == AgentRobot.ROBOT3:
-                robot_position = self.data.xpos[self.robot_3_rover_id][:2]
-
-            distance_to_placing_place_1 = np.linalg.norm(self.placingplace1_pos - robot_position)
-            distance_to_placing_place_2 = np.linalg.norm(self.placingplace2_pos - robot_position)
-
-            if min(distance_to_placing_place_1, distance_to_placing_place_2) > 0.20:
+            if self._can_robot_place() is False:
+                return False
+            
+        if self.robot_2_is_picking or self.robot_3_is_picking:
+            if action != 6:
                 return False
             
         if self.robot_2_is_placing_upper or self.robot_3_is_placing_upper:
@@ -641,15 +635,17 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
             ] = [value]
             
     def _robot_picking(self, agent_robot):
-        self._brake_robot2(agent_robot)
+        # self._brake_robot2(agent_robot)
 
         if agent_robot == AgentRobot.ROBOT2:
+            self.robot_2_stopped = True
             self.robot_2_is_picking = True
             
             if self.robot_2_stopped:
                 self._robot_picking_execution(agent_robot)
             
         elif agent_robot == AgentRobot.ROBOT3:
+            self.robot_3_stopped = True
             self.robot_3_is_picking = True
             
             if self.robot_3_stopped:
@@ -693,41 +689,46 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
             
         if self.agent_robot == AgentRobot.ROBOT2:
             if self.robot_2_random_picking_steps is None:
-                self.robot_2_random_picking_steps = random.randint(400, 1000)
+                # self.robot_2_random_picking_steps = random.randint(4, 10)
+                self.robot_2_random_picking_steps = random.randint(1, 1)
                 
             self.robot_2_random_picking_count += 1
             
             if self.robot_2_random_picking_count >= self.robot_2_random_picking_steps: 
                 target_position = self.data.xpos[self.robot_2_rover_id].copy()
-                target_position[2] += 0.05
+                target_position[2] += 0.02
                 self._move_object_to_position(self.active_joint_id, target_position)
                 self.robot_2_is_carrying_object = True
                 self.robot_2_carrying_object_color = self._get_object_color(self.active_joint_id)
+                self.robot_2_carrying_object_id = self.active_joint_id
                 self.robot_2_is_picking = False
                 self.robot_2_stopped = False
                 self.robot_2_random_picking_steps = None
                 self.robot_2_random_picking_count = 0
         elif self.agent_robot == AgentRobot.ROBOT3:
             if self.robot_3_random_picking_steps is None:
-                self.robot_3_random_picking_steps = random.randint(400, 1000)
+                # self.robot_3_random_picking_steps = random.randint(4, 10)
+                self.robot_3_random_picking_steps = random.randint(1, 1)
                 
             self.robot_3_random_picking_count += 1
             
             if self.robot_3_random_picking_count >= self.robot_3_random_picking_steps: 
                 target_position = self.data.xpos[self.robot_3_rover_id].copy()
-                target_position[2] += 0.05
+                target_position[2] += 0.02
                 self._move_object_to_position(self.active_joint_id, target_position)
                 self.robot_3_is_carrying_object = True
                 self.robot_3_carrying_object_color = self._get_object_color(self.active_joint_id)
+                self.robot_3_carrying_object_id = self.active_joint_id
                 self.robot_3_is_picking = False
                 self.robot_3_stopped = False
                 self.robot_3_random_picking_steps = None
                 self.robot_3_random_picking_count = 0
     
     def _robot_placing_object(self, layer, agent_robot):
-        self._brake_robot2(agent_robot)
+        # self._brake_robot2(agent_robot)
 
         if agent_robot == AgentRobot.ROBOT2:
+            self.robot_2_is_stopped = True
             self.robot_2_is_placing = True
             
             if layer == Layer.UPPER:
@@ -739,6 +740,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
                 self._robot_placing_execution(layer, agent_robot)
             
         elif agent_robot == AgentRobot.ROBOT3:
+            self.robot_2_is_stopped = True
             self.robot_3_is_placing = True
             
             if layer == Layer.UPPER:
@@ -754,9 +756,11 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         
             if self.robot_2_random_placing_steps is None:
                 if layer == Layer.UPPER:
-                    self.robot_2_random_placing_steps = random.randint(600, 1000)
+                    # self.robot_2_random_placing_steps = random.randint(6, 10)
+                    self.robot_2_random_placing_steps = random.randint(1, 1)
                 else:
-                    self.robot_2_random_placing_steps = random.randint(200, 400)
+                    # self.robot_2_random_placing_steps = random.randint(2, 4)
+                    self.robot_2_random_placing_steps = random.randint(1, 1)
 
             self.robot_2_random_placing_count += 1
             
@@ -793,9 +797,11 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         elif agent_robot == AgentRobot.ROBOT3:
             if self.robot_3_random_placing_steps is None:
                 if layer == Layer.UPPER:
-                    self.robot_3_random_placing_steps = random.randint(600, 1000)
+                    # self.robot_3_random_placing_steps = random.randint(6, 10)
+                    self.robot_3_random_placing_steps = random.randint(1, 1)
                 else:
-                    self.robot_3_random_placing_steps = random.randint(200, 400)
+                    # self.robot_3_random_placing_steps = random.randint(2, 4)
+                    self.robot_3_random_placing_steps = random.randint(1, 1)
 
             self.robot_3_random_placing_count += 1
             
@@ -1118,6 +1124,9 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         # robot2_status = self.second_robot_status.value
         # robot_2_target_position = np.array(self.robot_2_target_position_x_y) 
         
+        robot2_can_pick = self._can_robot_pick()
+        robot2_can_place = self._can_robot_place()
+        
         robot_2_is_carrying_object = 1.0 if self.robot_2_is_carrying_object else 0.0
         if self.robot_2_is_carrying_object:
             if self.robot_2_carrying_object_color == "RED":
@@ -1137,6 +1146,9 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         robot3_orientation = self._quaternion_to_yaw(self.data.xquat[self.robot_3_rover_id])
         # robot3_status = self.third_robot_status.value
         # robot_3_target_position = np.array(self.robot_3_target_position_x_y)
+
+        robot_3_can_pick = self._can_robot_pick()
+        robot_3_can_place = self._can_robot_place()
 
         robot_3_is_carrying_object = 1.0 if self.robot_3_is_carrying_object else 0.0
         if self.robot_3_is_carrying_object:
@@ -1169,6 +1181,8 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
                     [robot2_orientation / np.pi],                      # [1] 朝向
                     # [robot2_status / len(RLRobotFiniteState)],        # [1] 状态
                     # [robot_2_target_position[0] / self.max_position, robot_2_target_position[1] / self.max_position],  # [2] 目标位置
+                    [robot2_can_pick],
+                    [robot2_can_place],
                     [robot_2_is_carrying_object],                      # [1] 是否携带物体
                     [robot_2_carrying_object_color],                   # [1] 物体颜色
                     [robot_2_is_picking],                              # [1] 是否拾取
@@ -1183,6 +1197,8 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
                     [robot3_orientation / np.pi],                      # [1] 朝向
                     # [robot3_status / len(RLRobotFiniteState)],        # [1] 状态
                     # [robot_3_target_position[0] / self.max_position, robot_3_target_position[1] / self.max_position],  # [2] 目标位置
+                    [robot_3_can_pick],
+                    [robot_3_can_place],
                     [robot_3_is_carrying_object],                      # [1] 是否携带物体
                     [robot_3_carrying_object_color],                   # [1] 物体颜色
                     [robot_3_is_picking],                              # [1] 是否拾取
@@ -1204,6 +1220,8 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
                     [robot3_orientation / np.pi],                      # [1] 朝向
                     # [robot3_status / len(RLRobotFiniteState)],        # [1] 状态
                     # [robot_3_target_position[0] / self.max_position, robot_3_target_position[1] / self.max_position],  # [2] 目标位置
+                    [robot_3_can_pick],
+                    [robot_3_can_place],
                     [robot_3_is_carrying_object],                      # [1] 是否携带物体
                     [robot_3_carrying_object_color],                   # [1] 物体颜色
                     [robot_3_is_picking],                              # [1] 是否拾取
@@ -1218,6 +1236,8 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
                 [robot2_orientation / np.pi],                      # [1] 朝向
                 # [robot2_status / len(RLRobotFiniteState)],        # [1] 状态
                 # [robot_2_target_position[0] / self.max_position, robot_2_target_position[1] / self.max_position],  # [2] 目标位置
+                [robot2_can_pick],
+                [robot2_can_place],
                 [robot_2_is_carrying_object],                      # [1] 是否携带物体
                 [robot_2_carrying_object_color],                   # [1] 物体颜色
                 [robot_2_is_picking],                              # [1] 是否拾取
@@ -1260,6 +1280,46 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         ], dtype=np.float32)
         
         return obs
+    
+    def _can_robot_pick(self):
+        left_joint_id, left_position, right_joint_id, right_position = self._get_placed_object_info()
+
+        if left_joint_id is not None:
+            self.active_position = left_position
+            self.active_joint_id = left_joint_id
+            self.side = "left"
+        elif right_joint_id is not None:
+            self.active_position = right_position
+            self.active_joint_id = right_joint_id
+            self.side = "right"
+        else:
+            return False
+            
+        if self.agent_robot == AgentRobot.ROBOT2:
+            robot_position = self.data.xpos[self.robot_2_rover_id][:2]
+        elif self.agent_robot == AgentRobot.ROBOT3:
+            robot_position = self.data.xpos[self.robot_3_rover_id][:2]
+
+        distance_to_object = np.linalg.norm(self.active_position[:2] - robot_position)
+        
+        if distance_to_object > 0.30:
+            return False
+        
+        return True
+
+    def _can_robot_place(self):
+        if self.agent_robot == AgentRobot.ROBOT2:
+            robot_position = self.data.xpos[self.robot_2_rover_id][:2]
+        elif self.agent_robot == AgentRobot.ROBOT3:
+            robot_position = self.data.xpos[self.robot_3_rover_id][:2]
+
+        distance_to_placing_place_1 = np.linalg.norm(self.placingplace1_pos - robot_position)
+        distance_to_placing_place_2 = np.linalg.norm(self.placingplace2_pos - robot_position)
+
+        if min(distance_to_placing_place_1, distance_to_placing_place_2) > 0.35:
+            return False
+        
+        return True
 
     def _get_target_relative_info(self, robot_number):
         """获取目标相对信息"""

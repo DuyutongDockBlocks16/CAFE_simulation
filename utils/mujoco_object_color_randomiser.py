@@ -24,6 +24,6 @@ def randomize_materials_at_runtime(model):
                 color_name = color_assignment[i]
                 color_rgba = colors[color_name]
                 model.geom_rgba[geom_id] = color_rgba
-                print(f"object {geom_name}'s color set to: {color_rgba}")
+                # print(f"object {geom_name}'s color set to: {color_rgba}")
         except:
             print(f"object {geom_name} not found")

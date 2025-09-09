@@ -421,9 +421,9 @@ def driver_model_implementation(env):
     
 if __name__ == "__main__":
     driver_env = gym.make("V2CollabHybridMuJoCoEnv-v0")
-    # driver_model_training(driver_env)
+    driver_model_training(driver_env)
     # driver_model_training(driver_env, load_model_path=DRIVER_MODEL_NAME)
     # driver_model_training_parallel(load_model_path=DRIVER_MODEL_NAME, num_envs=14)
-    driver_model_training_parallel(load_model_path=None, num_envs=14)
+    # driver_model_training_parallel(load_model_path=None, num_envs=14)
     # driver_model_test_single_episode(driver_env)
     # driver_model_implementation(driver_env)
