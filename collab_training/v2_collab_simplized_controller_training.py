@@ -387,7 +387,8 @@ def driver_model_implementation(env):
     for _ in range(200000000000):
         env.render()  # Render at every step
         # sleep(0.01)
-        action, _ = model.predict(obs, deterministic=True)
+        # action, _ = model.predict(obs, deterministic=True)
+        action, _ = model.predict(obs, deterministic=False)
         # save all action to file
         # with open("picking_obs_log.txt", "a") as f:
         #     f.write(f"{obs.tolist()}\n")

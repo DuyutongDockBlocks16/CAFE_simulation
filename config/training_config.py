@@ -7,7 +7,7 @@ PICKING_MODEL_NAME = "final_picking_model_5000K_20250731_124426.zip"
 DRIVER_MODEL_NAME = "final_driver_model_continued_12000K_20250820_201438.zip"
 
 # COLLAB_MODEL_NAME = "../models_bak/final_driver_model_60000K_20250908_163645.zip"
-COLLAB_MODEL_NAME = "../models_bak/final_driver_model_60000K_20250909_140737.zip"
+COLLAB_MODEL_NAME = "../models_bak/final_driver_model_60000K_20250909_184218.zip"
 
 PLACING_MODEL_NAME = "../models_bak/final_placing_model_50000K_20250907_124625.zip"
 

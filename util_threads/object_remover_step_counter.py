@@ -77,7 +77,7 @@ def remove_object_on_plane_with_step_counter(model, data, plane_positions, plane
         time.sleep(check_interval)
         
 def remove_object_on_plane_with_step_counter_with_flag(model, data, plane_positions, plane_radius, plane_z, 
-                                           object_joint_ids, shared_state, check_interval=0.5):
+                                           object_joint_ids, shared_state, check_interval=0.5, min_delay_steps=7, max_delay_steps=15):
     print("remover thread running (step-based)")
     removed_ids = set()
     
@@ -147,6 +147,6 @@ def remove_object_on_plane_with_step_counter_with_flag(model, data, plane_positi
                is_on_plane(obj_pos, plane_positions[1], plane_radius, plane_z):
                 print(f"{joint_name} is on plane, scheduling removal...")
                 removed_ids.add(i)
-                schedule_removal_by_steps(i, qpos_adr, joint_name)
+                schedule_removal_by_steps(i, qpos_adr, joint_name, min_delay_steps, max_delay_steps)
 
         time.sleep(check_interval)

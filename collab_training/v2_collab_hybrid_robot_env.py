@@ -422,31 +422,33 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         action_is_valid = self._check_action_validity(action)
         
         if action_is_valid:
-            self._process_action(action, self.agent_robot)
+            action_reward = self._process_action(action, self.agent_robot)
         else:
             # print("Invalid action attempted, applying no-op instead.")
-            self._process_action(0, self.agent_robot)
+            action_reward = self._process_action(0, self.agent_robot)
+        
         
         # if self.current_step % 10 == 0:
         #     print("action:", action)
 
         reward = self._reward_function_robot_2()
+        reward += action_reward
 
         mujoco.mj_step(self.model, self.data)
 
         if self._check_robot_robot_collision():
             print("Robot-robot collision detected! Terminating episode.")
-            reward -= 4
+            reward -= 10
             terminated = True
             
         if self._check_robot_2_forbidden_collision():
             print("Robot collision with forbidden area detected! Terminating episode.")
-            reward -= 4
+            reward -= 10
             terminated = True
             
         if self._check_robot_3_forbidden_collision():
             print("Robot collision with forbidden area detected! Terminating episode.")
-            reward -= 4
+            reward -= 10
             terminated = True
             
         if break_flag:
@@ -472,7 +474,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
     def _reward_function_robot_2(self):
         reward = 0
         
-        reward -= 0.001  # Small step penalty to encourage efficiency
+        reward -= 0.0001  # Small step penalty to encourage efficiency
         
         potential_field_reward = self._calculate_potential_field_reward() * 10
         # print("Potential field reward:", potential_field_reward)
@@ -566,7 +568,15 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         if action == 6:        
             if self._can_robot_pick() is False:
                 return False
+            
+        if self._can_robot_pick():
+            if action == 4:
+                return False
         
+        if self._can_robot_place():
+            if action == 1:
+                return False 
+            
         if action in [7, 8]:
             if self.agent_robot == AgentRobot.ROBOT2:
                 if not self.robot_2_is_carrying_object:
@@ -729,9 +739,9 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
     
     def _robot_placing_object(self, layer, agent_robot):
         # self._brake_robot2(agent_robot)
-
+        print("Placing action executed")
         if agent_robot == AgentRobot.ROBOT2:
-            self.robot_2_is_stopped = True
+            self.robot_2_stopped = True
             self.robot_2_is_placing = True
             
             if layer == Layer.UPPER:
@@ -743,7 +753,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
                 self._robot_placing_execution(layer, agent_robot)
             
         elif agent_robot == AgentRobot.ROBOT3:
-            self.robot_2_is_stopped = True
+            self.robot_3_stopped = True
             self.robot_3_is_placing = True
             
             if layer == Layer.UPPER:
@@ -787,8 +797,9 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
                 
                 # print(f"Placing object at {target_position}")
                 self.robot_2_target_placing_position[2] += 0.02
-                self._move_object_to_position(self.active_joint_id, self.robot_2_target_placing_position)
+                self._move_object_to_position(self.robot_2_carrying_object_id, self.robot_2_target_placing_position)
                 self.robot_2_is_carrying_object = False
+                self.robot_2_carrying_object_id = None
                 self.robot_2_target_placing_position = None
                 self.robot_2_is_placing = False
                 self.robot_2_is_placing_lower = False
@@ -828,8 +839,9 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
                 
                 # print(f"Placing object at {target_position}")
                 self.robot_3_target_placing_position[2] += 0.02
-                self._move_object_to_position(self.active_joint_id, self.robot_3_target_placing_position)
+                self._move_object_to_position(self.robot_3_carrying_object_id, self.robot_3_target_placing_position)
                 self.robot_3_is_carrying_object = False
+                self.robot_3_carrying_object_id = None
                 self.robot_3_target_placing_position = None
                 self.robot_3_is_placing = False
                 self.robot_3_is_placing_lower = False
@@ -1001,7 +1013,8 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
 
         future1 = self.executor.submit(
             remove_object_on_plane_with_step_counter_with_flag,
-            model, data, lower_plane_positions, lower_plane_radius, lower_plane_z, object_joint_ids, remover_shared_state
+            model, data, lower_plane_positions, lower_plane_radius, lower_plane_z, object_joint_ids, remover_shared_state,
+            min_delay_steps=3, max_delay_steps=7
         )
 
         # upper plane parameters
@@ -1011,7 +1024,8 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
 
         future2 = self.executor.submit(
             remove_object_on_plane_with_step_counter_with_flag,
-            model, data, upper_plane_positions, upper_plane_radius, upper_plane_z, object_joint_ids, remover_shared_state
+            model, data, upper_plane_positions, upper_plane_radius, upper_plane_z, object_joint_ids, remover_shared_state,
+            min_delay_steps=3, max_delay_steps=7
         )
         
     def _get_object_number_on_each_placing_place(self):
@@ -1305,7 +1319,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
 
         distance_to_object = np.linalg.norm(self.active_position[:2] - robot_position)
         
-        if distance_to_object > 0.30:
+        if distance_to_object > 0.40:
             return False
         
         return True
@@ -1319,7 +1333,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         distance_to_placing_place_1 = np.linalg.norm(self.placingplace1_pos - robot_position)
         distance_to_placing_place_2 = np.linalg.norm(self.placingplace2_pos - robot_position)
 
-        if min(distance_to_placing_place_1, distance_to_placing_place_2) > 0.35:
+        if min(distance_to_placing_place_1, distance_to_placing_place_2) > 0.50:
             return False
         
         return True
@@ -1354,7 +1368,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
                 return np.zeros(3)
 
     def _all_objects_removed(self):
-        for _, joint_id in self.object_joints:
+        for _, joint_id, name in self.object_joints:
             body_id = self.model.jnt_bodyid[joint_id]
             position = self.data.xpos[body_id]
             position_x = position[0]
