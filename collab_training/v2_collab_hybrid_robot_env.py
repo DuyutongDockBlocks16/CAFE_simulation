@@ -474,7 +474,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
     def _reward_function_robot_2(self):
         reward = 0
         
-        reward -= 0.0001  # Small step penalty to encourage efficiency
+        reward -= 0.001  # Small step penalty to encourage efficiency
         
         potential_field_reward = self._calculate_potential_field_reward() * 10
         # print("Potential field reward:", potential_field_reward)
@@ -607,6 +607,21 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
             self.robot_3_is_placing:
             if action in [0, 1, 2, 3, 4, 5]:
                 return False
+            
+        if self.agent_robot == AgentRobot.ROBOT2:
+            if self.robot_2_carrying_object_color == "RED" and self._near_to_placing_place(self.agent_robot, self.placingplace1_pos):
+                if action in [7, 8]:
+                    return False
+            elif self.robot_2_carrying_object_color == "YELLOW" and self._near_to_placing_place(self.agent_robot, self.placingplace2_pos):
+                if action in [7, 8]:
+                    return False
+        elif self.agent_robot == AgentRobot.ROBOT3:
+            if self.robot_3_carrying_object_color == "RED" and self._near_to_placing_place(self.agent_robot, self.placingplace1_pos):
+                if action in [7, 8]:
+                    return False
+            elif self.robot_3_carrying_object_color == "YELLOW" and self._near_to_placing_place(self.agent_robot, self.placingplace2_pos):
+                if action in [7, 8]:
+                    return False
 
         return True
 
@@ -1014,7 +1029,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         future1 = self.executor.submit(
             remove_object_on_plane_with_step_counter_with_flag,
             model, data, lower_plane_positions, lower_plane_radius, lower_plane_z, object_joint_ids, remover_shared_state,
-            min_delay_steps=3, max_delay_steps=7
+            check_interval=0.05, min_delay_steps=1, max_delay_steps=2
         )
 
         # upper plane parameters
@@ -1025,7 +1040,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         future2 = self.executor.submit(
             remove_object_on_plane_with_step_counter_with_flag,
             model, data, upper_plane_positions, upper_plane_radius, upper_plane_z, object_joint_ids, remover_shared_state,
-            min_delay_steps=3, max_delay_steps=7
+            check_interval=0.05 , min_delay_steps=1, max_delay_steps=2
         )
         
     def _get_object_number_on_each_placing_place(self):
@@ -1325,17 +1340,23 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         return True
 
     def _can_robot_place(self):
-        if self.agent_robot == AgentRobot.ROBOT2:
+        if self._near_to_placing_place(self.agent_robot, self.placingplace1_pos) or \
+            self._near_to_placing_place(self.agent_robot, self.placingplace2_pos):
+            return True
+        
+        return False
+    
+    def _near_to_placing_place(self, agent_robot, placingplace_pos):
+        if agent_robot == AgentRobot.ROBOT2:
             robot_position = self.data.xpos[self.robot_2_rover_id][:2]
-        elif self.agent_robot == AgentRobot.ROBOT3:
+        elif agent_robot == AgentRobot.ROBOT3:
             robot_position = self.data.xpos[self.robot_3_rover_id][:2]
 
-        distance_to_placing_place_1 = np.linalg.norm(self.placingplace1_pos - robot_position)
-        distance_to_placing_place_2 = np.linalg.norm(self.placingplace2_pos - robot_position)
+        distance_to_placing_place = np.linalg.norm(placingplace_pos - robot_position)
 
-        if min(distance_to_placing_place_1, distance_to_placing_place_2) > 0.50:
+        if distance_to_placing_place > 0.50:
             return False
-        
+
         return True
 
     def _get_target_relative_info(self, robot_number):
