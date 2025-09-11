@@ -14,11 +14,6 @@ from enum import Enum
 from utils.mujoco_object_color_randomiser import randomize_materials_at_runtime
 from config.training_config import COLLAB_MODEL_NAME
 
-# FIRST_ROBOT_ACTION_SPACE_LENGTH = 8
-SECOND_ROBOT_NAVIGATION_ACTION_SPACE_LENGTH = 2
-SECOND_ROBOT_PICKING_AND_PLACING_ACTION_SPACE_LENGTH = 6
-
-SECOND_ROBOT_ACTION_SPACE_LENGTH = 8
 
 class Direction(Enum):
     FORWARD = 0
@@ -39,7 +34,7 @@ class ObjectColor:
         elif np.allclose(color_array, cls.YELLOW):
             return "YELLOW"
 
-class V2CollabHybridMuJoCoEnv(gym.Env):
+class V3CollabHybridMuJoCoEnv(gym.Env):
     
     def _get_data_and_model(self):
         model = mujoco.MjModel.from_xml_path("../xml/collab_mirobot.xml")
@@ -233,7 +228,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         self.action_space = gym.spaces.Discrete(len(ACTIONS))
 
         self.current_step = 0
-        self.max_steps = 5000
+        self.max_steps = 3000
         
         self.object_geoms = [
             "object0_geom", "object1_geom", "object2_geom", "object3_geom",
@@ -296,13 +291,15 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
             [AgentRobot.ROBOT2, AgentRobot.ROBOT3]
         )
         
-        self.rl_controlled_robot = None
+        # self.rl_controlled_robot = None
 
-        obs = self._get_obs()
+        obs = self._get_obs(self.agent_robot)
         
         self.observation_space = gym.spaces.Box(
             low=-np.inf, high=np.inf, shape=obs.shape, dtype=np.float32
         )
+        
+        self.rl_model = PPO.load(COLLAB_MODEL_NAME)
         
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -322,7 +319,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         if self.agent_robot == AgentRobot.ROBOT2:
             self.rl_controlled_robot = AgentRobot.ROBOT3
         if self.agent_robot == AgentRobot.ROBOT3:
-            self.rl_controlled_robot = AgentRobot.ROBOT2    
+            self.rl_controlled_robot = AgentRobot.ROBOT2
         
         self.current_step = 0
         
@@ -389,9 +386,11 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
                 mujoco.mj_forward(self.model, self.data)
                 time.sleep(0.1)
 
-        return self._get_obs(), info
+        return self._get_obs(self.agent_robot), info
     
     def step(self, action):
+        
+        self._process_rl_robot()
         
         total_reward = 0
         terminated = False
@@ -425,16 +424,15 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         
         terminated = False
         truncated = False
-        obs = self._get_obs()
+        obs = self._get_obs(self.agent_robot)
 
-        action_is_valid = self._check_action_validity(action)
+        action_is_valid = self._check_action_validity(action, self.agent_robot)
         
         if action_is_valid:
             action_reward = self._process_action(action, self.agent_robot)
         else:
             # print("Invalid action attempted, applying no-op instead.")
             action_reward = self._process_action(0, self.agent_robot)
-        
         
         # if self.current_step % 10 == 0:
         #     print("action:", action)
@@ -465,6 +463,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
             terminated = True
         
         if self.current_step >= self.max_steps:
+            print("Maximum steps reached, terminating episode.")
             terminated = True
             
         if not np.all(np.isfinite(self.data.qacc)) or np.any(np.abs(self.data.qacc) > 1e7):
@@ -556,20 +555,20 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
                 target_position[2] += 0.02
                 self._move_object_to_position(self.robot_3_carrying_object_id, target_position)
 
-    def _check_action_validity(self, action):
+    def _check_action_validity(self, action, agent_robot):
         if action in [0, 1, 2, 3, 4, 5]:
-            if self.agent_robot == AgentRobot.ROBOT2:
+            if agent_robot == AgentRobot.ROBOT2:
                 if self.robot_2_is_picking or self.robot_2_is_placing:
                     return False
-            elif self.agent_robot == AgentRobot.ROBOT3:
+            elif agent_robot == AgentRobot.ROBOT3:
                 if self.robot_3_is_picking or self.robot_3_is_placing:
                     return False
         
         if action == 6:
-            if self.agent_robot == AgentRobot.ROBOT2:
+            if agent_robot == AgentRobot.ROBOT2:
                 if self.robot_2_is_carrying_object:
                     return False
-            elif self.agent_robot == AgentRobot.ROBOT3:
+            elif agent_robot == AgentRobot.ROBOT3:
                 if self.robot_3_is_carrying_object:
                     return False
             
@@ -586,10 +585,10 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
                 return False 
             
         if action in [7, 8]:
-            if self.agent_robot == AgentRobot.ROBOT2:
+            if agent_robot == AgentRobot.ROBOT2:
                 if not self.robot_2_is_carrying_object:
                     return False
-            elif self.agent_robot == AgentRobot.ROBOT3:
+            elif agent_robot == AgentRobot.ROBOT3:
                 if not self.robot_3_is_carrying_object:
                     return False
         
@@ -616,18 +615,18 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
             if action in [0, 1, 2, 3, 4, 5]:
                 return False
             
-        if self.agent_robot == AgentRobot.ROBOT2:
-            if self.robot_2_carrying_object_color == "RED" and self._near_to_placing_place(self.agent_robot, self.placingplace1_pos):
+        if agent_robot == AgentRobot.ROBOT2:
+            if self.robot_2_carrying_object_color == "RED" and self._near_to_placing_place(agent_robot, self.placingplace1_pos):
                 if action in [7, 8]:
                     return False
-            elif self.robot_2_carrying_object_color == "YELLOW" and self._near_to_placing_place(self.agent_robot, self.placingplace2_pos):
+            elif self.robot_2_carrying_object_color == "YELLOW" and self._near_to_placing_place(agent_robot, self.placingplace2_pos):
                 if action in [7, 8]:
                     return False
-        elif self.agent_robot == AgentRobot.ROBOT3:
-            if self.robot_3_carrying_object_color == "RED" and self._near_to_placing_place(self.agent_robot, self.placingplace1_pos):
+        elif agent_robot == AgentRobot.ROBOT3:
+            if self.robot_3_carrying_object_color == "RED" and self._near_to_placing_place(agent_robot, self.placingplace1_pos):
                 if action in [7, 8]:
                     return False
-            elif self.robot_3_carrying_object_color == "YELLOW" and self._near_to_placing_place(self.agent_robot, self.placingplace2_pos):
+            elif self.robot_3_carrying_object_color == "YELLOW" and self._near_to_placing_place(agent_robot, self.placingplace2_pos):
                 if action in [7, 8]:
                     return False
 
@@ -723,7 +722,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         elif right_joint_id is not None:
             self.active_joint_id = right_joint_id
             
-        if self.agent_robot == AgentRobot.ROBOT2:
+        if agent_robot == AgentRobot.ROBOT2:
             if self.robot_2_random_picking_steps is None:
                 # self.robot_2_random_picking_steps = random.randint(4, 10)
                 self.robot_2_random_picking_steps = random.randint(1, 1)
@@ -741,7 +740,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
                 self.robot_2_stopped = False
                 self.robot_2_random_picking_steps = None
                 self.robot_2_random_picking_count = 0
-        elif self.agent_robot == AgentRobot.ROBOT3:
+        elif agent_robot == AgentRobot.ROBOT3:
             if self.robot_3_random_picking_steps is None:
                 # self.robot_3_random_picking_steps = random.randint(4, 10)
                 self.robot_3_random_picking_steps = random.randint(1, 1)
@@ -895,13 +894,13 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
     
     def _move_object_to_position(self, joint_id, new_position):
         qpos_adr = self.model.jnt_qposadr[joint_id]
-        joint_type = self.model.jnt_type[joint_id]
+        # joint_type = self.model.jnt_type[joint_id]
         
-        if joint_type == mujoco.mjtJoint.mjJNT_FREE:
-            self.data.qpos[qpos_adr:qpos_adr+3] = new_position 
-            self.data.qpos[qpos_adr+3:qpos_adr+7] = [1, 0, 0, 0]  
-            dof_adr = self.model.jnt_dofadr[joint_id]
-            self.data.qvel[dof_adr:dof_adr+6] = 0.0
+        # if joint_type == mujoco.mjtJoint.mjJNT_FREE:
+        self.data.qpos[qpos_adr:qpos_adr+3] = new_position 
+        self.data.qpos[qpos_adr+3:qpos_adr+7] = [1, 0, 0, 0]  
+        dof_adr = self.model.jnt_dofadr[joint_id]
+        self.data.qvel[dof_adr:dof_adr+6] = 0.0
 
 
     def render(self):
@@ -1157,7 +1156,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
 
         return potential_reward
     
-    def _get_obs(self):
+    def _get_obs(self, agent_robot):
         robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
         robot2_vel = self.data.cvel[self.robot_2_rover_id][:2]
         robot2_orientation = self._quaternion_to_yaw(self.data.xquat[self.robot_2_rover_id])
@@ -1213,8 +1212,8 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
                 placingplace_object_numbers_for_observation[i] = 1
             elif placingplace_object_number >= 1:
                 placingplace_object_numbers_for_observation[i] = -1 # capacity exceeded
-                
-        if self.agent_robot == AgentRobot.ROBOT2:
+
+        if agent_robot == AgentRobot.ROBOT2:
             agent_robot_obs = np.concatenate([
                     robot2_pos / self.max_position,                    # [2] 位置
                     robot2_vel / self.max_speed,                       # [2] 速度 
@@ -1252,7 +1251,7 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
                 [1.0 if self.robot_2_target_position_x_y is not None else 0.0],  # [1] 是否有目标
             ], dtype=np.float32)
         
-        elif self.agent_robot == AgentRobot.ROBOT3:
+        elif agent_robot == AgentRobot.ROBOT3:
             
             agent_robot_obs = np.concatenate([
                     robot3_pos / self.max_position,                    # [2] 位置
@@ -1293,9 +1292,9 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         
         
         walls = {"left": -3.0, "right": 3.0, "front": 3.0, "back": -3.0}
-        if self.agent_robot == AgentRobot.ROBOT2:
+        if agent_robot == AgentRobot.ROBOT2:
             robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
-        elif self.agent_robot == AgentRobot.ROBOT3:
+        elif agent_robot == AgentRobot.ROBOT3:
             robot2_pos = self.data.xpos[self.robot_3_rover_id][:2]
         wall_distances = np.array([
             robot2_pos[0] - walls["left"],   
@@ -1474,4 +1473,17 @@ class V2CollabHybridMuJoCoEnv(gym.Env):
         w, x, y, z = quat
         yaw = np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
         return yaw
-    
+
+    def _process_rl_robot(self):
+        obs = self._get_obs(self.rl_controlled_robot)
+
+        self._target_position_generator(self.rl_controlled_robot)
+
+        action, _ = self.rl_model.predict(obs, deterministic=False)
+        
+        action_is_valid = self._check_action_validity(action, self.rl_controlled_robot)
+        
+        if action_is_valid:
+            action_reward = self._process_action(action, self.rl_controlled_robot)
+        else:
+            action_reward = self._process_action(0, self.rl_controlled_robot)
