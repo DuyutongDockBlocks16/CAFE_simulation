@@ -103,7 +103,11 @@
   <asset>
     <material name="MatWheel" specular="1" rgba=".1 .1 .1 1" />
     <material name="MatBody" specular="1" rgba=".6 .6 .1 1" />
-    <material name="MatBody_2" specular="1" rgba="0.2 0.2 1.0 1" />
+    
+    <!-- blue -->
+    <material name="MatBody_2" specular="1" rgba="0.2 0.2 1.0 1" /> 
+
+    <!-- grey -->
     <material name="MatBody_3" specular="1" rgba="0.8 0.8 0.8 1" />
     <mesh name="chasis" scale=".01 .006 .0015"
       vertex=" 9   2   0

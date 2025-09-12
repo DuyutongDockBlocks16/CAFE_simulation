@@ -228,7 +228,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         self.action_space = gym.spaces.Discrete(len(ACTIONS))
 
         self.current_step = 0
-        self.max_steps = 3000
+        self.max_steps = 6000
         
         self.object_geoms = [
             "object0_geom", "object1_geom", "object2_geom", "object3_geom",
@@ -307,10 +307,6 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
             np.random.seed(seed)
             
         randomize_materials_at_runtime(self.model)
-        
-        # self.agent_robot = random.choice(
-        #     [AgentRobot.ROBOT2, AgentRobot.ROBOT3]
-        # )
         
         self.agent_robot = random.choice(
             [AgentRobot.ROBOT2, AgentRobot.ROBOT3]
@@ -428,14 +424,48 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
 
         action_is_valid = self._check_action_validity(action, self.agent_robot)
         
+        action_reward = 0
+        
         if action_is_valid:
             action_reward = self._process_action(action, self.agent_robot)
+            executed_action = action
         else:
             # print("Invalid action attempted, applying no-op instead.")
-            action_reward = self._process_action(0, self.agent_robot)
+            action_reward = self._process_action(0, self.agent_robot) # Change action to no-op for logging purposes
+            executed_action = 0
+        
         
         # if self.current_step % 10 == 0:
-        #     print("action:", action)
+        #     if action == 6:
+                
+        #         left_joint_id, left_position, right_joint_id, right_position = self._get_placed_object_info()
+
+        #         if left_joint_id is not None:
+        #             self.active_position = left_position
+        #             self.active_joint_id = left_joint_id
+        #             self.side = "left"
+        #         elif right_joint_id is not None:
+        #             self.active_position = right_position
+        #             self.active_joint_id = right_joint_id
+        #             self.side = "right"
+        #         else:
+        #             return False
+
+        #         if self.agent_robot == AgentRobot.ROBOT2:
+        #             robot_position = self.data.xpos[self.robot_2_rover_id][:2]
+        #         elif self.agent_robot == AgentRobot.ROBOT3:
+        #             robot_position = self.data.xpos[self.robot_3_rover_id][:2]
+
+        #         distance_to_object = np.linalg.norm(self.active_position[:2] - robot_position)
+                
+        #         if distance_to_object < 0.4:
+        #             print(f"Step: {self.current_step}, Agent Robot: {self.agent_robot.name}, distance to object: {distance_to_object:.3f}, object id: {self.active_joint_id}")
+        #             print("action:", action, "executed_action:", executed_action)
+        #             if self.agent_robot == AgentRobot.ROBOT2:
+        #                 color = "blue"
+        #             elif self.agent_robot == AgentRobot.ROBOT3:
+        #                 color = "grey"
+        #             print("color:", color)
 
         reward = self._reward_function_robot_2()
         reward += action_reward
@@ -573,14 +603,14 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
                     return False
             
         if action == 6:        
-            if self._can_robot_pick() is False:
+            if self._can_robot_pick(agent_robot) is False:
                 return False
             
-        if self._can_robot_pick():
+        if self._can_robot_pick(agent_robot):
             if action == 4:
                 return False
         
-        if self._can_robot_place():
+        if self._can_robot_place(agent_robot):
             if action == 1:
                 return False 
             
@@ -593,7 +623,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
                     return False
         
         if action in [7, 8]:
-            if self._can_robot_place() is False:
+            if self._can_robot_place(agent_robot) is False:
                 return False
             
         if self.robot_2_is_picking or self.robot_3_is_picking:
@@ -1163,8 +1193,8 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         # robot2_status = self.second_robot_status.value
         # robot_2_target_position = np.array(self.robot_2_target_position_x_y) 
         
-        robot2_can_pick = self._can_robot_pick()
-        robot2_can_place = self._can_robot_place()
+        robot2_can_pick = self._can_robot_pick(agent_robot)
+        robot2_can_place = self._can_robot_place(agent_robot)
         
         robot_2_is_carrying_object = 1.0 if self.robot_2_is_carrying_object else 0.0
         if self.robot_2_is_carrying_object:
@@ -1186,8 +1216,8 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         # robot3_status = self.third_robot_status.value
         # robot_3_target_position = np.array(self.robot_3_target_position_x_y)
 
-        robot_3_can_pick = self._can_robot_pick()
-        robot_3_can_place = self._can_robot_place()
+        robot_3_can_pick = self._can_robot_pick(agent_robot)
+        robot_3_can_place = self._can_robot_place(agent_robot)
 
         robot_3_is_carrying_object = 1.0 if self.robot_3_is_carrying_object else 0.0
         if self.robot_3_is_carrying_object:
@@ -1320,7 +1350,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         
         return obs
     
-    def _can_robot_pick(self):
+    def _can_robot_pick(self, agent_robot):
         left_joint_id, left_position, right_joint_id, right_position = self._get_placed_object_info()
 
         if left_joint_id is not None:
@@ -1333,10 +1363,10 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
             self.side = "right"
         else:
             return False
-            
-        if self.agent_robot == AgentRobot.ROBOT2:
+
+        if agent_robot == AgentRobot.ROBOT2:
             robot_position = self.data.xpos[self.robot_2_rover_id][:2]
-        elif self.agent_robot == AgentRobot.ROBOT3:
+        elif agent_robot == AgentRobot.ROBOT3:
             robot_position = self.data.xpos[self.robot_3_rover_id][:2]
 
         distance_to_object = np.linalg.norm(self.active_position[:2] - robot_position)
@@ -1346,9 +1376,9 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         
         return True
 
-    def _can_robot_place(self):
-        if self._near_to_placing_place(self.agent_robot, self.placingplace1_pos) or \
-            self._near_to_placing_place(self.agent_robot, self.placingplace2_pos):
+    def _can_robot_place(self, agent_robot):
+        if self._near_to_placing_place(agent_robot, self.placingplace1_pos) or \
+            self._near_to_placing_place(agent_robot, self.placingplace2_pos):
             return True
         
         return False
