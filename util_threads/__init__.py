@@ -1,3 +1,3 @@
-from .object_placer import place_object_on_table
+from .object_placer import place_object_on_table, place_object_on_table_random
 from .object_remover import remove_object_on_plane
 from .object_remover_step_counter import remove_object_on_plane_with_step_counter

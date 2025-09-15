@@ -4,7 +4,7 @@ import mujoco
 from first_robot_controller.mirobot_controller import MirobotController
 from config.env_config import Direction, Layer, FiniteState, RLRobotFiniteState
 import concurrent.futures
-from util_threads.object_placer import place_object_on_table
+from util_threads.object_placer import place_object_on_table_random
 from util_threads.object_remover_step_counter import remove_object_on_plane_with_step_counter_with_flag
 import threading
 from stable_baselines3 import PPO
@@ -172,7 +172,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         self.forbidden_geoms = [
             "wall_front", 
             "wall_back", "wall_left", "wall_right",
-            "pickingplace:table0", "pickingplace:table2",
+            # "pickingplace:table0", "pickingplace:table2",
             "placingplace2:low_plane", "placingplace2:high_plane",
             "placingplace1:low_plane", "placingplace1:high_plane",  
         ]
@@ -1041,7 +1041,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
     
     def start_object_placer_thread(self, model, data, object_joint_ids, left_object_position, right_object_position, shared_state):
         threading.Thread(
-            target=place_object_on_table,
+            target=place_object_on_table_random,
             args=(model, data, left_object_position, right_object_position, object_joint_ids),
             kwargs={"shared_state": shared_state},
             daemon=True
@@ -1371,18 +1371,18 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
 
         distance_to_object = np.linalg.norm(self.active_position[:2] - robot_position)
         
-        if distance_to_object > 0.40:
+        if distance_to_object > 0.50:
             return False
         
         return True
 
     def _can_robot_place(self, agent_robot):
-        if self._near_to_placing_place(agent_robot, self.placingplace1_pos) or \
-            self._near_to_placing_place(agent_robot, self.placingplace2_pos):
+        if self._near_to_placing_place(agent_robot, self.placingplace1_pos ) or \
+            self._near_to_placing_place(agent_robot, self.placingplace2_pos ):
             return True
         
         return False
-    
+
     def _near_to_placing_place(self, agent_robot, placingplace_pos):
         if agent_robot == AgentRobot.ROBOT2:
             robot_position = self.data.xpos[self.robot_2_rover_id][:2]
@@ -1390,8 +1390,13 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
             robot_position = self.data.xpos[self.robot_3_rover_id][:2]
 
         distance_to_placing_place = np.linalg.norm(placingplace_pos - robot_position)
+        
+        if placingplace_pos == self.placingplace1_pos:
+            threshold = 0.7
+        elif placingplace_pos == self.placingplace2_pos:
+            threshold = 0.5
 
-        if distance_to_placing_place > 0.50:
+        if distance_to_placing_place > threshold:
             return False
 
         return True

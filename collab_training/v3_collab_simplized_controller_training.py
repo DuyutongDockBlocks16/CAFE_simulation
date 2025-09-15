@@ -24,7 +24,7 @@ import mujoco.viewer
 import time
 import os
 from datetime import datetime
-from config.training_config import COLLAB_MODEL_NAME, DRIVER_MODEL_NAME
+from config.training_config import COLLAB_2_MODEL_NAME, DRIVER_MODEL_NAME
 from callbacks.episode_data_collector import EpisodeBatchCollector
 from callbacks.success_check_point_saver import SuccessCheckpointCallback
 from callbacks.training_renderer import RenderCallback
@@ -234,7 +234,7 @@ def driver_model_training_parallel(load_model_path=None, num_envs=8):
 
     # total_additional_steps = 160_000_000
     # total_additional_steps = 500_000
-    total_additional_steps = 10_000_000
+    total_additional_steps = 12_000_000
 
     ent_scheduler = EntCoefficientScheduler(
         initial_ent_coef=0.02,  
@@ -378,7 +378,7 @@ def driver_model_training_parallel(load_model_path=None, num_envs=8):
 #     print("✅ 测试完成")
 
 def driver_model_implementation(env):
-    model = PPO.load(COLLAB_MODEL_NAME, env=env)
+    model = PPO.load(COLLAB_2_MODEL_NAME, env=env)
     obs, info = env.reset()
 
     env.render()
@@ -423,8 +423,8 @@ def driver_model_implementation(env):
 if __name__ == "__main__":
     driver_env = gym.make("V3CollabHybridMuJoCoEnv-v0")
     # driver_model_training(driver_env)
-    # driver_model_training(driver_env, load_model_path=COLLAB_MODEL_NAME)
-    # driver_model_training_parallel(load_model_path=COLLAB_MODEL_NAME, num_envs=8)
+    # driver_model_training(driver_env, load_model_path=COLLAB_2_MODEL_NAME)
+    # driver_model_training_parallel(load_model_path=COLLAB_2_MODEL_NAME, num_envs=8)
     driver_model_training_parallel(load_model_path=None, num_envs=14)
     # driver_model_test_single_episode(driver_env)
     # driver_model_implementation(driver_env)
