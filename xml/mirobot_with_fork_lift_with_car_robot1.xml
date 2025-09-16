@@ -94,7 +94,7 @@
     </default>
 
     <default class="active_adhesion">
-      <!-- <geom rgba=".8 .5 .5 1" margin=".01" gap=".01"/> -->
+      <!-- <geom rgba=".8 .5 .5 1"/> -->
       <geom margin=".01" gap=".01"/>
     </default>
 
@@ -300,17 +300,17 @@
                       <geom class="collision" mesh="link6" />
                       <body name="robot1:vacuum_sphere" pos="0 0 -0.028" childclass="active_adhesion">
 
-                        <site name="robot1:vacuum_contact_site" pos="0 0 0" size="0.01"/>
+                        <!-- <site name="robot1:vacuum_contact_site" pos="0 0 0" size="0.01"/> -->
 
-                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
-                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="0.0027 0.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
-                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="0.0027 -.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
-                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="-.0027 0.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
-                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="-.0027 -.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
-                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="-.003 0 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
-                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos=".003 0 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
-                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="0 -.003 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
-                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 1" pos="0 .003 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 0.0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 0.0" pos="0.0027 0.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 0.0" pos="0.0027 -.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 0.0" pos="-.0027 0.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 0.0" pos="-.0027 -.0027 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 0.0" pos="-.003 0 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 0.0" pos=".003 0 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 0.0" pos="0 -.003 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
+                        <geom type="sphere" size="0.002" rgba="0.8 0.2 0.2 0.0" pos="0 .003 0" friction="3 0.01 0.001" solimp="0.99 0.99 0.001" solref="0.02 1"/>
                       </body>
                       <!-- <body name="4boxes" pos=".12 0 -.08" childclass="active_adhesion">
                         <site name="force_sensor" group="3"/>
@@ -430,8 +430,8 @@
       class="acker_solver_param" />
   </equality>
 
-  <sensor>
+  <!-- <sensor>
     <touch name="robot1:vacuum_touch" site="robot1:vacuum_contact_site"/>
-  </sensor>
+  </sensor> -->
 
 </mujoco>

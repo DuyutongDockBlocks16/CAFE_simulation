@@ -1,6 +1,6 @@
 <mujoco>
-  <!-- <include file="mirobot_with_fork_lift_with_car_robot1.xml" />
-  <include file="mirobot_with_fork_lift_with_car_robot2.xml" /> -->
+  <include file="mirobot_with_fork_lift_with_car_robot1.xml" />
+  <!-- <include file="mirobot_with_fork_lift_with_car_robot2.xml" /> -->
   <!-- <include file="mirobot_with_fork_lift_with_car_robot3.xml" /> -->
   <!-- <include file="robot_husky_mobile.xml"/> -->
   <!-- <include file="rover4We-only.xml"/> -->

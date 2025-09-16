@@ -241,7 +241,7 @@
   </tendon>
 
   <actuator>
-    <motor name="robot2:drive" tendon="robot2:rear-differential" ctrllimited="true" ctrlrange="-3 3"
+    <motor name="robot2:drive" tendon="robot2:rear-differential" ctrllimited="true" ctrlrange="-6 6"
     gear="1.5" />
     <position name="robot2:ghost-steer" joint="robot2:ghost-steer-hinge" ctrllimited="true" ctrlrange="-.9 .9"
       gear="4.0" />

@@ -4,7 +4,7 @@ import mujoco
 from first_robot_controller.mirobot_controller import MirobotController
 from config.env_config import Direction, Layer, FiniteState, RLRobotFiniteState
 import concurrent.futures
-from util_threads.object_placer import place_object_on_table
+from util_threads.object_placer import place_object_on_table_random
 from util_threads.object_remover_step_counter import remove_object_on_plane_with_step_counter_with_flag
 import threading
 from stable_baselines3 import PPO
@@ -14,6 +14,7 @@ from enum import Enum
 from utils.mujoco_object_color_randomiser import randomize_materials_at_runtime
 from config.training_config import COLLAB_MODEL_NAME
 
+SECOND_ROBOT_ACTION_SPACE_LENGTH = 8
 
 class Direction(Enum):
     FORWARD = 0
@@ -34,7 +35,7 @@ class ObjectColor:
         elif np.allclose(color_array, cls.YELLOW):
             return "YELLOW"
 
-class V3CollabHybridMuJoCoEnv(gym.Env):
+class V4CollabHybridMuJoCoEnv(gym.Env):
     
     def _get_data_and_model(self):
         model = mujoco.MjModel.from_xml_path("../xml/collab_mirobot.xml")
@@ -172,7 +173,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         self.forbidden_geoms = [
             "wall_front", 
             "wall_back", "wall_left", "wall_right",
-            # "pickingplace:table0", "pickingplace:table2",
+            "pickingplace:table0", "pickingplace:table2",
             "placingplace2:low_plane", "placingplace2:high_plane",
             "placingplace1:low_plane", "placingplace1:high_plane",  
         ]
@@ -201,34 +202,34 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         ]
         # General setup end
         
-        # ACTIONS = {
-        #     0: "drive 0",
-        #     1: "drive 3",
-        #     2: "drive -3",
-        #     3: "steer 0",
-        #     4: "steer -0.9",
-        #     5: "steer 0.9",
-        #     6: "pick",
-        #     7: "place upper",
-        #     8: "place lower"
-        # }
-        
         ACTIONS = {
-            0: "do nothing",
-            1: "forward",
-            2: "backward",
-            3: "left",
-            4: "right",
-            5: "do nothing",
+            0: "drive 0",
+            1: "drive 3",
+            2: "drive -3",
+            3: "steer 0",
+            4: "steer -0.9",
+            5: "steer 0.9",
             6: "pick",
             7: "place upper",
             8: "place lower"
         }
+        
+        # ACTIONS = {
+        #     0: "do nothing",
+        #     1: "forward",
+        #     2: "backward",
+        #     3: "left",
+        #     4: "right",
+        #     5: "do nothing",
+        #     6: "pick",
+        #     7: "place upper",
+        #     8: "place lower"
+        # }
             
         self.action_space = gym.spaces.Discrete(len(ACTIONS))
 
         self.current_step = 0
-        self.max_steps = 8000
+        self.max_steps = 6000
         
         self.object_geoms = [
             "object0_geom", "object1_geom", "object2_geom", "object3_geom",
@@ -299,7 +300,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
             low=-np.inf, high=np.inf, shape=obs.shape, dtype=np.float32
         )
         
-        self.rl_model = PPO.load(COLLAB_MODEL_NAME)
+        # self.rl_model = PPO.load(COLLAB_MODEL_NAME)
         
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -386,7 +387,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
     
     def step(self, action):
         
-        self._process_rl_robot()
+        # self._process_rl_robot()
         
         total_reward = 0
         terminated = False
@@ -526,17 +527,17 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         action_reward = 0
         
         if action == 0:
-            self.move_robot(0, 0, agent_robot)
+            self._forward_robot(0, agent_robot)
         elif action == 1:
-            self.move_robot(0.05, 0, agent_robot)
+            self._forward_robot(6, agent_robot)
         elif action == 2:
-            self.move_robot(-0.05, 0, agent_robot)
+            self._forward_robot(-6, agent_robot)
         elif action == 3:
-            self.move_robot(0, 0.05, agent_robot)
-        elif action == 4: 
-            self.move_robot(0, -0.05, agent_robot)
-        elif action == 5: 
-            self.move_robot(0, 0, agent_robot)
+            self._steer_robot(0, agent_robot)
+        elif action == 4:
+            self._steer_robot(-0.9, agent_robot)
+        elif action == 5:
+            self._steer_robot(0.9, agent_robot)
         elif action == 6:
             print("Picking action executed")
             self._robot_picking(agent_robot)
@@ -1041,7 +1042,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
     
     def start_object_placer_thread(self, model, data, object_joint_ids, left_object_position, right_object_position, shared_state):
         threading.Thread(
-            target=place_object_on_table,
+            target=place_object_on_table_random,
             args=(model, data, left_object_position, right_object_position, object_joint_ids),
             kwargs={"shared_state": shared_state},
             daemon=True
@@ -1371,7 +1372,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
 
         distance_to_object = np.linalg.norm(self.active_position[:2] - robot_position)
         
-        if distance_to_object > 0.50:
+        if distance_to_object > 0.80:
             return False
         
         return True
@@ -1392,9 +1393,9 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         distance_to_placing_place = np.linalg.norm(placingplace_pos - robot_position)
         
         if placingplace_pos == self.placingplace1_pos:
-            threshold = 1.0
+            threshold = 0.8
         elif placingplace_pos == self.placingplace2_pos:
-            threshold = 0.5
+            threshold = 0.8
 
         if distance_to_placing_place > threshold:
             return False
@@ -1509,16 +1510,16 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         yaw = np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
         return yaw
 
-    def _process_rl_robot(self):
-        obs = self._get_obs(self.rl_controlled_robot)
+    # def _process_rl_robot(self):
+    #     obs = self._get_obs(self.rl_controlled_robot)
 
-        self._target_position_generator(self.rl_controlled_robot)
+    #     self._target_position_generator(self.rl_controlled_robot)
 
-        action, _ = self.rl_model.predict(obs, deterministic=False)
+    #     action, _ = self.rl_model.predict(obs, deterministic=False)
         
-        action_is_valid = self._check_action_validity(action, self.rl_controlled_robot)
+    #     action_is_valid = self._check_action_validity(action, self.rl_controlled_robot)
         
-        if action_is_valid:
-            action_reward = self._process_action(action, self.rl_controlled_robot)
-        else:
-            action_reward = self._process_action(0, self.rl_controlled_robot)
+    #     if action_is_valid:
+    #         action_reward = self._process_action(action, self.rl_controlled_robot)
+    #     else:
+    #         action_reward = self._process_action(0, self.rl_controlled_robot)
