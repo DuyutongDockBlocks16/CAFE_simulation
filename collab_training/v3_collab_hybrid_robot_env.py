@@ -4,7 +4,7 @@ import mujoco
 from first_robot_controller.mirobot_controller import MirobotController
 from config.env_config import Direction, Layer, FiniteState, RLRobotFiniteState
 import concurrent.futures
-from util_threads.object_placer import place_object_on_table
+from util_threads.object_placer import place_object_on_table, place_object_on_table_random
 from util_threads.object_remover_step_counter import remove_object_on_plane_with_step_counter_with_flag
 import threading
 from stable_baselines3 import PPO
@@ -299,7 +299,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
             low=-np.inf, high=np.inf, shape=obs.shape, dtype=np.float32
         )
         
-        self.rl_model = PPO.load(COLLAB_MODEL_NAME)
+        # self.rl_model = PPO.load(COLLAB_MODEL_NAME)
         
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -386,7 +386,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
     
     def step(self, action):
         
-        self._process_rl_robot()
+        # self._process_rl_robot()
         
         total_reward = 0
         terminated = False
@@ -1041,7 +1041,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
     
     def start_object_placer_thread(self, model, data, object_joint_ids, left_object_position, right_object_position, shared_state):
         threading.Thread(
-            target=place_object_on_table,
+            target=place_object_on_table_random,
             args=(model, data, left_object_position, right_object_position, object_joint_ids),
             kwargs={"shared_state": shared_state},
             daemon=True

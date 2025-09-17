@@ -4,7 +4,7 @@ import numpy as np
 import time
 from config.env_config import Direction
 
-def place_object_on_table(model, data, left_object_position, right_object_position, object_joint_ids, shared_state, check_interval=0.1):
+def place_object_on_table(model, data, left_object_position, right_object_position, object_joint_ids, shared_state, check_interval=0.2):
 
     placed_flag = False
     next_object_position = random.choice([left_object_position, right_object_position])

@@ -399,32 +399,62 @@ def driver_model_implementation(env):
             mujoco.mj_step(env.unwrapped.model, env.unwrapped.data)  
             break
 
-    model = env.unwrapped.model
-    data = env.unwrapped.data
+    # model = env.unwrapped.model
+    # data = env.unwrapped.data
 
     env.close()
 
-    sleep(20)
+    # sleep(20)
 
-    with mujoco.viewer.launch_passive(model, data) as viewer:
-        print("Press ESC to exit viewer...")
-        last_time = time.time()
-        frame_count = 0
-        while viewer.is_running():
-            mujoco.mj_step(model, data)
-            viewer.sync()
-            frame_count += 1
-            now = time.time()
-            if now - last_time >= 1.0:
-                # print(f"Simulated FPS: {frame_count}")
-                frame_count = 0
-                last_time = now
+    # with mujoco.viewer.launch_passive(model, data) as viewer:
+    #     print("Press ESC to exit viewer...")
+    #     last_time = time.time()
+    #     frame_count = 0
+    #     while viewer.is_running():
+    #         mujoco.mj_step(model, data)
+    #         viewer.sync()
+    #         frame_count += 1
+    #         now = time.time()
+    #         if now - last_time >= 1.0:
+    #             # print(f"Simulated FPS: {frame_count}")
+    #             frame_count = 0
+    #             last_time = now
+    
+def data_collection(env):
+    # python v3_collab_simplized_controller_training.py 2>&1 | tee data_collection_$(date +%Y%m%d_%H%M%S).log
+    model = PPO.load(COLLAB_2_MODEL_NAME, env=env)
+    
+    range_number = 100
+    
+    for i in range(range_number):
+        print(f"\n=== Data Collection Episode {i+1}/{range_number} ===")
+        obs, info = env.reset()
+
+        # env.render()
+        # sleep(10)
+
+        for _ in range(200000000000):
+            # env.render() 
+            # sleep(0.01)
+            action, _ = model.predict(obs, deterministic=False)
+            obs, reward, terminated, truncated, info = env.step(action)
+            if terminated or truncated:
+                obs, info = env.reset()
+                # env.unwrapped.data.ctrl[:] = 0
+                mujoco.mj_step(env.unwrapped.model, env.unwrapped.data)  
+                break
+
+        env.close()
+    
+    env.close()
+
     
 if __name__ == "__main__":
     driver_env = gym.make("V3CollabHybridMuJoCoEnv-v0")
     # driver_model_training(driver_env)
     # driver_model_training(driver_env, load_model_path=COLLAB_2_MODEL_NAME)
     # driver_model_training_parallel(load_model_path=COLLAB_2_MODEL_NAME, num_envs=8)
-    # driver_model_training_parallel(load_model_path=None, num_envs=14)
+    driver_model_training_parallel(load_model_path=None, num_envs=14)
     # driver_model_test_single_episode(driver_env)
-    driver_model_implementation(driver_env)
+    # driver_model_implementation(driver_env)
+    # data_collection(driver_env)
