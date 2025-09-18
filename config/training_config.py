@@ -9,11 +9,11 @@ DRIVER_MODEL_NAME = "final_driver_model_continued_12000K_20250820_201438.zip"
 PLACING_MODEL_NAME = "../models_bak/final_placing_model_50000K_20250907_124625.zip"
 
 V1_MODEL_NAME = "../models_bak/final_driver_model_12000K_20250917_120511.zip.bak"
-V2_MODEL_NAME = "../models_bak/final_driver_model_10000K_20250912_142558.zip"
+V2_MODEL_NAME = "../models_bak/final_driver_model_12000K_20250917_170818.zip.bak"
 
-COLLAB_MODEL_NAME = V1_MODEL_NAME
+COLLAB_MODEL_NAME = V2_MODEL_NAME
 
 # COLLAB_2_MODEL_NAME = "../models_bak/final_driver_model_10000K_20250912_142558.zip"
-COLLAB_2_MODEL_NAME = V1_MODEL_NAME
+COLLAB_2_MODEL_NAME = V2_MODEL_NAME
 
 SUCCESS_THRESHOLD = 10000

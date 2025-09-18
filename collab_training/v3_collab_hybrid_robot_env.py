@@ -12,7 +12,7 @@ import random
 import time
 from enum import Enum
 from utils.mujoco_object_color_randomiser import randomize_materials_at_runtime
-from config.training_config import V1_MODEL_NAME
+from config.training_config import COLLAB_MODEL_NAME
 
 
 class Direction(Enum):
@@ -299,7 +299,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
             low=-np.inf, high=np.inf, shape=obs.shape, dtype=np.float32
         )
         
-        self.rl_model = PPO.load(V1_MODEL_NAME)
+        self.rl_model = PPO.load(COLLAB_MODEL_NAME)
         
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
