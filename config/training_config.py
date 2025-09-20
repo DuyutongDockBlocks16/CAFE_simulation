@@ -11,10 +11,11 @@ PLACING_MODEL_NAME = "../models_bak/final_placing_model_50000K_20250907_124625.z
 V1_MODEL_NAME = "../models_bak/final_driver_model_12000K_20250917_120511.zip.bak"
 V2_MODEL_NAME = "../models_bak/final_driver_model_12000K_20250917_170818.zip.bak"
 E1_MODEL_NAME = "../models_bak/final_driver_model_continued_24000K_20250918_113210.zip.bak" # from V2_MODEL_NAME
+E2_MODEL_NAME = "../models_bak/final_driver_model_continued_36000K_20250919_134832.zip.bak"
 
-COLLAB_MODEL_NAME = E1_MODEL_NAME
+COLLAB_MODEL_NAME = E2_MODEL_NAME
 
 # COLLAB_2_MODEL_NAME = "../models_bak/final_driver_model_10000K_20250912_142558.zip"
-COLLAB_2_MODEL_NAME = E1_MODEL_NAME
+COLLAB_2_MODEL_NAME = E2_MODEL_NAME
 
 SUCCESS_THRESHOLD = 10000
