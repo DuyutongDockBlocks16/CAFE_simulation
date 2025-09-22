@@ -24,7 +24,7 @@ import mujoco.viewer
 import time
 import os
 from datetime import datetime
-from config.training_config import COLLAB_2_MODEL_NAME, DRIVER_MODEL_NAME
+from config.training_config import COLLAB_2_MODEL_NAME, DRIVER_MODEL_NAME, FIXED_MODEL_NAME, V1_MODEL_NAME
 from callbacks.episode_data_collector import EpisodeBatchCollector
 from callbacks.success_check_point_saver import SuccessCheckpointCallback
 from callbacks.training_renderer import RenderCallback
@@ -438,7 +438,7 @@ def data_collection(env):
         for _ in range(200000000000):
             # env.render() 
             # sleep(0.01)
-            action, _ = model.predict(obs, deterministic=False)
+            action, _ = model.predict(obs, deterministic=True)
             obs, reward, terminated, truncated, info = env.step(action)
             if terminated or truncated:
                 obs, info = env.reset()
@@ -455,6 +455,119 @@ def data_collection(env):
         env.close()
     
     env.close()
+    
+def driver_model_training_episode_save(env, load_model_path=None, save_every_episodes=1, enable_backup=False):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = f"../logs/driver_episode_data_{timestamp}.jsonl"
+    
+    episode_collector = EpisodeBatchCollector(
+        output_file=output_file,
+        batch_size=1,
+        verbose=1
+    )
+    
+    combined_callback = CallbackList([
+        episode_collector,
+    ])
+    
+    if load_model_path is not None:
+        model = PPO.load(load_model_path, env=env)
+        print(f"✅ Loaded model from: {load_model_path}")
+    else:
+        model = PPO(
+            "MlpPolicy", 
+            env, 
+            verbose=1, 
+            learning_rate=3e-4,
+            n_steps=2048,
+            batch_size=256,
+            tensorboard_log="./ppo_logs/"
+        )
+    
+    episode_count = 0
+    total_episodes = 8000
+    
+    for episode in range(total_episodes):
+        print(f"\n=== Episode {episode+1}/{total_episodes} ===")
+        
+        # 训练一个episode
+        obs, info = env.reset()
+        done = False
+        steps_in_episode = 0
+        
+        while not done:
+            action, _ = model.predict(obs, deterministic=False)
+            obs, reward, terminated, truncated, info = env.step(action)
+            done = terminated or truncated
+            steps_in_episode += 1
+            
+            if steps_in_episode > 8000: 
+                print("⚠️ Reached maximum steps, breaking...")
+                done = True
+                break
+            
+        if steps_in_episode > 0:
+            model.learn(
+                total_timesteps=steps_in_episode, 
+                reset_num_timesteps=False, 
+                callback=combined_callback
+            )
+        
+        episode_count += 1
+
+        # 每隔指定episode保存模型
+        if episode_count % save_every_episodes == 0:
+            if enable_backup:
+                # 备份模式：如果存在旧模型，先备份
+                if os.path.exists(f"{FIXED_MODEL_NAME}"):
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    backup_name = f"backup_ep{episode_count-save_every_episodes}_{timestamp}.zip"
+                    os.rename(f"{FIXED_MODEL_NAME}", f"{backup_name}")
+                    print(f"📁 Backed up previous model to: {backup_name}")
+            else:
+                # 无备份模式：直接覆盖
+                if os.path.exists(f"{FIXED_MODEL_NAME}"):
+                    print(f"🔄 Overwriting existing model: {FIXED_MODEL_NAME}")
+            
+            # 保存新模型到固定名字
+            model.save(FIXED_MODEL_NAME)
+            print(f"💾 Saved model after episode {episode_count}: {FIXED_MODEL_NAME}")
+    
+    env.close()
+    
+def driver_model_training_timestep_based(env, load_model_path=None):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = f"../logs/driver_episode_data_{timestamp}.jsonl"
+    
+    episode_collector = EpisodeBatchCollector(
+        output_file=output_file,
+        batch_size=1,
+        verbose=1
+    )
+    
+    combined_callback = CallbackList([
+        episode_collector,
+    ])
+    
+    for round in range(8000):
+        # 每个episode重新加载上一次训练的模型
+        if round == 0 and load_model_path:
+            model = PPO.load(load_model_path, env=env)
+        elif round > 0:
+            model = PPO.load(f"{FIXED_MODEL_NAME}", env=env)
+        else:
+            model = PPO("MlpPolicy", env, verbose=1)
+
+        # 训练这个模型
+        model.learn(
+            total_timesteps=4096, 
+            reset_num_timesteps=False,
+            callback=combined_callback
+        )
+         
+        # 保存训练后的模型
+        model.save(FIXED_MODEL_NAME)
+        print(f"💾 Round {round+1}: Model improved and saved")
 
     
 if __name__ == "__main__":
@@ -466,3 +579,4 @@ if __name__ == "__main__":
     # driver_model_test_single_episode(driver_env)
     # driver_model_implementation(driver_env)
     # data_collection(driver_env)
+    # driver_model_training_episode_save(driver_env, load_model_path=V1_MODEL_NAME, save_every_episodes=1, enable_backup=False)
