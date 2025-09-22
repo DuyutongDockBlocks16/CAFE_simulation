@@ -16,10 +16,11 @@ E3_MODEL_NAME = "../models_bak/final_driver_model_continued_36000K_20250920_1552
 E4_MODEL_NAME = "../models_bak/final_driver_model_continued_48000K_20250920_190030.zip.bak"
 E5_MODEL_NAME = "../models_bak/final_driver_model_continued_60000K_20250920_195253.zip.bak"
 E6_MODEL_NAME = "../models_bak/final_driver_model_continued_72000K_20250920_212641.zip.bak"
+E7_MODEL_NAME = "../models_bak/final_driver_model_continued_84000K_20250922_100256.zip.bak"
 
-COLLAB_MODEL_NAME = E6_MODEL_NAME
+COLLAB_MODEL_NAME = E7_MODEL_NAME
 
 # COLLAB_2_MODEL_NAME = "../models_bak/final_driver_model_10000K_20250912_142558.zip"
-COLLAB_2_MODEL_NAME = E6_MODEL_NAME
+COLLAB_2_MODEL_NAME = E7_MODEL_NAME
 
 SUCCESS_THRESHOLD = 10000
