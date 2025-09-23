@@ -591,4 +591,4 @@ if __name__ == "__main__":
     # driver_model_implementation(driver_env)
     # data_collection(driver_env)
     
-    # driver_model_training_timestep_based_parallel_safe(load_model_path=V1_MODEL_NAME)
+    driver_model_training_timestep_based_parallel_safe(load_model_path=V1_MODEL_NAME)
