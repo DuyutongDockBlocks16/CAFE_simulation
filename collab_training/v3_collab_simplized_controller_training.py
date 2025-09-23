@@ -535,7 +535,7 @@ def driver_model_training_episode_save(env, load_model_path=None, save_every_epi
     
     env.close()
     
-def driver_model_training_timestep_based_parallel_safe(load_model_path=None, num_envs=8):
+def driver_model_training_timestep_based_parallel_safe(load_model_path=None, num_envs=14):
     
     # 创建并行环境（在同一个进程内）
     env = SubprocVecEnv([make_env(i) for i in range(num_envs)])
