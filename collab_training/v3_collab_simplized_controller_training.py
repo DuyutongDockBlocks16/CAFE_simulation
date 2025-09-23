@@ -535,13 +535,18 @@ def driver_model_training_episode_save(env, load_model_path=None, save_every_epi
     
     env.close()
     
-def driver_model_training_timestep_based(env, load_model_path=None):
+def driver_model_training_timestep_based_parallel_safe(load_model_path=None, num_envs=8):
+    
+    # 创建并行环境（在同一个进程内）
+    env = SubprocVecEnv([make_env(i) for i in range(num_envs)])
+    env = VecMonitor(env)
+    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = f"../logs/driver_episode_data_{timestamp}.jsonl"
     
     episode_collector = EpisodeBatchCollector(
         output_file=output_file,
-        batch_size=1,
+        batch_size=5,
         verbose=1
     )
     
@@ -549,34 +554,41 @@ def driver_model_training_timestep_based(env, load_model_path=None):
         episode_collector,
     ])
     
-    for round in range(8000):
-        # 每个episode重新加载上一次训练的模型
-        if round == 0 and load_model_path:
-            model = PPO.load(load_model_path, env=env)
-        elif round > 0:
-            model = PPO.load(f"{FIXED_MODEL_NAME}", env=env)
-        else:
-            model = PPO("MlpPolicy", env, verbose=1)
-
-        # 训练这个模型
+    if load_model_path:
+        model = PPO.load(load_model_path, env=env, device='cpu')
+        print(f"✅ Loaded initial model: {load_model_path}")
+    else:
+        model = PPO("MlpPolicy", env, verbose=1, device='cpu', n_steps=2048)
+    
+    for round in range(1000):  # 减少轮数，因为并行效率高
+        print(f"\n=== Round {round+1}/1000 ===")
+        
+        # 每轮重新加载模型（如果需要逐步改进）
+        if round > 0:
+            model = PPO.load(f"{FIXED_MODEL_NAME}", env=env, device='cpu')
+            print(f"🔄 Reloaded model for round {round+1}")
+        
+        # 训练（8个并行环境，所以实际训练步数是 4096 * 8）
         model.learn(
-            total_timesteps=4096, 
+            total_timesteps=4096,  # 这会在8个环境中并行收集 4096 * 8 = 32768 步
             reset_num_timesteps=False,
             callback=combined_callback
         )
          
-        # 保存训练后的模型
+        # 保存模型
         model.save(FIXED_MODEL_NAME)
         print(f"💾 Round {round+1}: Model improved and saved")
+    
+    env.close()
 
     
 if __name__ == "__main__":
     driver_env = gym.make("V3CollabHybridMuJoCoEnv-v0")
     # driver_model_training(driver_env)
     # driver_model_training(driver_env, load_model_path=COLLAB_2_MODEL_NAME)
-    driver_model_training_parallel(load_model_path=COLLAB_2_MODEL_NAME, num_envs=14)
+    # driver_model_training_parallel(load_model_path=COLLAB_2_MODEL_NAME, num_envs=14)
     # driver_model_training_parallel(load_model_path=None, num_envs=14)
     # driver_model_test_single_episode(driver_env)
     # driver_model_implementation(driver_env)
     # data_collection(driver_env)
-    # driver_model_training_episode_save(driver_env, load_model_path=V1_MODEL_NAME, save_every_episodes=1, enable_backup=False)
+    driver_model_training_timestep_based_parallel_safe(load_model_path=V1_MODEL_NAME)

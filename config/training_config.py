@@ -18,10 +18,11 @@ E5_MODEL_NAME = "../models_bak/final_driver_model_continued_60000K_20250920_1952
 E6_MODEL_NAME = "../models_bak/final_driver_model_continued_72000K_20250920_212641.zip.bak"
 E7_MODEL_NAME = "../models_bak/final_driver_model_continued_84000K_20250922_100256.zip.bak"
 E8_MODEL_NAME = "../models_bak/final_driver_model_continued_96000K_20250922_141502.zip.bak"
+E9_MODEL_NAME = "../models_bak/final_driver_model_continued_96000K_20250922_184926.zip.bak"
 
-FIXED_MODEL_NAME = "latest_episode_model.zip"
+FIXED_MODEL_NAME = "latest_episode_model.zip.bak"
 
-COLLAB_MODEL_NAME = E8_MODEL_NAME
+COLLAB_MODEL_NAME = FIXED_MODEL_NAME
 
 # COLLAB_2_MODEL_NAME = "../models_bak/final_driver_model_10000K_20250912_142558.zip"
 COLLAB_2_MODEL_NAME = E8_MODEL_NAME
