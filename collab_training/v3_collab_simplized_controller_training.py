@@ -560,7 +560,7 @@ def driver_model_training_timestep_based_parallel_safe(load_model_path=None, num
     else:
         model = PPO("MlpPolicy", env, verbose=1, device='cpu', n_steps=2048)
     
-    for round in range(1000):  # 减少轮数，因为并行效率高
+    for round in range(10):  # 减少轮数，因为并行效率高
         print(f"\n=== Round {round+1}/1000 ===")
         
         # 每轮重新加载模型（如果需要逐步改进）
@@ -568,9 +568,8 @@ def driver_model_training_timestep_based_parallel_safe(load_model_path=None, num
             model = PPO.load(f"{FIXED_MODEL_NAME}", env=env, device='cpu')
             print(f"🔄 Reloaded model for round {round+1}")
         
-        # 训练（8个并行环境，所以实际训练步数是 4096 * 8）
         model.learn(
-            total_timesteps=4096,  # 这会在8个环境中并行收集 4096 * 8 = 32768 步
+            total_timesteps=10_000_000, 
             reset_num_timesteps=False,
             callback=combined_callback
         )
@@ -592,4 +591,4 @@ if __name__ == "__main__":
     # driver_model_implementation(driver_env)
     # data_collection(driver_env)
     
-    driver_model_training_timestep_based_parallel_safe(load_model_path=V1_MODEL_NAME)
+    # driver_model_training_timestep_based_parallel_safe(load_model_path=V1_MODEL_NAME)
