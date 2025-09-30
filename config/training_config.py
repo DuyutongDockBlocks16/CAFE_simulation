@@ -1,12 +1,17 @@
 # APPROACHING_MODEL_NAME = "final_model_continued_21600K_20250707_165449.zip"
 
-APPROACHING_MODEL_NAME =  "final_model_28000K_20250724_095113.zip"
-# PICKING_MODEL_NAME = "final_picking_model_continued_13000K_20250729_102650.zip"
-PICKING_MODEL_NAME = "final_picking_model_5000K_20250731_124426.zip"
-# PICKING_MODEL_NAME = "final_picking_model_3000K_20250726_163849.zip"
+sec_robot_forward_model_path = "../models/final_model_continued_21600K_20250707_165449.zip.bak"
+sec_robot_backward_model_path="../models/final_model_continued_56000K_20250724_140118.zip.bak"
+
+APPROACHING_MODEL_NAME =  sec_robot_forward_model_path
+# PICKING_MODEL_NAME = "../models/final_picking_model_continued_13000K_20250729_102650.zip"
+PICKING_MODEL_NAME = "../models/final_picking_model_5000K_20250731_124426.zip"
+# PICKING_MODEL_NAME = "../models/final_picking_model_3000K_20250726_163849.zip"
 DRIVER_MODEL_NAME = "final_driver_model_continued_12000K_20250820_201438.zip"
 
 PLACING_MODEL_NAME = "../models_bak/final_placing_model_50000K_20250907_124625.zip"
+
+
 
 V1_MODEL_NAME = "../models_bak/final_driver_model_12000K_20250917_120511.zip.bak"
 V2_MODEL_NAME = "../models_bak/final_driver_model_12000K_20250917_170818.zip.bak"
@@ -22,9 +27,9 @@ E9_MODEL_NAME = "../models_bak/final_driver_model_continued_96000K_20250922_1849
 
 FIXED_MODEL_NAME = "latest_episode_model.zip.bak"
 
-COLLAB_MODEL_NAME = FIXED_MODEL_NAME
+COLLAB_MODEL_NAME = E5_MODEL_NAME
 
 # COLLAB_2_MODEL_NAME = "../models_bak/final_driver_model_10000K_20250912_142558.zip"
-COLLAB_2_MODEL_NAME = E8_MODEL_NAME
+COLLAB_2_MODEL_NAME = E5_MODEL_NAME
 
 SUCCESS_THRESHOLD = 10000

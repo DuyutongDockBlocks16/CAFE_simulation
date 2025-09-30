@@ -306,7 +306,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         if seed is not None:
             np.random.seed(seed)
             
-        randomize_materials_at_runtime(self.model)
+        # randomize_materials_at_runtime(self.model)
         
         self.agent_robot = random.choice(
             [AgentRobot.ROBOT2, AgentRobot.ROBOT3]
@@ -386,7 +386,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
     
     def step(self, action):
         
-        self._process_rl_robot()
+        # self._process_rl_robot()
         
         total_reward = 0
         terminated = False
@@ -486,6 +486,15 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
             print("Robot collision with forbidden area detected! Terminating episode.")
             reward -= 10
             terminated = True
+            
+        if self._robots_are_too_close():
+            print("Robots are too close to each other! Terminating episode.")
+            reward -= 10
+            terminated = True
+            
+        # if self._robots_are_too_close():
+        #     print("Robots are too close to each other! Take over control of robots.")
+        #     self._move_robots_apart()
             
         if break_flag:
             print("Task completed successfully! Terminating episode.")
@@ -1027,6 +1036,14 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         
         return False
     
+    def _robots_are_too_close(self):
+        robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
+        robot3_pos = self.data.xpos[self.robot_3_rover_id][:2]
+        distance = np.linalg.norm(robot2_pos - robot3_pos)
+        if distance < 0.5:  
+            return True
+        return False
+    
     def _get_object_ids(self, model):
         object_ids = []
         for i in range(model.njnt):
@@ -1137,9 +1154,9 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
             distance_to_robot_3 = np.linalg.norm(robot2_pos - robot3_pos)
             # print(f"Distance to Robot 3: {distance_to_robot_3:.4f}")
 
-            influence_distance = 1.0  # 影响范围
+            influence_distance = 2.0  # 影响范围
             if distance_to_robot_3 < influence_distance:
-                repulsive_potential = 1.0 * (1/distance_to_robot_3 - 1/influence_distance)**2
+                repulsive_potential = 2.0 * (1/distance_to_robot_3 - 1/influence_distance)**2
 
             # 🔥 总势能
             total_potential = attractive_potential + repulsive_potential
@@ -1151,7 +1168,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
             else:
                 # print("No previous potential, initializing potential reward to 0.")
                 potential_reward = 0
-
+            # print(f"Distance to Robot 3: {distance_to_robot_3:.4f}, distance_to_target: {distance_to_target:.4f}")
             self.prev_potential = total_potential
             
         elif self.agent_robot == AgentRobot.ROBOT3:
@@ -1167,9 +1184,9 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
             distance_to_robot_2 = np.linalg.norm(robot3_pos - robot2_pos)
             # print(f"Distance to Robot 2: {distance_to_robot_2:.4f}")
 
-            influence_distance = 1.0  # 影响范围
+            influence_distance = 2.0  # 影响范围
             if distance_to_robot_2 < influence_distance:
-                repulsive_potential = 1.0 * (1/distance_to_robot_2 - 1/influence_distance)**2
+                repulsive_potential = 2.0 * (1/distance_to_robot_2 - 1/influence_distance)**2
 
             # 🔥 总势能
             total_potential = attractive_potential + repulsive_potential
@@ -1182,7 +1199,11 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
                 # print("No previous potential, initializing potential reward to 0.")
                 potential_reward = 0
 
+            # print(f"Distance to Robot 2: {distance_to_robot_2:.4f}, distance_to_target: {distance_to_target:.4f}")
             self.prev_potential = total_potential
+
+        # print(f"Repulsive Potential: {repulsive_potential:.4f}, Attractive Potential: {attractive_potential:.4f}, Total Potential: {total_potential:.4f}, Potential Reward: {potential_reward:.4f}")
+        
 
         return potential_reward
     
@@ -1522,3 +1543,34 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
             action_reward = self._process_action(action, self.rl_controlled_robot)
         else:
             action_reward = self._process_action(0, self.rl_controlled_robot)
+            
+    def _move_robots_apart(self):
+        print("🚨 Robots are too close! Moving them apart...")
+        # calculate which robot is near to (-2, 1)
+        robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
+        robot3_pos = self.data.xpos[self.robot_3_rover_id][:2]
+        target_pos = np.array([-2.0, 1.0])
+        distance_robot2 = np.linalg.norm(robot2_pos - target_pos)
+        distance_robot3 = np.linalg.norm(robot3_pos - target_pos)
+        if distance_robot2 < distance_robot3:
+            near_robot = AgentRobot.ROBOT2
+        else:
+            near_robot = AgentRobot.ROBOT3
+        
+        # directly move the near robot to (-2, 1)
+        if near_robot == AgentRobot.ROBOT2:
+            rover_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot2:centroid")
+            qpos_adr = self.model.jnt_qposadr[rover_joint_id]
+            
+            current_pos = self.data.qpos[qpos_adr:qpos_adr+3].copy()
+            current_pos[0] = -2
+            current_pos[1] = 1
+            self.data.qpos[qpos_adr:qpos_adr+3] = current_pos
+        elif near_robot == AgentRobot.ROBOT3:
+            rover_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "robot3:centroid")
+            qpos_adr = self.model.jnt_qposadr[rover_joint_id]
+
+            current_pos = self.data.qpos[qpos_adr:qpos_adr+3].copy()
+            current_pos[0] = -2
+            current_pos[1] = 1
+            self.data.qpos[qpos_adr:qpos_adr+3] = current_pos

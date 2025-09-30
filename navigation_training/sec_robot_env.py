@@ -2,13 +2,13 @@ import gymnasium as gym
 import numpy as np
 import mujoco
 import mujoco.viewer
-from first_robot_controller.mirobot_controller import MirobotController 
+# from first_robot_controller.mirobot_controller import MirobotController 
 import threading
-from util_threads.object_remover import remove_object_on_plane
-from util_threads.object_placer import place_object_on_table
-from util_threads.object_remover_step_counter import remove_object_on_plane_with_step_counter
-from utils.mujoco_state_loader import load_mujoco_state_from_file, restore_mujoco_state
-from config.env_config import FiniteState
+# from util_threads.object_remover import remove_object_on_plane
+# from util_threads.object_placer import place_object_on_table
+# from util_threads.object_remover_step_counter import remove_object_on_plane_with_step_counter
+# from utils.mujoco_state_loader import load_mujoco_state_from_file, restore_mujoco_state
+# from config.env_config import FiniteState
 import random
 
 ACTION_SPACE_REDUCTION = 14  # Number of actuators to be reduced from the action space for moving
@@ -52,7 +52,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         mujoco.mj_forward(self.model, self.data)
 
-        self.first_robot_controller = MirobotController(self.model, self.data, self.left_object_position, self.right_object_position)
+        # self.first_robot_controller = MirobotController(self.model, self.data, self.left_object_position, self.right_object_position)
 
         self.shared_state = {"current_object_index": None, "current_object_position": None, "stop": False, "stopped": True}
 
@@ -67,12 +67,12 @@ class SecondRobotMuJoCoEnv(gym.Env):
                 # [2, -2],
                 # [2, 1],
                 # [2, -1],
-                # [0, 2],
+                [1, -2],
                 # [0, 1],
                 # [-1, -2.45],
                 # [1, -2.45],
-                [-2, 2],
-                [-2, 0]
+                # [-2, 2],
+                # [-2, 0]
             ]
 
         self.robot2_quats = [
@@ -257,16 +257,16 @@ class SecondRobotMuJoCoEnv(gym.Env):
             self.current_world_step = 0
             self.finished = False
 
-            inactive_status = [
-                FiniteState.IDLE,
-                FiniteState.ORIGIN_POSITION_TO_PICKING_POSITION,
-                FiniteState.DECREASING_JOINT3_AND_JOINT5,
-                FiniteState.WAITING_DECREASING_JOINT3_AND_JOINT5,
-                FiniteState.JOINT1_TURNING,
-                FiniteState.WAITING_JOINT1_TURNING,
-                FiniteState.LIFTING_JOINT3,
-                FiniteState.WAITING_LIFTING_JOINT3
-            ]
+            # inactive_status = [
+            #     FiniteState.IDLE,
+            #     FiniteState.ORIGIN_POSITION_TO_PICKING_POSITION,
+            #     FiniteState.DECREASING_JOINT3_AND_JOINT5,
+            #     FiniteState.WAITING_DECREASING_JOINT3_AND_JOINT5,
+            #     FiniteState.JOINT1_TURNING,
+            #     FiniteState.WAITING_JOINT1_TURNING,
+            #     FiniteState.LIFTING_JOINT3,
+            #     FiniteState.WAITING_LIFTING_JOINT3
+            # ]
             # while self.first_robot_controller.get_status() in inactive_status:
             #     mujoco.mj_step(self.model, self.data)
             #     # self.first_robot_controller.step(self.shared_state["current_object_position"])

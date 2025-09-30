@@ -325,7 +325,8 @@ def placing_model_implementation(env):
         # save all action to file
         # with open("picking_obs_log.txt", "a") as f:
         #     f.write(f"{obs.tolist()}\n")
-        obs, reward, terminated, truncated, info = env.step(action)
+        # obs, reward, terminated, truncated, info = env.step(action)
+        terminated, truncated = False, False    
         if terminated or truncated:
             # obs, info = env.reset()
             # env.unwrapped.data.ctrl[:] = 0
@@ -357,6 +358,6 @@ if __name__ == "__main__":
     placing_env = gym.make("SecondRobotPlacingMuJoCoEnv-v0")
     # placing_model_training(placing_env, load_model_path=PLACING_MODEL_NAME)
     # placing_model_training(placing_env)
-    placing_model_training_parallel()
+    # placing_model_training_parallel()
     # placing_model_training_parallel(load_model_path=PLACING_MODEL_NAME)
-    # placing_model_implementation(placing_env)
+    placing_model_implementation(placing_env)

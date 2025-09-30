@@ -1,3 +1,10 @@
+import sys
+import os
+
+# 添加项目根目录到Python路径
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
 import gymnasium as gym
 import sec_robot_env 
 from stable_baselines3 import PPO
@@ -9,7 +16,7 @@ import mujoco.viewer
 import time
 import os
 from datetime import datetime
-from config.env_config import Direction, Layer, FiniteState
+# from config.env_config import Direction, Layer, FiniteState
 from config.training_config import APPROACHING_MODEL_NAME, SUCCESS_THRESHOLD
 from callbacks.episode_data_collector import EpisodeBatchCollector
 from callbacks.success_check_point_saver import SuccessCheckpointCallback
@@ -27,8 +34,7 @@ gym.register(
     id="SecondRobotMuJoCoEnv-v0",
     entry_point="sec_robot_env:SecondRobotMuJoCoEnv",
     kwargs={
-        "xml_path": "xml/scene_mirobot.xml",
-        "state_filepath": "saved_states/robot_state_20250723_093442.pkl"
+        "xml_path": "../xml/scene_mirobot.xml"
     }
 )
 
@@ -320,7 +326,7 @@ def approaching_model_implementation(env):
     obs, info = env.reset()
 
     env.render()
-    sleep(15)
+    sleep(1)
 
     for _ in range(200000000000):
         env.render()  # Render at every step
@@ -360,5 +366,5 @@ if __name__ == "__main__":
     # approach_model_training(approach_env, load_model_path=APPROACHING_MODEL_NAME)
     # approach_model_training(approach_env)
     # approach_model_training_parallel()
-    approach_model_training_parallel(load_model_path=APPROACHING_MODEL_NAME)
-    # approaching_model_implementation(approach_env)
+    # approach_model_training_parallel(load_model_path=APPROACHING_MODEL_NAME)
+    approaching_model_implementation(approach_env)

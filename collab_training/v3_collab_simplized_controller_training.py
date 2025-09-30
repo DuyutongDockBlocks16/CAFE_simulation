@@ -438,12 +438,12 @@ def data_collection(env):
         for _ in range(200000000000):
             # env.render() 
             # sleep(0.01)
-            action, _ = model.predict(obs, deterministic=True)
+            action, _ = model.predict(obs, deterministic=False)
             obs, reward, terminated, truncated, info = env.step(action)
             if terminated or truncated:
-                obs, info = env.reset()
+                # obs, info = env.reset()
                 # env.unwrapped.data.ctrl[:] = 0
-                mujoco.mj_step(env.unwrapped.model, env.unwrapped.data)  
+                # mujoco.mj_step(env.unwrapped.model, env.unwrapped.data)  
                 mujoco_timestep = env.unwrapped.model.opt.timestep
                 current_simulation_time = env.unwrapped.data.time
                 episode_simulation_time = current_simulation_time - episode_start_time
@@ -451,8 +451,9 @@ def data_collection(env):
                 
                 print(f"  - Total MuJoCo steps executed: {total_mujoco_steps}")
                 break
-
-        env.close()
+        
+        # sleep(10)
+        # env.close()
     
     env.close()
     
@@ -586,9 +587,9 @@ if __name__ == "__main__":
     # driver_model_training(driver_env)
     # driver_model_training(driver_env, load_model_path=COLLAB_2_MODEL_NAME)
     # driver_model_training_parallel(load_model_path=COLLAB_2_MODEL_NAME, num_envs=14)
-    # driver_model_training_parallel(load_model_path=None, num_envs=14)
+    driver_model_training_parallel(load_model_path=None, num_envs=14)
     # driver_model_test_single_episode(driver_env)
     # driver_model_implementation(driver_env)
     # data_collection(driver_env)
     
-    driver_model_training_timestep_based_parallel_safe(load_model_path=V1_MODEL_NAME)
+    # driver_model_training_timestep_based_parallel_safe(load_model_path=V1_MODEL_NAME)
