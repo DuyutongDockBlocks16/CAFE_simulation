@@ -386,7 +386,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
     
     def step(self, action):
         
-        # self._process_rl_robot()
+        self._process_rl_robot()
         
         total_reward = 0
         terminated = False
