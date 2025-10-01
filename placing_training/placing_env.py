@@ -76,7 +76,9 @@ class SecondRobotPlacingMuJoCoEnv(gym.Env):
         # print all positions
         print(f"Object initial position: {self.object_initial_position}")
         print(f"Placing place2 high plane body position: {self.placing_place2_high_plane_body_position}")
-        
+        rover_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "robot2:rover")
+        print(f"Robot 2 position: {self.data.xpos[rover_body_id]}")
+
         self.target_position_final = self.placing_place2_high_plane_body_position.copy()
         self.target_position_pre_0 = self.placing_place2_high_plane_body_position.copy()
         self.target_position_pre_0[0] -= 0.4
