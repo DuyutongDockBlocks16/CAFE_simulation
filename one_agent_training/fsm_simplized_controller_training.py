@@ -1,6 +1,6 @@
 import os
 import torch
-
+import sys
 os.environ['CUDA_VISIBLE_DEVICES'] = ''
 torch.set_default_device('cpu')
 
@@ -8,8 +8,12 @@ print("🖥️ 强制使用 CPU 进行训练")
 print(f"PyTorch device: {torch.device('cpu')}")
 print(f"CUDA available: {torch.cuda.is_available()}")
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir) 
+sys.path.insert(0, parent_dir)
+
 import gymnasium as gym
-import sec_robot_env 
+# import sec_robot_env 
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor, DummyVecEnv
 from stable_baselines3.common.utils import set_random_seed

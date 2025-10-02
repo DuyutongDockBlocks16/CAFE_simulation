@@ -23,7 +23,7 @@ class Direction(Enum):
 class FsmHybridMuJoCoEnv(gym.Env):
     
     def _get_data_and_model(self):
-        model = mujoco.MjModel.from_xml_path("xml/scene_mirobot.xml")
+        model = mujoco.MjModel.from_xml_path("../xml/scene_mirobot.xml")
         data = mujoco.MjData(model)
         time_step = 0.005
         model.opt.timestep = time_step  
@@ -33,8 +33,8 @@ class FsmHybridMuJoCoEnv(gym.Env):
         super().__init__()
         self.action_repeat = action_repeat
         
-        sec_robot_forward_model_path = "models/final_model_continued_21600K_20250707_165449.zip.bak"
-        sec_robot_backward_model_path="models/final_model_continued_56000K_20250724_140118.zip.bak"
+        sec_robot_forward_model_path = "../models/final_model_continued_21600K_20250707_165449.zip.bak"
+        sec_robot_backward_model_path="../models/final_model_continued_56000K_20250724_140118.zip.bak"
 
         self.sec_robot_navigation_forward_model = PPO.load(sec_robot_forward_model_path)
         self.sec_robot_navigation_backward_model = PPO.load(sec_robot_backward_model_path)
