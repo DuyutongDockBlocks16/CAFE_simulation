@@ -28,12 +28,13 @@ E9_MODEL_NAME = "../models_bak/final_driver_model_continued_96000K_20250922_1849
 EE1_MODEL_NAME = "../models_bak/final_driver_model_12000K_20250930_102009.zip.bak"
 
 EE2_MODEL_NAME = "../models_bak/final_driver_model_continued_24000K_20251001_093017.zip.bak"
+EE3_MODEL_NAME = "../models_bak/final_driver_model_continued_36000K_20251002_082755.zip.bak"
 
 FIXED_MODEL_NAME = "latest_episode_model.zip.bak"
 
-COLLAB_MODEL_NAME = EE2_MODEL_NAME
+COLLAB_MODEL_NAME = EE3_MODEL_NAME
 
 # COLLAB_2_MODEL_NAME = "../models_bak/final_driver_model_10000K_20250912_142558.zip"
-COLLAB_2_MODEL_NAME = EE2_MODEL_NAME
+COLLAB_2_MODEL_NAME = EE3_MODEL_NAME
 
 SUCCESS_THRESHOLD = 10000

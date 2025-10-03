@@ -344,14 +344,14 @@ def driver_model_test_single_episode(env):
         valid_actions = np.where(action_mask)[0]
         
         # 每50步打印一次状态
-        if step_count % 50 == 0:
-            print(f"\nStep {step_count}:")
-            print(f"  FSM State: {fsm_state}")
-            print(f"  Valid actions: {valid_actions.tolist()}")
+        # if step_count % 50 == 0:
+        #     print(f"\nStep {step_count}:")
+        #     print(f"  FSM State: {fsm_state}")
+        #     print(f"  Valid actions: {valid_actions.tolist()}")
         
         # 预测并执行动作
-        action, _ = model.predict(obs, deterministic=True)
-        print(f"  Action: {action}", end="")
+        action, _ = model.predict(obs, action_masks=action_mask, deterministic=False)
+        # print(f"  Action: {action}", end="")
         
         obs, reward, terminated, truncated, info = env.step(action)
         step_count += 1
@@ -380,6 +380,6 @@ def driver_model_test_single_episode(env):
 if __name__ == "__main__":
     driver_env = gym.make("FsmHybridMuJoCoEnv-v0")
     # driver_model_training(driver_env)
-    driver_model_training(driver_env, load_model_path=DRIVER_MODEL_NAME)
+    # driver_model_training(driver_env, load_model_path=DRIVER_MODEL_NAME)
     # driver_model_training_parallel(load_model_path=DRIVER_MODEL_NAME, num_envs=14)
-    # driver_model_test_single_episode(driver_env)
+    driver_model_test_single_episode(driver_env)
