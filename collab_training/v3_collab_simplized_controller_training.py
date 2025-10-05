@@ -171,7 +171,7 @@ def driver_model_training(env, load_model_path=None):
     
     env.close()
     
-def driver_model_training_parallel(load_model_path=None, num_envs=8):
+def driver_model_training_parallel(load_model_path=None, num_envs=14):
     env = SubprocVecEnv([make_env(i) for i in range(num_envs)])
     env = VecMonitor(env)
     
