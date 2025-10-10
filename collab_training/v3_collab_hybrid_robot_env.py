@@ -499,10 +499,11 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
             terminated = True
             
         if self._robots_are_too_close():
-            print("Robots are too close to each other!")
-            reward -= 20
+            # print("Robots are too close to each other!")
+            reward = 0
+            reward -= 5
             self.close_counter += 1
-            if self.close_counter >= 5:
+            if self.close_counter >= 100:
                 print("Robots have been too close for too long! Terminating episode.")
                 terminated = True
         else:
