@@ -228,7 +228,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         self.action_space = gym.spaces.Discrete(len(ACTIONS))
 
         self.current_step = 0
-        self.max_steps = 8000
+        self.max_steps = 4000
         
         self.object_geoms = [
             "object0_geom", "object1_geom", "object2_geom", "object3_geom",
@@ -291,6 +291,8 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
             [AgentRobot.ROBOT2, AgentRobot.ROBOT3]
         )
         
+        self.rl_robot_need_to_execute = None
+        
         # self.rl_controlled_robot = None
 
         obs = self._get_obs(self.agent_robot)
@@ -316,9 +318,13 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
             self.rl_controlled_robot = AgentRobot.ROBOT3
         if self.agent_robot == AgentRobot.ROBOT3:
             self.rl_controlled_robot = AgentRobot.ROBOT2
-        
+            
+        self.rl_robot_need_to_execute = random.choices(
+            [True, False], weights=[0.8, 0.2], k=1
+        )[0]
+
         self.current_step = 0
-        
+
         self.robot_2_target_position_x_y = None
         self.robot_2_random_picking_steps = None
         self.robot_2_random_picking_count = 0
@@ -386,7 +392,8 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
     
     def step(self, action):
         
-        self._process_rl_robot()
+        if self.rl_robot_need_to_execute:
+            self._process_rl_robot()
         
         total_reward = 0
         terminated = False
@@ -472,25 +479,25 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
 
         mujoco.mj_step(self.model, self.data)
 
-        if self._check_robot_robot_collision():
-            print("Robot-robot collision detected! Terminating episode.")
-            reward -= 10
-            terminated = True
+        # if self._check_robot_robot_collision():
+        #     print("Robot-robot collision detected! Terminating episode.")
+        #     reward -= 10
+        #     # terminated = True
             
         if self._check_robot_2_forbidden_collision():
             print("Robot collision with forbidden area detected! Terminating episode.")
-            reward -= 10
+            reward -= 20
             terminated = True
             
         if self._check_robot_3_forbidden_collision():
             print("Robot collision with forbidden area detected! Terminating episode.")
-            reward -= 10
+            reward -= 20
             terminated = True
             
         if self._robots_are_too_close():
-            print("Robots are too close to each other! Terminating episode.")
+            print("Robots are too close to each other!")
             reward -= 10
-            terminated = True
+            # terminated = True
             
         # if self._robots_are_too_close():
         #     print("Robots are too close to each other! Take over control of robots.")
@@ -1040,7 +1047,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
         robot3_pos = self.data.xpos[self.robot_3_rover_id][:2]
         distance = np.linalg.norm(robot2_pos - robot3_pos)
-        if distance < 0.5:  
+        if distance < 0.8:  
             return True
         return False
     
@@ -1413,7 +1420,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         distance_to_placing_place = np.linalg.norm(placingplace_pos - robot_position)
         
         if placingplace_pos == self.placingplace1_pos:
-            threshold = 1.0
+            threshold = 0.5
         elif placingplace_pos == self.placingplace2_pos:
             threshold = 0.5
 
