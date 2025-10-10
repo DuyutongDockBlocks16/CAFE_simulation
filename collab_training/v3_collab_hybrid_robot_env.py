@@ -293,6 +293,8 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         
         self.rl_robot_need_to_execute = None
         
+        self.close_counter = 0
+        
         # self.rl_controlled_robot = None
 
         obs = self._get_obs(self.agent_robot)
@@ -318,6 +320,8 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
             self.rl_controlled_robot = AgentRobot.ROBOT3
         if self.agent_robot == AgentRobot.ROBOT3:
             self.rl_controlled_robot = AgentRobot.ROBOT2
+            
+        self.close_counter = 0
             
         self.rl_robot_need_to_execute = random.choices(
             [True, False], weights=[0.8, 0.2], k=1
@@ -496,8 +500,13 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
             
         if self._robots_are_too_close():
             print("Robots are too close to each other!")
-            reward -= 10
-            # terminated = True
+            reward -= 20
+            self.close_counter += 1
+            if self.close_counter >= 5:
+                print("Robots have been too close for too long! Terminating episode.")
+                terminated = True
+        else:
+            self.close_counter = 0
             
         # if self._robots_are_too_close():
         #     print("Robots are too close to each other! Take over control of robots.")
