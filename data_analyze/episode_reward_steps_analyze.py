@@ -4,7 +4,7 @@ import numpy as np
 from datetime import datetime
 import os
 
-LOG_NAME = "driver_episode_data_20251009_091406.jsonl"
+LOG_NAME = "driver_episode_data_20251012_222756.jsonl"
 
 def read_episode_data(filename):
     """
@@ -86,8 +86,8 @@ def plot_episode_analysis(episodes, metadata=None, final_metadata=None, save_pat
     
     # 🎯 Plot 1: Total Reward per Episode (增强版)
     # 原始奖励曲线
-    ax1.plot(episode_numbers, total_rewards, 'b-', linewidth=1.5, marker='o', 
-             markersize=3, alpha=0.6, label='Episode Reward')
+    # ax1.plot(episode_numbers, total_rewards, 'b-', linewidth=1.5, marker='o', 
+    #          markersize=3, alpha=0.6, label='Episode Reward')
     
     # 🎯 添加移动平均线
     ax1.plot(episode_numbers, moving_avg_rewards, 'r-', linewidth=3, 

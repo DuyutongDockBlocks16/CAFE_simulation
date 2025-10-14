@@ -64,4 +64,4 @@ def parse_log_file(log_path, output_csv):
 
 
 if __name__ == "__main__":
-    parse_log_file("data_collection_20251006_114941.log", "data_collection_20251006_114941EE5.csv")
+    parse_log_file("data_collection_20251013_210155F1I.log", "data_collection_20251013_210155F1I.csv")

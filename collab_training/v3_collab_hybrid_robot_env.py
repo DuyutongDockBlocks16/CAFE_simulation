@@ -228,7 +228,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         self.action_space = gym.spaces.Discrete(len(ACTIONS))
 
         self.current_step = 0
-        self.max_steps = 4000
+        self.max_steps = 6000
         
         self.object_geoms = [
             "object0_geom", "object1_geom", "object2_geom", "object3_geom",
@@ -323,9 +323,12 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
             
         self.close_counter = 0
             
-        self.rl_robot_need_to_execute = random.choices(
-            [True, False], weights=[0.8, 0.2], k=1
-        )[0]
+        # self.rl_robot_need_to_execute = random.choices(
+        #     [True, False], weights=[0.8, 0.2], k=1
+        # )[0]
+        
+        # self.rl_robot_need_to_execute = True
+        self.rl_robot_need_to_execute = False
 
         self.current_step = 0
 
@@ -483,10 +486,10 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
 
         mujoco.mj_step(self.model, self.data)
 
-        # if self._check_robot_robot_collision():
-        #     print("Robot-robot collision detected! Terminating episode.")
-        #     reward -= 10
-        #     # terminated = True
+        if self._check_robot_robot_collision():
+            print("Robot-robot collision detected! Terminating episode.")
+            reward -= 10
+            terminated = True
             
         if self._check_robot_2_forbidden_collision():
             print("Robot collision with forbidden area detected! Terminating episode.")
@@ -498,16 +501,16 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
             reward -= 20
             terminated = True
             
-        if self._robots_are_too_close():
-            # print("Robots are too close to each other!")
-            reward = 0
-            reward -= 5
-            self.close_counter += 1
-            if self.close_counter >= 100:
-                print("Robots have been too close for too long! Terminating episode.")
-                terminated = True
-        else:
-            self.close_counter = 0
+        # if self._robots_are_too_close():
+        #     # print("Robots are too close to each other!")
+        #     reward = 0
+        #     reward -= 30
+        #     # self.close_counter += 1
+        #     # if self.close_counter >= 100:
+        #     #     print("Robots have been too close for too long! Terminating episode.")
+        #     #     terminated = True
+        # # else:
+        # #     self.close_counter = 0
             
         # if self._robots_are_too_close():
         #     print("Robots are too close to each other! Take over control of robots.")
@@ -1430,7 +1433,7 @@ class V3CollabHybridMuJoCoEnv(gym.Env):
         distance_to_placing_place = np.linalg.norm(placingplace_pos - robot_position)
         
         if placingplace_pos == self.placingplace1_pos:
-            threshold = 0.5
+            threshold = 1.0
         elif placingplace_pos == self.placingplace2_pos:
             threshold = 0.5
 

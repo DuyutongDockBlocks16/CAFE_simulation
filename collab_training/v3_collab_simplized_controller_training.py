@@ -437,8 +437,8 @@ def data_collection(env):
 
         for _ in range(200000000000):
             # print(f"\r  Sim Time: {env.unwrapped.data.time:.2f}s", end="")
-            env.render() 
-            sleep(0.01)
+            # env.render() 
+            # sleep(0.01)
             action, _ = model.predict(obs, deterministic=False)
             # print(f" Action: {action}", end="")
             obs, reward, terminated, truncated, info = env.step(action)
@@ -587,11 +587,11 @@ def driver_model_training_timestep_based_parallel_safe(load_model_path=None, num
 if __name__ == "__main__":
     driver_env = gym.make("V3CollabHybridMuJoCoEnv-v0")
     # driver_model_training(driver_env)
-    driver_model_training(driver_env, load_model_path=COLLAB_2_MODEL_NAME)
+    # driver_model_training(driver_env, load_model_path=COLLAB_2_MODEL_NAME)
     # driver_model_training_parallel(load_model_path=COLLAB_2_MODEL_NAME, num_envs=14)
     # driver_model_training_parallel(load_model_path=COLLAB_2_MODEL_NAME, num_envs=8)
     # driver_model_test_single_episode(driver_env)
     # driver_model_implementation(driver_env)
-    # data_collection(driver_env)
+    data_collection(driver_env)
     
     # driver_model_training_timestep_based_parallel_safe(load_model_path=V1_MODEL_NAME)
