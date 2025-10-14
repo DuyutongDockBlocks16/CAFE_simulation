@@ -242,12 +242,12 @@
 %%   is part of the metadata in the pdf/a file, and the metadata cannot contain
 %%   linebreaks.
 %%
-\thesistitle{Hierarchical Reinforcement Learning with Finite State Machines for Multi-Robot Collaborative Manipulation}
+\thesistitle{Learning-Based Multi-Robot Collaboration for Intelligent and Adaptive Robotic Systems}
 %\thesistitle[Title of the thesis]{Title of\\ the thesis}
 %%
 %% Either remove or leave \thesissubtitle{} empty if you don't use it
 %%
-\thesissubtitle{A possible subtitle}
+% \thesissubtitle{A possible subtitle}
 %\thesissubtitle[Subtitle of the thesis]{Subtitle of\\ the thesis}
 %\thesissubtitle{}
 
@@ -387,9 +387,7 @@ Stochastic Learning and Adaptive Control}
 %% abstract rewrite it in the abstarct environment as described below.
 %%
 \thesisabstract{%
-  1 - In a Multi-Robot collaborative scenario, adding a new robot brings additional development work.
-  2 - This work proposed a new algorithm that includes observing and learning the working pattern of the main robot and accelerating task completion with more robots manipulated by reinforcement learning models.
-  3 -  
+The increasing complexity of modern industrial environments demands robotic systems that are not only efficient but also intelligent, adaptive, and capable of collaboration. Traditional approaches in robotics, including single-agent reinforcement learning (RL) and simplified multi-agent frameworks, often struggle to operate effectively in continuous, high-dimensional, and dynamic scenarios, particularly when integrated mobility and dexterous manipulation are required. This thesis addresses these challenges by developing learning-based strategies for multi-robot collaboration in adaptive robotic systems. Specifically, two case studies are conducted within the framework of the academic project ``Conscious Agents as a Foundation for a Collaborative Factory of the Future.'' The first study introduces an observation algorithm that captures the behavior of an autonomous robot performing pick-and-place tasks and integrates this information with reinforcement learning for end-to-end motor control and decision-making. The second study investigates decentralized multi-agent collaboration between two RL-controlled robots, demonstrating the emergence of coordinated behaviors under shared objectives. Experiments in simulated continuous-control environments show that the proposed methods enable scalable, adaptive, and robust multi-robot cooperation, highlighting their potential for practical industrial applications. The results contribute to advancing intelligent, socially aware, and collaborative robotic systems, paving the way for flexible automation in future manufacturing and service domains.
 }
 
 %% You can prevent LaTeX from writing into the xmpdata file (it contains all the 
@@ -427,9 +425,7 @@ Stochastic Learning and Adaptive Control}
 %% well.
 %%
 \begin{abstractpage}[english]
-  1 - In a Multi-Robot collaborative scenario, adding a new robot brings additional development work.
-  2 - This work proposed a new algorithm that includes observing and learning the working pattern of the main robot and accelerating task completion with more robots manipulated by reinforcement learning models.
-  3 -  
+The increasing complexity of modern industrial environments demands robotic systems that are not only efficient but also intelligent, adaptive, and capable of collaboration. Traditional approaches in robotics, including single-agent reinforcement learning (RL) and simplified multi-agent frameworks, often struggle to operate effectively in continuous, high-dimensional, and dynamic scenarios, particularly when integrated mobility and dexterous manipulation are required. This thesis addresses these challenges by developing learning-based strategies for multi-robot collaboration in adaptive robotic systems. Specifically, two case studies are conducted within the framework of the academic project ``Conscious Agents as a Foundation for a Collaborative Factory of the Future.'' The first study introduces an observation algorithm that captures the behavior of an autonomous robot performing pick-and-place tasks and integrates this information with reinforcement learning for end-to-end motor control and decision-making. The second study investigates decentralized multi-agent collaboration between two RL-controlled robots, demonstrating the emergence of coordinated behaviors under shared objectives. Experiments in simulated continuous-control environments show that the proposed methods enable scalable, adaptive, and robust multi-robot cooperation, highlighting their potential for practical industrial applications. The results contribute to advancing intelligent, socially aware, and collaborative robotic systems, paving the way for flexible automation in future manufacturing and service domains.
 \end{abstractpage}
 
 %% The text in the \thesisabstract macro is stored in the macro \abstractext, so
@@ -591,8 +587,7 @@ Otaniemi, 10 October 2025\\
 %% 
 \thispagestyle{empty}
 
-The evolution from Industry 4.0 to Industry 5.0 reflects a shift from pure automation and digitalization toward human-centric, sustainable, and resilient production. While Industry 4.0 focused on interconnected machines and data-driven efficiency, Industry 5.0 highlights the integration of human creativity with intelligent, collaborative robotic systems. The transition toward Industry 5.0 emphasizes not only efficiency but also intelligence and collaboration in robotic systems. Robots are expected to work alongside both humans and other robots, performing fundamental tasks such as pick-and-place while adapting to dynamic factory environments. Simulation platforms for example MuJoCo [1] and reinforcement learning (RL) frameworks such as Stable-Baselines3 [2] have enabled rapid experimentation with low-level motor control and high-level decision-making in robotics. However, many existing approaches remain constrained to two categories: deterministic, rule-based controllers, which execute predefined instructions with high efficiency but lack adaptability in dynamic or unforeseen environments; and isolated reinforcement learning (RL) agents, which can acquire behaviors through interaction and experience, yet often operate in isolation without mechanisms for coordination or collaboration. Such approaches struggle with adaptability in unstructured environments and overlook the importance of multi-agent collaboration. Moreover, mechanisms for observing and interpreting the behaviors of rule-based robots—those operating under fixed, deterministic control—in order to support learning-based agents are still underexplored. These gaps hinder progress toward intelligent, collaborative robotic systems envisioned in Industry 5.0 [3].
-This thesis tackles these challenges by conducting two case studies within the framework of the academic project “Conscious Agents as a Foundation for a Collaborative Factory of the Future.” The first develops an observation algorithm to capture the behavior of a rule-based robot performing pick-and-place tasks, and integrates this with RL-based motor control and decision-making for a robot governed entirely by reinforcement learning. The second case study explores multi-agent collaboration between two RL-controlled robots, aiming to demonstrate how robots can cooperate with each other—and eventually with humans—under a unified control framework. Together, these studies contribute to advancing smart and collaborative robotics for Industry 5.0.The remainder of this thesis is organized as follows. Chapter 2 reviews the relevant literature on reinforcement learning in robotics, and approaches to robot observation and collaboration. Chapter 3 introduces the methodological framework, including the simulation environments, algorithms, and evaluation metrics employed. Chapter 4 presents the first case study on integrating rule-based robot observation with reinforcement learning control, while Chapter 5 reports the second case study on multi-agent collaboration between RL-controlled robots. Finally, Chapter 6 discusses the findings and concludes with directions for future research.
+The evolution from Industry 4.0 to Industry 5.0 reflects a shift from pure automation and digitalization toward human-centric, sustainable, and resilient production. While Industry 4.0 focused on interconnected machines and data-driven efficiency, Industry 5.0 highlights the integration of human creativity with intelligent, collaborative robotic systems. The transition toward Industry 5.0 emphasizes not only efficiency but also intelligence and collaboration in robotic systems. Robots are expected to work alongside both humans and other robots, performing fundamental tasks such as pick-and-place while adapting to dynamic factory environments. Despite the significant advances in reinforcement learning for robotics, existing approaches often remain limited in scope. Many studies focus either on single-agent control for navigation or manipulation, or on multi-agent systems in simplified, discrete, or centrally coordinated environments. As a result, these methods frequently struggle to adapt to continuous, high-dimensional, and dynamic industrial scenarios, where multiple robots must operate collaboratively in shared workspaces. Furthermore, most research has addressed homogeneous platforms and isolated capabilities, leaving integrated systems that combine mobile bases and dexterous manipulators largely unexplored. These limitations hinder the development of decentralized, scalable, and adaptive multi-robot systems capable of robust collaboration, which is essential for realizing intelligent and flexible robotic operations in practical industrial settings. This thesis tackles these challenges by conducting two case studies within the framework of the academic project “Conscious Agents as a Foundation for a Collaborative Factory of the Future.” The first develops an observation algorithm to capture the behavior of a rule-based robot performing pick-and-place tasks, and integrates this with RL-based motor control and decision-making for a robot governed entirely by reinforcement learning. The second case study explores multi-agent collaboration between two RL-controlled robots, aiming to demonstrate how robots can cooperate with each other—and eventually with humans—under a unified control framework. Together, these studies contribute to advancing smart and collaborative robotics for Industry 5.0.The remainder of this thesis is organized as follows. Chapter 2 reviews the relevant literature on reinforcement learning in robotics, and approaches to robot observation and collaboration. Chapter 3 introduces the methodological framework, including the simulation environments, algorithms, and evaluation metrics employed. Chapter 4 presents the first case study on integrating rule-based robot observation with reinforcement learning control, while Chapter 5 reports the second case study on multi-agent collaboration between RL-controlled robots. Finally, Chapter 6 discusses the findings and concludes with directions for future research.
 
 
 % \subsection{Typical content in the introduction}
@@ -1133,7 +1128,7 @@ The initial orientation of the Secondary Robot is aligned with the positive $x$-
 
 \subparagraph{Training configuration}
 
-We employ $n=8$ parallel environments. The PPO models are trained with the following hyperparameters and configurations:
+We employ $n=8$ parallel environments. The models are trained with the following hyperparameters and configurations:
 \begin{itemize}
     \item Learning rate: $1 \times 10^{-4}$
     \item Number of steps per environment per update: $n_{\text{steps}} = 1024$
@@ -1745,7 +1740,6 @@ The testing results are summarized as follows:
 
 These results suggest that the trained policy achieves a \textbf{62\% success rate} in completing the task without collisions, and \textbf{52\% fully clean success rate} without either collisions or placement violations.
 
-Through this design, the agent learns a policy that maximizes expected cumulative rewards while respecting the underlying MDP structure. By employing PPO with an MLP policy network, our framework can handle high-dimensional state spaces, complex interactions between multiple agents, and sequential dependencies of actions and rewards, making it suitable for a wide range of robotic control tasks.
 
 \clearpage
 
@@ -1861,17 +1855,27 @@ a_{\text{i}}, & \text{otherwise}.
 Let $r_t$ denote the reward received by the agent at timestep $t$. It is composed of multiple components:  
 
 \begin{equation}
-r_t = r_{\text{step}} + r_{\text{action}} + r_{\text{potential}} + r_{\text{collision}} + r_{\text{task}}
+r_t = r_{\text{step}} + r_{\text{action}} + r_{\text{potential}} + r_{\text{task}},
+\end{equation}
+
+but with a proximity condition that overrides all other rewards when the distance between robots is less than 0.8:
+
+\begin{equation}
+r_t =
+\begin{cases}
+-30, & \text{if } d_{r} < 0.8, \\
+r_{\text{step}} + r_{\text{action}} + r_{\text{potential}} + r_{\text{task}}, & \text{otherwise}.
+\end{cases}
 \end{equation}
 
 where
 
-1. \textbf{Step penalty} (to encourage efficiency):
+\textbf{Step penalty} (to encourage efficiency):
 \begin{equation}
 r_{\text{step}} = -0.001
 \end{equation}
 
-2. \textbf{Action reward}:
+\textbf{Action reward}:
 \begin{equation}
 r_{\text{action}} =
 \begin{cases}
@@ -1880,7 +1884,7 @@ r_{\text{action}} =
 \end{cases}
 \end{equation}
 
-3. \textbf{Potential field reward} (encouraging progress toward target and avoiding the other robot):  
+\textbf{Potential field reward} (encouraging progress toward target and avoiding the other robot):  
 
 Let $\mathbf{p}_t$ be the agent robot's current position, $\mathbf{p}_{\text{target}}$ the target position, and $\mathbf{p}_{\text{other}}$ the other robot's position. Define attractive and repulsive potentials:
 
@@ -1902,16 +1906,7 @@ r_{\text{potential}} = U_{\text{prev}} - (U_{\text{attr}} + U_{\text{rep}}),
 
 where $U_{\text{prev}}$ is the potential at the previous timestep (encouraging the agent to reduce potential).
 
-4. \textbf{Collision penalties}:
-\begin{equation}
-r_{\text{collision}} = 
-\begin{cases}
--10, & \text{if collision with robot or forbidden area occurs}, \\
-0, & \text{otherwise}.
-\end{cases}
-\end{equation}
-
-5. \textbf{Task completion reward}:
+\textbf{Task completion reward}:
 \begin{equation}
 r_{\text{task}} = 
 \begin{cases}
@@ -1924,17 +1919,17 @@ An episode terminates when any of the following conditions occur:
 
 \begin{itemize}
     \item \textbf{Collision termination:}  
-    The episode ends immediately if the agent robot collides with the other robot or any forbidden area.
+    The episode ends immediately if the agent robot collides with Walls, Placing Plate, and Picking Tables.
 
     \item \textbf{Task completion:}  
     The episode ends if the task is completed (all of the objects are removed from the plates).
 
     \item \textbf{Maximum steps:}  
-    The episode ends if the step limit of 8000 is reached.
+    The episode ends if the step limit of 6000 is reached.
 \end{itemize}
 
 \paragraph{Training environment}  
-The training environment is initialized with Robot~2 (white) placed at position $(-2, -1)$ m and Robot~3 (purple) at position $(-2, 1)$ m, as shown in Figure~\ref{fig:case_2_training_env}.  
+The training environment is initialized with R2 (white) placed at position $(-2, -1)$ m and R3 (purple) at position $(-2, 1)$ m, as shown in Figure~\ref{fig:case_2_training_env}.  
 
 \begin{figure}[H]
 \centering
@@ -1942,15 +1937,15 @@ The training environment is initialized with Robot~2 (white) placed at position 
 \caption{\label{fig:case_2_training_env}Initial positions of Robot~2 and Robot~3.}
 \end{figure}
 
-We adopt a multi-round alternating training scheme over 9 rounds to obtain a single policy capable of independently controlling both robots while avoiding inter-robot and walls collisions.
+We adopt a multi-round alternating training scheme over 5 rounds to obtain a single policy capable of independently controlling both robots while avoiding inter-robot and walls collisions.
 
 In the first training round, one robot is randomly assigned to the agent for training, while the other robot remains stationary. This yields the initial policy $\pi_1$.  
 
-For subsequent rounds, we employ an alternating training procedure. Specifically, in round $k$ ($2 \le k \le 9$), the agent trains one robot based on the policy $\pi_{k-1}$, while the other robot is controlled by the previously learned policy $\pi_{k-1}$. The resulting policy after round $k$ is denoted as $\pi_k$.
+For subsequent rounds, we employ an alternating training procedure. Specifically, in round $k$ ($2 \le k \le 5$), the agent trains one robot based on the policy $\pi_{k-1}$, while the other robot is controlled by the previously learned policy $\pi_{k-1}$. The resulting policy after round $k$ is denoted as $\pi_k$.
 
-This process is repeated until the ninth round, producing the final policy $\pi_9$.
+This process is repeated until the fifth round, producing the final policy $\pi_5$.
 
-Each training round is conducted using a parallel environment setup with $N=14$ independent instances. The agent is trained with the Proximal Policy Optimization (PPO) algorithm using a multi-layer perceptron (MLP) policy. The hyperparameters are set as follows:
+Each training round is conducted using a parallel environment setup with $N=14$ independent instances. The hyperparameters are set as follows:
 
 \begin{itemize}
     \item Learning rate: $1 \times 10^{-3}$
@@ -1968,16 +1963,15 @@ Each training round is conducted using a parallel environment setup with $N=14$ 
 
 The training results are presented in two parts.  
 
-\textbf{Reward curves.} The first part consists of the reward curves obtained over the nine rounds of alternating training. These curves illustrate the progression of learning and convergence of the policy over successive training rounds, as shown in Figure~\ref{fig:reward_curves_9rounds}.  
+\textbf{Reward curves.} The first part consists of the reward curves obtained over the five rounds of alternating training, with a moving window size of 200 episodes, as shown in Figure~\ref{fig:reward_curves_9rounds}.  
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.9\linewidth]{reward_curves_9rounds.png}
-\caption{\label{fig:reward_curves_9rounds}Reward curves of 9 rounds}
+\caption{\label{fig:reward_curves_9rounds}Reward curves of 5 rounds}
 \end{figure}
 
-\textbf{Evaluation metrics.} The second part focuses on evaluating the performance of the trained policies. In the testing phase, both robots are controlled independently by the latest policy obtained from each training round. For each policy, we conduct 100 evaluation episodes to ensure statistical reliability, and the deterministic policy
-set to False. We define six evaluation metrics:
+\textbf{Evaluation metrics.} The second part focuses on evaluating the performance of the trained policies. In the testing phase, both robots are controlled independently by the latest policy obtained from each training round.For each policy, we conduct 100 evaluation episodes to ensure statistical reliability, with the deterministic policy set to \texttt{False}. Considering that collisions between robots should be strictly prohibited under real-world conditions, the evaluation setting differs from the training environment: once a collision occurs, the current episode is immediately terminated and marked as a failure. We define six evaluation metrics:
 
 
 \begin{enumerate}
@@ -1988,7 +1982,7 @@ set to False. We define six evaluation metrics:
     \begin{figure}[H]
     \centering
     \includegraphics[width=0.9\linewidth]{progress_completion_per_policy.png}
-    \caption{\label{fig:progress_completion_per_policy}Average progress and task completion rate of 9 policies}
+    \caption{\label{fig:progress_completion_per_policy}Average progress and task completion rate of 5 policies}
     \end{figure}
 
     \item \textbf{Timesteps per placed object.} This metric evaluates the efficiency of object placement under multi-agent control by quantifying the average number of simulation steps required to successfully place a single object. It is formally defined as
@@ -2011,15 +2005,15 @@ set to False. We define six evaluation metrics:
     \begin{figure}[H]
     \centering
     \includegraphics[width=0.9\linewidth]{ind_progress_completion_per_policy.png}
-    \caption{\label{fig:ind_progress_completion_per_policy}Independent-agent average progress and task completion rate of 9 policies.}
+    \caption{\label{fig:ind_progress_completion_per_policy}Independent-agent average progress and task completion rate of 5 policies.}
     \end{figure}
     
-    \item \textbf{Independent-agent timesteps per placed object.} Using the same independent-agent tests, this metric measures the efficiency of object placement, as shown in Figure~\ref{fig:independent_agent_timesteps_per_object}. 
+    \item \textbf{Independent-agent timesteps per placed object.} Using the same independent-agent tests, this metric measures the efficiency of object placement, as shown in Figure~\ref{fig:ind_timesteps_per_object}. 
 
     \begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\linewidth]{independent_agent_timesteps_per_object.png}
-    \caption{\label{fig:independent_agent_timesteps_per_object}Independent-agent Curve of Timesteps per placed object.}
+    \includegraphics[width=0.9\linewidth]{ind_timesteps_per_object.png}
+    \caption{\label{fig:ind_timesteps_per_object}Independent-agent Curve of Timesteps per placed object.}
     \end{figure}
 
 
