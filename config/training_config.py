@@ -29,11 +29,11 @@ EE3_MODEL_NAME = "../models_bak/final_driver_model_continued_36000K_20251002_082
 EE4_MODEL_NAME = "../models_bak/final_driver_model_continued_48000K_20251003_113425.zip.bak"
 EE5_MODEL_NAME = "../models_bak/final_driver_model_continued_60000K_20251005_202807.zip.bak"
 
-F1_MODEL_NAME = "../models_bak/final_driver_model_12000K_20251008_192822.zip"
-F2_MODEL_NAME = "../models_bak/final_driver_model_continued_24000K_20251010_233052.zip"
-F3_MODEL_NAME = "../models_bak/final_driver_model_continued_36000K_20251012_222756.zip"
-F4_MODEL_NAME = "../models_bak/final_driver_model_continued_48000K_20251013_090713.zip"
-F5_MODEL_NAME = "../models_bak/final_driver_model_continued_60000K_20251013_134906.zip"
+F1_MODEL_NAME = "../models_bak/final_driver_model_12000K_20251008_192822.zip.bak"
+F2_MODEL_NAME = "../models_bak/final_driver_model_continued_24000K_20251010_233052.zip.bak"
+F3_MODEL_NAME = "../models_bak/final_driver_model_continued_36000K_20251012_222756.zip.bak"
+F4_MODEL_NAME = "../models_bak/final_driver_model_continued_48000K_20251013_090713.zip.bak"
+F5_MODEL_NAME = "../models_bak/final_driver_model_continued_60000K_20251013_134906.zip.bak"
 
 FIXED_MODEL_NAME = "latest_episode_model.zip.bak"
 
