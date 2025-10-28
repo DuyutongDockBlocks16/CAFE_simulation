@@ -213,7 +213,7 @@ def picking_model_training_parallel(load_model_path=None, num_envs=8):
         
         model = PPO("MlpPolicy", env, verbose=1, 
                     learning_rate=1e-4,     
-                    n_steps=2048,           # 调整为并行环境合适的值
+                    n_steps=2048,           # Adjusted for parallel environments
                     batch_size=256,          
                     n_epochs=8,            
                     ent_coef=0.02,          

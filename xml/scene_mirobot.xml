@@ -15,16 +15,16 @@
     <material name="target_mat" rgba="1 0 0 1" />
     <material name="block_mat" rgba="0.2 0.5 0.8 1" />
 
-    <material name="object0_mat" rgba="1.0 0.2 0.2 1" />      <!-- 红色 -->
-    <material name="object1_mat" rgba="0.2 1.0 0.2 1" />      <!-- 绿色 -->
-    <material name="object2_mat" rgba="0.2 0.2 1.0 1" />      <!-- 蓝色 -->
-    <material name="object3_mat" rgba="1.0 1.0 0.2 1" />      <!-- 黄色 -->
-    <material name="object4_mat" rgba="1.0 0.2 1.0 1" />      <!-- 洋红 -->
-    <material name="object5_mat" rgba="0.2 1.0 1.0 1" />      <!-- 青色 -->
-    <material name="object6_mat" rgba="1.0 0.6 0.2 1" />      <!-- 橙色 -->
-    <material name="object7_mat" rgba="0.6 0.2 1.0 1" />      <!-- 紫色 -->
-    <material name="object8_mat" rgba="0.8 0.8 0.8 1" />      <!-- 灰色 -->
-    <material name="object9_mat" rgba="0.4 0.2 0.1 1" />      <!-- 棕色 -->
+    <material name="object0_mat" rgba="1.0 0.2 0.2 1" />      <!-- Red -->
+    <material name="object1_mat" rgba="0.2 1.0 0.2 1" />      <!-- Green -->
+    <material name="object2_mat" rgba="0.2 0.2 1.0 1" />      <!-- Blue -->
+    <material name="object3_mat" rgba="1.0 1.0 0.2 1" />      <!-- Yellow -->
+    <material name="object4_mat" rgba="1.0 0.2 1.0 1" />      <!-- Magenta -->
+    <material name="object5_mat" rgba="0.2 1.0 1.0 1" />      <!-- Cyan -->
+    <material name="object6_mat" rgba="1.0 0.6 0.2 1" />      <!-- Orange -->
+    <material name="object7_mat" rgba="0.6 0.2 1.0 1" />      <!-- Purple -->
+    <material name="object8_mat" rgba="0.8 0.8 0.8 1" />      <!-- Gray -->
+    <material name="object9_mat" rgba="0.4 0.2 0.1 1" />      <!-- Brown -->
   </asset>
 
   <worldbody>

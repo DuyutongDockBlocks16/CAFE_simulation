@@ -12,8 +12,6 @@ data = mujoco.MjData(model)
 time_step = 0.001
 model.opt.timestep = time_step  
 
-
-
 with mujoco.viewer.launch_passive(model, data) as viewer:
     print("Press ESC to exit viewer...")
     last_time = time.time()

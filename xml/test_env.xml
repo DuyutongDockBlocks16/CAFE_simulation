@@ -10,38 +10,38 @@
     </asset>
 
     <worldbody>
-        <!-- 地面 -->
+        <!-- Ground -->
         <geom name="ground" type="plane" size="2 2 0.1" pos="0 0 0" material="ground_mat"/>
 
-        <!-- 目标物体 -->
+        <!-- Target object -->
         <body name="object0" pos="0 0 0.05">
             <joint name="object0:joint" type="free"/>
             <geom name="object0_geom" type="box" size="0.020 0.020 0.01" material="block_mat" mass="0.1"/>
         </body>
 
-        <!-- 放置区域 -->
+        <!-- Target area -->
         <geom name="target_area" type="box" pos="0.5 0.5 0.001" size="0.05 0.05 0.001" material="target_mat" contype="0" conaffinity="0"/>
 
-        <!-- 机器人底座（高圆柱） -->
+        <!-- Robot base (tall cylinder) -->
         <body name="robot_base" pos="0.2 0.2 0.05">
             <joint name="base_yaw" type="hinge" axis="0 0 1" limited="true" range="-3.14 3.14"/>
-            <geom type="cylinder" size="0.05 0.05" material="robot_mat"/> <!-- 高柱 -->
+            <geom type="cylinder" size="0.05 0.05" material="robot_mat"/> <!-- Tall pillar -->
 
-            <!-- 水平手臂，安装在柱子中部（Z = 0） -->
+            <!-- Horizontal arm, mounted at the middle of the pillar (Z = 0) -->
             <body name="horizontal_arm" pos="0.05 0 0">
                 <geom type="box" size="0.03 0.04 0.01" material="robot_mat"/>
 
-                <!-- 夹爪底座 -->
+                <!-- Gripper base -->
                 <body name="gripper" pos="0.05 0 0">
                     <!-- <geom type="box" size="0.02 0.02 0.01" material="robot_mat"/> -->
 
-                    <!-- 左指 -->
+                    <!-- Left finger -->
                     <body name="left_finger" pos="0 0.04 0">
                         <joint name="left_finger" type="slide" axis="0 1 0" limited="true" range="-0.025 0" />
                         <geom type="box" size="0.03 0.005 0.015" material="robot_mat"/>
                     </body>
 
-                    <!-- 右指 -->
+                    <!-- Right finger -->
                     <body name="right_finger" pos="0 -0.04 0">
                         <joint name="right_finger" type="slide" axis="0 1 0" limited="true" range="0 0.025" />
                         <geom type="box" size="0.03 0.005 0.015" material="robot_mat"/>
@@ -61,5 +61,3 @@
         <position joint="right_finger" kp="1" ctrlrange="0 0.025"/>
     </actuator>
 </mujoco>
-
-

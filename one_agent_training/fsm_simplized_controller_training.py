@@ -4,7 +4,7 @@ import sys
 os.environ['CUDA_VISIBLE_DEVICES'] = ''
 torch.set_default_device('cpu')
 
-print("🖥️ 强制使用 CPU 进行训练")
+print("🖥️ Force using CPU for training")
 print(f"PyTorch device: {torch.device('cpu')}")
 print(f"CUDA available: {torch.cuda.is_available()}")
 
@@ -221,7 +221,7 @@ def driver_model_training_parallel(load_model_path=None, num_envs=8):
             env, verbose=1, 
             device='cpu',
                     learning_rate=1e-3,     
-                    n_steps=2048,           # 调整为并行环境合适的值
+                    n_steps=2048,           # Adjust to suitable value for parallel environments
                     batch_size=256,          
                     n_epochs=8,            
                     ent_coef=0.02,          
@@ -277,9 +277,9 @@ def driver_model_training_parallel(load_model_path=None, num_envs=8):
         print(f"\n✅ Training completed successfully!")
         
     except KeyboardInterrupt:
-        print(f"\n Training interrupted by user")
+        print(f"\n❌ Training interrupted by user")
     except Exception as e:
-        print(f"\n Training error: {e}")
+        print(f"\n❌ Training error: {e}")
         import traceback
         traceback.print_exc()
     
@@ -320,7 +320,7 @@ def driver_model_training_parallel(load_model_path=None, num_envs=8):
     env.close()
     
 def driver_model_test_single_episode(env):
-    """测试单个episode的简化版本"""
+    """Simplified version for testing single episode"""
     
     def mask_fn(env):
         return env.get_action_mask()
@@ -333,23 +333,23 @@ def driver_model_test_single_episode(env):
     sleep(3)
     
     step_count = 0
-    print("🚀 开始单episode测试...")
+    print("🚀 Starting single episode test...")
     
     while True:
         env.render()
         
-        # 获取状态信息
+        # Get state information
         fsm_state = env.unwrapped.second_robot_status
         action_mask = env.unwrapped.get_action_mask()
         valid_actions = np.where(action_mask)[0]
         
-        # 每50步打印一次状态
+        # Print state every 50 steps
         # if step_count % 50 == 0:
         #     print(f"\nStep {step_count}:")
         #     print(f"  FSM State: {fsm_state}")
         #     print(f"  Valid actions: {valid_actions.tolist()}")
         
-        # 预测并执行动作
+        # Predict and execute action
         action, _ = model.predict(obs, action_masks=action_mask, deterministic=False)
         # print(f"  Action: {action}", end="")
         
@@ -362,20 +362,20 @@ def driver_model_test_single_episode(env):
             print()
         
         if terminated or truncated:
-            print(f"\n🏁 Episode结束!")
-            print(f"  总步数: {step_count}")
-            print(f"  终止原因: {'成功完成' if terminated else '超时截断'}")
-            print(f"  最终奖励: {reward:.3f}")
+            print(f"\n🏁 Episode ended!")
+            print(f"  Total steps: {step_count}")
+            print(f"  Termination reason: {'Successfully completed' if terminated else 'Timeout truncated'}")
+            print(f"  Final reward: {reward:.3f}")
             break
         
-        if step_count > 10000:  # 防止无限循环
-            print("⚠️ 达到最大步数限制")
+        if step_count > 10000:  # Prevent infinite loop
+            print("⚠️ Reached maximum step limit")
             break
         
         sleep(0.01)
     
     env.close()
-    print("✅ 测试完成")
+    print("✅ Test completed")
     
 if __name__ == "__main__":
     driver_env = gym.make("FsmHybridMuJoCoEnv-v0")

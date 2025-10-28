@@ -361,44 +361,6 @@
     <light pos="0 0 1000" castshadow="true" />
   </worldbody>
 
-  <!-- <equality>
-    <weld body1="link6_mocap" body2="link6_dummy" class="tcp_compliance" relpose="0 0 0 0 0 0 0"/>
-  </equality> -->
-
-  <!-- SENSORS -->
-  <!-- <sensor>
-    <force name="force" site="ft_sensorsite" />
-    <torque name="torque" site="ft_sensorsite" />
-
-    <framequat name="quat" objtype="site" objname="imu_sensorsite" />
-    <gyro name="angvel" site="imu_sensorsite" />
-    <accelerometer name="linacc" site="imu_sensorsite" />
-  </sensor> -->
-
-  <!-- Define a grouping of sensors that correspond to geometry_msgs/Wrench -->
-  <!-- <custom>
-    <tuple name="wrench">
-      <element objname="wrench_sensor" objtype="tuple" />
-    </tuple>
-
-    <tuple name="wrench_sensor">
-      <element objname="force" objtype="sensor" />
-      <element objname="torque" objtype="sensor" />
-    </tuple>
-  </custom> -->
-
-  <!-- Define a grouping of sensors that correspond to sensor_msgs/Imu -->
-  <!-- <custom>
-    <tuple name="imu">
-      <element objname="imu_sensor" objtype="tuple" />
-    </tuple>
-
-    <tuple name="imu_sensor">
-      <element objname="quat" objtype="sensor" />
-      <element objname="angvel" objtype="sensor" />
-      <element objname="linacc" objtype="sensor" />
-    </tuple>
-  </custom> -->
 
   <tendon>
     <fixed name="robot1:rear-differential">
@@ -406,22 +368,6 @@
       <joint joint="robot1:r-r-drive-hinge" coef="1" />
     </fixed>
   </tendon>
-
-  <!-- <actuator>
-    <position class="Joint1" name="robot1:Joint1" joint="robot1:Joint1" gear="1.0"/>
-    <position class="Joint2" name="robot1:Joint2" joint="robot1:Joint2" />
-    <position class="Joint3" name="robot1:Joint3" joint="robot1:Joint3" />
-    <position class="Joint4" name="robot1:Joint4" joint="robot1:Joint4" />
-    <position class="Joint5" name="robot1:Joint5" joint="robot1:Joint5" />
-    <position class="Joint6" name="robot1:Joint6" joint="robot1:Joint6"/>
-    <position name="robot1:ghost-steer" joint="robot1:ghost-steer-hinge" ctrllimited="true"
-      ctrlrange="-.9 .9"
-      gear="4.0" />
-    <motor name="robot1:drive" tendon="robot1:rear-differential" ctrllimited="true" ctrlrange="-3 3"
-      gear="1.5" />
-    <adhesion name="robot1:adhere_winch" body="robot1:vacuum_sphere" ctrlrange="0 1" gain="4"/>
-    <adhesion name="robot1:adhere_winch" body="4boxes" ctrlrange="0 1" gain="5"/>
-  </actuator> -->
 
   <equality>
     <joint name="robot1:f-l-steer-hinge" joint1="robot1:f-l-steer-hinge"

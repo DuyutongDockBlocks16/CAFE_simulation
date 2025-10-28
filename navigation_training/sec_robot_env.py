@@ -5,8 +5,8 @@ import mujoco.viewer
 # from first_robot_controller.mirobot_controller import MirobotController 
 import threading
 # from util_threads.object_remover import remove_object_on_plane
-# from util_threads.object_placer import place_object_on_table
-# from util_threads.object_remover_step_counter import remove_object_on_plane_with_step_counter
+from util_threads.object_placer import place_object_on_table
+from util_threads.object_remover_step_counter import remove_object_on_plane_with_step_counter
 # from utils.mujoco_state_loader import load_mujoco_state_from_file, restore_mujoco_state
 # from config.env_config import FiniteState
 import random
@@ -191,11 +191,11 @@ class SecondRobotMuJoCoEnv(gym.Env):
         self._store_robot2_initial_states()
 
     def reset_robot2_only(self):
-        """只重置robot2的状态"""
+        """Reset only robot2's state"""
         
         print("🔄 Resetting robot2 states only...")
         
-        # 🎯 重置robot2的qpos
+        # 🎯 Reset robot2's qpos
         reset_count = 0
         for idx, initial_value in self.robot2_initial_qpos.items():
             if idx < len(self.data.qpos):
@@ -205,7 +205,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
                 print(f"  ⚠️ qpos index {idx} out of range during reset")
         print(f"   qpos: {reset_count} values reset")
         
-        # 🎯 重置robot2的qvel
+        # 🎯 Reset robot2's qvel
         reset_count = 0
         for idx, initial_value in self.robot2_initial_qvel.items():
             if idx < len(self.data.qvel):
@@ -215,7 +215,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
                 print(f"  ⚠️ qvel index {idx} out of range during reset")
         print(f"   qvel: {reset_count} values reset")
         
-        # 🎯 重置robot2的ctrl
+        # 🎯 Reset robot2's ctrl
         reset_count = 0
         for idx, initial_value in self.robot2_initial_ctrl.items():
             if idx < len(self.data.ctrl):
@@ -225,7 +225,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
                 print(f"  ⚠️ ctrl index {idx} out of range during reset")
         print(f"   ctrl: {reset_count} values reset")
         
-        # 🎯 确保状态同步
+        # 🎯 Ensure state synchronization
         mujoco.mj_forward(self.model, self.data)
         
         print("✅ Robot2 reset complete")
@@ -288,12 +288,12 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
     def step(self, action):
         self._update_robot_tracking()
-        """带有action repeat的step方法"""
+        """Step method with action repeat"""
         if self.action_repeat == 1:
-            # 如果action_repeat=1，使用原始step逻辑
+            # If action_repeat=1, use original step logic
             return self._original_step(action)
         else:
-            # 如果action_repeat>1，重复执行action
+            # If action_repeat>1, repeat action execution
             total_reward = 0
             terminated = False
             truncated = False
@@ -391,7 +391,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
         target_angle = np.arctan2(target_rel[1], target_rel[0])  
         
         target_relative_angle = target_angle - robot2_orientation
-        target_relative_angle = np.arctan2(np.sin(target_relative_angle), np.cos(target_relative_angle))  # 标准化到[-π,π]
+        target_relative_angle = np.arctan2(np.sin(target_relative_angle), np.cos(target_relative_angle))  # Normalize to [-π,π]
         
         target_rel_normalized = target_rel / max_distance  
 
@@ -403,7 +403,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
         robot1_relative_angle = np.arctan2(np.sin(robot1_relative_angle), np.cos(robot1_relative_angle))
         robot1_rel_normalized = robot1_rel / max_distance
 
-        # 🎯 墙壁相对位置
+        # 🎯 Wall relative positions
         walls = {"left": -3.0, "right": 3.0, "front": 3.0, "back": -3.0}
         wall_distances = np.array([
             robot2_pos[0] - walls["left"],   
@@ -412,7 +412,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
             walls["front"] - robot2_pos[1]   
         ])
 
-        # 🎯 放置点相对位置
+        # 🎯 Placing point relative positions
         placing_place_1_pos = np.array([2.8, 1.0])  
         placing_1_rel = placing_place_1_pos - robot2_pos
         placing_1_distance = np.linalg.norm(placing_1_rel)
@@ -431,40 +431,40 @@ class SecondRobotMuJoCoEnv(gym.Env):
         # print([target_relative_angle / np.pi])
         
         observation = np.concatenate([
-            # 🎯 机器人自身状态
-            robot2_pos / max_position,                    # [2] 绝对位置
-            robot2_vel / max_speed,                       # [2] 速度 
-            [robot2_orientation / np.pi],                 # [1] 朝向 
+            # 🎯 Robot's own state
+            robot2_pos / max_position,                    # [2] Absolute position
+            robot2_vel / max_speed,                       # [2] Velocity 
+            [robot2_orientation / np.pi],                 # [1] Orientation 
 
-            # 🎯 目标相对信息（增强版）
-            target_rel_normalized,                        # [2] 目标相对位置向量 
-            [target_distance / max_distance],             # [1] 目标距离
-            [target_angle / np.pi],                       # [1] 目标世界角度
-            [target_relative_angle / np.pi],              # [1] 目标相对角度 
+            # 🎯 Target relative information (enhanced)
+            target_rel_normalized,                        # [2] Target relative position vector 
+            [target_distance / max_distance],             # [1] Target distance
+            [target_angle / np.pi],                       # [1] Target world angle
+            [target_relative_angle / np.pi],              # [1] Target relative angle 
 
-            # 🎯 机器人1相对信息（增强版）
-            robot1_rel_normalized,                        # [2] 机器人1相对位置 
-            [robot1_distance / max_distance],             # [1] 机器人1距离
-            [robot1_relative_angle / np.pi],              # [1] 机器人1相对角度 
+            # 🎯 Robot1 relative information (enhanced)
+            robot1_rel_normalized,                        # [2] Robot1 relative position 
+            [robot1_distance / max_distance],             # [1] Robot1 distance
+            [robot1_relative_angle / np.pi],              # [1] Robot1 relative angle 
 
             trajectory_features,
 
-            [np.max(collision_risks),                     # 最大风险
-             np.mean(collision_risks),                    # 平均风险
-             np.min(min_distances),                       # 最小距离
-             np.argmax(collision_risks) / self.prediction_steps],  # 最危险时刻(归一化)
+            [np.max(collision_risks),                     # Maximum risk
+             np.mean(collision_risks),                    # Average risk
+             np.min(min_distances),                       # Minimum distance
+             np.argmax(collision_risks) / self.prediction_steps],  # Most dangerous moment (normalized)
             
-            # 🎯 环境相对信息
-            wall_distances / max_distance,                # [4] 墙壁距离
+            # 🎯 Environment relative information
+            wall_distances / max_distance,                # [4] Wall distances
 
-            # 🎯 放置点相对信息（增强版）
-            placing_1_rel_normalized,                     # [2] 放置点1相对位置 
-            [placing_1_distance / max_distance],          # [1] 放置点1距离
-            [placing_1_angle / np.pi],                    # [1] 放置点1相对角度 
+            # 🎯 Placing point relative information (enhanced)
+            placing_1_rel_normalized,                     # [2] Placing point 1 relative position 
+            [placing_1_distance / max_distance],          # [1] Placing point 1 distance
+            [placing_1_angle / np.pi],                    # [1] Placing point 1 relative angle 
             
-            placing_2_rel_normalized,                     # [2] 放置点2相对位置 
-            [placing_2_distance / max_distance],          # [1] 放置点2距离
-            [placing_2_angle / np.pi],                    # [1] 放置点2相对角度 
+            placing_2_rel_normalized,                     # [2] Placing point 2 relative position 
+            [placing_2_distance / max_distance],          # [1] Placing point 2 distance
+            [placing_2_angle / np.pi],                    # [1] Placing point 2 relative angle 
         ], dtype=np.float32)
 
         return observation
@@ -553,10 +553,10 @@ class SecondRobotMuJoCoEnv(gym.Env):
         current_pos = self.data.xpos[self.robot_1_rover_id][:2]
         
         if len(self.robot1_recent_positions) < 2:
-            # 没有历史数据 -> 静止预测
+            # No historical data -> stationary prediction
             return np.tile(current_pos, (self.prediction_steps, 1))
         
-        # 🎯 计算速度和加速度
+        # 🎯 Calculate velocity and acceleration
         velocity = self.robot1_recent_positions[-1] - self.robot1_recent_positions[-2]
         
         if len(self.robot1_recent_positions) >= 3:
@@ -565,7 +565,7 @@ class SecondRobotMuJoCoEnv(gym.Env):
         else:
             acceleration = np.zeros(2)
         
-        # 🎯 运动学预测（适用于所有情况）
+        # 🎯 Kinematic prediction (applicable to all cases)
         predicted_positions = []
         dt = 0.005 * 4
         
@@ -639,9 +639,9 @@ class SecondRobotMuJoCoEnv(gym.Env):
             
             min_distances.append(distance)
             
-            if distance < 0.5:  # 危险距离
+            if distance < 0.5:  # Dangerous distance
                 risk = 1.0 - (distance / 0.5)
-            elif distance < 1.0:  # 警告距离
+            elif distance < 1.0:  # Warning distance
                 risk = 0.5 * (1.0 - (distance - 0.5) / 0.5)
             else:
                 risk = 0.0
@@ -655,19 +655,19 @@ class SecondRobotMuJoCoEnv(gym.Env):
         if len(predicted_trajectory) == 0:
             return np.zeros(8)
         
-        # 相对于Robot2的轨迹
+        # Trajectory relative to Robot2
         relative_trajectory = predicted_trajectory - robot2_pos
         
-        # 特征提取
-        start_pos = relative_trajectory[0]                    # 起始相对位置
-        end_pos = relative_trajectory[-1]                     # 结束相对位置
+        # Feature extraction
+        start_pos = relative_trajectory[0]                    # Starting relative position
+        end_pos = relative_trajectory[-1]                     # Ending relative position
         
-        # 轨迹方向和长度
+        # Trajectory direction and length
         trajectory_vector = end_pos - start_pos
         trajectory_length = np.linalg.norm(trajectory_vector)
         trajectory_direction = trajectory_vector / (trajectory_length + 1e-8)
         
-        # 轨迹曲率（方向变化）
+        # Trajectory curvature (direction change)
         if len(relative_trajectory) > 2:
             vectors = np.diff(relative_trajectory, axis=0)
             direction_changes = np.diff(vectors, axis=0)
@@ -675,18 +675,18 @@ class SecondRobotMuJoCoEnv(gym.Env):
         else:
             curvature = 0.0
         
-        # 最近接近点
+        # Closest approach point
         distances = np.linalg.norm(relative_trajectory, axis=1)
         min_distance = np.min(distances)
-        closest_time = np.argmin(distances) / len(distances)  # 归一化时间
+        closest_time = np.argmin(distances) / len(distances)  # Normalized time
         
         features = np.concatenate([
-            start_pos / 8.0,                    # [2] 起始相对位置
-            trajectory_direction,               # [2] 轨迹主方向
-            [trajectory_length / 8.0],          # [1] 轨迹长度
-            [curvature],                        # [1] 轨迹曲率
-            [min_distance / 8.0],               # [1] 最近距离
-            [closest_time],                     # [1] 最近时刻
+            start_pos / 8.0,                    # [2] Starting relative position
+            trajectory_direction,               # [2] Main trajectory direction
+            [trajectory_length / 8.0],          # [1] Trajectory length
+            [curvature],                        # [1] Trajectory curvature
+            [min_distance / 8.0],               # [1] Minimum distance
+            [closest_time],                     # [1] Time of closest approach
         ])
         
         return features
@@ -704,33 +704,33 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
 
     def _get_robot2_joint_indices(self):
-        """根据您的XML获取robot2相关的所有关节索引"""
+        """Get all joint indices related to robot2 based on your XML"""
         
-        # 🤖 根据您的XML文件定义的robot2关节名称
+        # 🤖 Robot2 joint names defined in your XML file
         robot2_joint_names = [
-            # 底盘主关节（自由关节）
+            # Chassis main joint (free joint)
             "robot2:centroid",
             
-            # 车轮驱动关节
-            "robot2:r-l-drive-hinge",        # 后左轮驱动
-            "robot2:r-r-drive-hinge",        # 后右轮驱动
-            "robot2:f-l-drive-hinge-1",      # 前左轮驱动1
-            "robot2:f-l-drive-hinge-2",      # 前左轮驱动2
-            "robot2:f-r-drive-hinge-1",      # 前右轮驱动1
-            "robot2:f-r-drive-hinge-2",      # 前右轮驱动2
+            # Wheel drive joints
+            "robot2:r-l-drive-hinge",        # Rear left wheel drive
+            "robot2:r-r-drive-hinge",        # Rear right wheel drive
+            "robot2:f-l-drive-hinge-1",      # Front left wheel drive 1
+            "robot2:f-l-drive-hinge-2",      # Front left wheel drive 2
+            "robot2:f-r-drive-hinge-1",      # Front right wheel drive 1
+            "robot2:f-r-drive-hinge-2",      # Front right wheel drive 2
             
-            # 转向关节
-            "robot2:ghost-steer-hinge",      # 虚拟转向
-            "robot2:f-l-steer-hinge",        # 前左轮转向
-            "robot2:f-r-steer-hinge",        # 前右轮转向
+            # Steering joints
+            "robot2:ghost-steer-hinge",      # Virtual steering
+            "robot2:f-l-steer-hinge",        # Front left wheel steering
+            "robot2:f-r-steer-hinge",        # Front right wheel steering
             
-            # 机械臂关节
-            "robot2:Joint1",                 # 机械臂关节1
-            "robot2:Joint2",                 # 机械臂关节2
-            "robot2:Joint3",                 # 机械臂关节3
-            "robot2:Joint4",                 # 机械臂关节4
-            "robot2:Joint5",                 # 机械臂关节5
-            # 注意：Joint6在XML中被注释掉了，所以不包含
+            # Robotic arm joints
+            "robot2:Joint1",                 # Arm joint 1
+            "robot2:Joint2",                 # Arm joint 2
+            "robot2:Joint3",                 # Arm joint 3
+            "robot2:Joint4",                 # Arm joint 4
+            "robot2:Joint5",                 # Arm joint 5
+            # Note: Joint6 is commented out in XML, so not included
         ]
         
         joint_indices = {
@@ -745,22 +745,22 @@ class SecondRobotMuJoCoEnv(gym.Env):
             try:
                 joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
                 
-                # 获取qpos索引范围
+                # Get qpos index range
                 qpos_adr = self.model.jnt_qposadr[joint_id]
                 joint_type = self.model.jnt_type[joint_id]
                 
                 if joint_type == mujoco.mjtJoint.mjJNT_FREE:
-                    # 自由关节：7个qpos (位置3 + 四元数4)
+                    # Free joint: 7 qpos (position 3 + quaternion 4)
                     qpos_indices = list(range(qpos_adr, qpos_adr + 7))
                     qvel_indices = list(range(self.model.jnt_dofadr[joint_id], self.model.jnt_dofadr[joint_id] + 6))
                     print(f"  ✅ {joint_name} (FREE): qpos[{qpos_adr}:{qpos_adr+7}], qvel[{self.model.jnt_dofadr[joint_id]}:{self.model.jnt_dofadr[joint_id]+6}]")
                 elif joint_type == mujoco.mjtJoint.mjJNT_HINGE:
-                    # 铰链关节：1个qpos
+                    # Hinge joint: 1 qpos
                     qpos_indices = [qpos_adr]
                     qvel_indices = [self.model.jnt_dofadr[joint_id]]
                     print(f"  ✅ {joint_name} (HINGE): qpos[{qpos_adr}], qvel[{self.model.jnt_dofadr[joint_id]}]")
                 elif joint_type == mujoco.mjtJoint.mjJNT_SLIDE:
-                    # 滑动关节：1个qpos
+                    # Slide joint: 1 qpos
                     qpos_indices = [qpos_adr]
                     qvel_indices = [self.model.jnt_dofadr[joint_id]]
                     print(f"  ✅ {joint_name} (SLIDE): qpos[{qpos_adr}], qvel[{self.model.jnt_dofadr[joint_id]}]")
@@ -806,21 +806,20 @@ class SecondRobotMuJoCoEnv(gym.Env):
 
         mujoco.mj_forward(self.model, self.data)
         
-        # 存储qpos
         for idx in self.robot2_joint_indices['qpos']:
             if idx < len(self.data.qpos):
                 self.robot2_initial_qpos[idx] = self.data.qpos[idx]
             else:
                 print(f"  ⚠️ qpos index {idx} out of range")
         
-        # 存储qvel
+        # Store qvel
         for idx in self.robot2_joint_indices['qvel']:
             if idx < len(self.data.qvel):
                 self.robot2_initial_qvel[idx] = self.data.qvel[idx]
             else:
                 print(f"  ⚠️ qvel index {idx} out of range")
         
-        # 存储ctrl
+        # Store ctrl
         for idx in self.robot2_joint_indices['ctrl']:
             if idx < len(self.data.ctrl):
                 self.robot2_initial_ctrl[idx] = self.data.ctrl[idx]

@@ -50,9 +50,9 @@ class EntCoefficientScheduler(BaseCallback):
         else:
             new_ent_coef = self.initial_ent_coef
         
-        self.model.ent_coef = max(new_ent_coef, 0.0001)  # 确保不会变成0
+        self.model.ent_coef = max(new_ent_coef, 0.0001)  # Ensure it doesn't become 0
         
-        # 🎯 更详细的日志
+        # More detailed logging
         if steps_since_start % 10000 == 0 and self.verbose > 0:
             print(f"📉 Total steps: {self.num_timesteps:,} | "
                   f"New steps: {steps_since_start:,} | "

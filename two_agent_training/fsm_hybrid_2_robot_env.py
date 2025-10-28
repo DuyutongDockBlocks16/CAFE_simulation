@@ -1788,7 +1788,7 @@ class Fsm2RobotHybridMuJoCoEnv(gym.Env):
         distance_to_robot_1 = np.linalg.norm(robot2_pos - robot1_pos)
         # print(f"Distance to Robot 1: {distance_to_robot_1:.4f}")
 
-        influence_distance = 3.0  # 影响范围
+        influence_distance = 3.0  # influence range
         if distance_to_robot_1 < influence_distance:
             repulsive_potential = 1.0 * (1/distance_to_robot_1 - 1/influence_distance)**2
             
@@ -1797,13 +1797,13 @@ class Fsm2RobotHybridMuJoCoEnv(gym.Env):
         elif robot_id == 3:
             another_rl_robot_pos = self.data.xpos[self.robot_2_rover_id][:2]
             
-        influence_distance_to_another_rl_robot = 1.0  # 影响范围
+        influence_distance_to_another_rl_robot = 1.0  # influence range
         repulsive_potential_to_another_rl_robot = 0
         distance_to_another_rl_robot = np.linalg.norm(robot2_pos - another_rl_robot_pos)
         if distance_to_another_rl_robot < influence_distance_to_another_rl_robot:
             repulsive_potential_to_another_rl_robot = 0.5 * (1/distance_to_another_rl_robot - 1/influence_distance_to_another_rl_robot)**2
 
-        # 🔥 总势能
+        # total potential energy
         total_potential = attractive_potential + repulsive_potential + repulsive_potential_to_another_rl_robot
 
         if robot_id == 2:
@@ -1849,94 +1849,94 @@ class Fsm2RobotHybridMuJoCoEnv(gym.Env):
                 forbidden_geom_distances.append(distance_robot3)
                     
         
-        # 🔥 转换为NumPy数组并归一化
+        # convert to numpy array and normalize
         forbidden_geom_distances = np.array(forbidden_geom_distances) / self.max_distance
     
         
-        # 🔥 当前观察（25维）
+        # current observation (25 dimensions)
         current_obs = np.concatenate([
-            # 自身状态 [5维]
-            robot2_pos / self.max_position,                    # [2] 位置
-            robot2_vel / self.max_speed,                       # [2] 速度 
-            [robot2_orientation / np.pi],                      # [1] 朝向
+            # self state [5 dimensions]
+            robot2_pos / self.max_position,                    # [2] position
+            robot2_vel / self.max_speed,                       # [2] velocity 
+            [robot2_orientation / np.pi],                      # [1] orientation
 
-            # 目标信息 [4维]
-            self._get_target_relative_info(self.robot_2_rover_id),           # [3] 目标相对位置+距离
-            [1.0 if self.robot_2_target_position_x_y is not None else 0.0],  # [1] 是否有目标
+            # target information [4 dimensions]
+            self._get_target_relative_info(self.robot_2_rover_id),           # [3] target relative position + distance
+            [1.0 if self.robot_2_target_position_x_y is not None else 0.0],  # [1] whether has target
             
-            robot3_pos / self.max_position,                    # [2] robot3位置
-            robot3_vel / self.max_speed,                       # [2] robot3速度
-            [robot3_orientation / np.pi],                      # [1] robot3朝向
+            robot3_pos / self.max_position,                    # [2] robot3 position
+            robot3_vel / self.max_speed,                       # [2] robot3 velocity
+            [robot3_orientation / np.pi],                      # [1] robot3 orientation
             
-            self._get_target_relative_info(self.robot_3_rover_id),           # [3] 目标相对位置+距离
-            [1.0 if self.robot_3_target_position_x_y is not None else 0.0],  # [1] 是否有目标       
+            self._get_target_relative_info(self.robot_3_rover_id),           # [3] target relative position + distance
+            [1.0 if self.robot_3_target_position_x_y is not None else 0.0],  # [1] whether has target       
             
-            # robot1信息 [9维]
-            self._get_robot1_relative_info(),                  # [9] robot1相对位置+速度+朝向
+            # robot1 information [9 dimensions]
+            self._get_robot1_relative_info(),                  # [9] robot1 relative position + velocity + orientation
 
-            # 任务状态 [3维]
-            [self.second_robot_status.value / len(RLRobotFiniteState)],  # [1] 状态
-            [self.third_robot_status.value / len(RLRobotFiniteState)],  # [1] 状态
-            [1.0 if self.second_robot_is_picking else 0.0],   # [1] 是否在拾取
-            [1.0 if self.third_robot_is_picking else 0.0],   # [1] 是否在拾取
-            [1.0 if self.first_robot_is_carrying else 0.0],   # [1] robot1是否在搬运
+            # task state [3 dimensions]
+            [self.second_robot_status.value / len(RLRobotFiniteState)],  # [1] state
+            [self.third_robot_status.value / len(RLRobotFiniteState)],  # [1] state
+            [1.0 if self.second_robot_is_picking else 0.0],   # [1] whether picking
+            [1.0 if self.third_robot_is_picking else 0.0],   # [1] whether picking
+            [1.0 if self.first_robot_is_carrying else 0.0],   # [1] whether robot1 is carrying
             
-            # 放置位置状态 [4维]
-            placingplace_object_numbers_for_observation,       # [4] 每个放置位置的物体数量
+            # placing position state [4 dimensions]
+            placingplace_object_numbers_for_observation,       # [4] number of objects at each placing position
             
-            # 禁止区域距离 [2维]
+            # forbidden area distances [2 dimensions]
             forbidden_geom_distances
             
         ], dtype=np.float32)
         
-        # 🔥 更新历史位置
+        # update position history
         self._update_position_history()
         
-        # 🔥 提取增强历史特征 (54维)
+        # extract enhanced history features (54 dimensions)
         history_features_robot2_and_robot3 = self._extract_enhanced_multi_scale_history_robot2_and_robot3()
 
-        # 🔥 组合观察：25 + 54 = 79维
+        # combine observations: 25 + 54 = 79 dimensions
         enhanced_obs = np.concatenate([current_obs, history_features_robot2_and_robot3])
         
         return enhanced_obs
 
     def _update_position_history(self):
-        """更新位置历史记录"""
+        """Update position history record"""
         if not hasattr(self, 'robot_positions_history'):
             self.robot_positions_history = []
-            self.history_sample_steps = [5, 10, 20, 50, 100, 200]  # 6个时间尺度
+            self.history_sample_steps = [5, 10, 20, 50, 100, 200]  # 6 time scales
         
-        # 获取当前两个机器人的位置
+        # get current positions of both robots
         robot1_pos = self.data.xpos[self.robot_1_rover_id][:2]
         robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
         robot3_pos = self.data.xpos[self.robot_3_rover_id][:2]
         current_positions = np.concatenate([robot1_pos, robot2_pos, robot3_pos])
         
-        # 添加到历史记录
+        # add to history record
         self.robot_positions_history.append(current_positions)
         
-        # 限制历史长度（保留最近200步）
+        # limit history length (keep recent 200 steps)
         if len(self.robot_positions_history) > 200:
             self.robot_positions_history.pop(0)
 
     def _extract_enhanced_multi_scale_history_robot2_and_robot3(self):
-        """提取增强的多时间尺度历史特征"""
+        """Extract enhanced multi-time-scale history features"""
         
         if len(self.robot_positions_history) < 2:
-            return np.zeros(54)  # 6个时间点 × 9维特征 = 54维
+            return np.zeros(54)  # 6 time points × 9 feature dimensions = 54 dimensions
         
         history_features = []
         
         for steps_back in self.history_sample_steps:
             if steps_back < len(self.robot_positions_history):
-                # 🔥 获取历史位置
+                # get historical positions
                 past_positions = self.robot_positions_history[-steps_back-1]
                 current_positions = self.robot_positions_history[-1]
                 
-                # 🎯 计算位置变化
+                # calculate position changes
                 position_delta = current_positions - past_positions
                 
-                # 🎯 计算距离变化
+                # calculate distance changes
                 past_robot1_pos = past_positions[:2]
                 past_robot2_pos = past_positions[2:4]
                 past_robot3_pos = past_positions[4:]
@@ -1952,23 +1952,23 @@ class Fsm2RobotHybridMuJoCoEnv(gym.Env):
                 distance_change_robot2 = current_distance_robot2 - past_distance_robot2
                 distance_change_robot3 = current_distance_robot3 - past_distance_robot3
 
-                # 🎯 组合特征 [6维]
+                # combined features [6 dimensions]
                 step_features = np.concatenate([
-                    past_positions / self.max_position,        # [6] 历史位置
-                    [distance_change_robot2 / self.max_distance],     # [1] 距离变化
-                    [distance_change_robot3 / self.max_distance],     # [1] 距离变化
-                    [steps_back / 200.0]                       # [1] 时间权重
+                    past_positions / self.max_position,        # [6] historical position
+                    [distance_change_robot2 / self.max_distance],     # [1] distance change
+                    [distance_change_robot3 / self.max_distance],     # [1] distance change
+                    [steps_back / 200.0]                       # [1] time weight
                 ])
                 
                 history_features.extend(step_features)
             else:
-                # 历史不够，用零填充
+                # insufficient history, fill with zeros
                 history_features.extend(np.zeros(9))
 
         return np.array(history_features[:54], dtype=np.float32)
 
     def _get_target_relative_info(self, robot_rover_id):
-        """获取目标相对信息"""
+        """Get target relative information"""
         robot2_pos = self.data.xpos[robot_rover_id][:2]
         
         if self.robot_2_target_position_x_y is not None:
@@ -1976,47 +1976,47 @@ class Fsm2RobotHybridMuJoCoEnv(gym.Env):
             target_rel = target_pos - robot2_pos
             distance = np.linalg.norm(target_rel)
             return np.concatenate([
-                target_rel / self.max_distance,     # [2] 归一化相对位置
-                [distance / self.max_distance]      # [1] 归一化距离
+                target_rel / self.max_distance,     # [2] normalized relative position
+                [distance / self.max_distance]      # [1] normalized distance
             ])
         else:
             return np.zeros(3)
 
     def _get_robot1_relative_info(self):
-        """增强版：包含位置、速度、朝向信息"""
+        """Enhanced version: includes position, velocity, and orientation information"""
         robot2_pos = self.data.xpos[self.robot_2_rover_id][:2]
         robot1_pos = self.data.xpos[self.robot_1_rover_id][:2]
         
-        # 🔥 位置信息
+        # position information
         robot1_rel = robot1_pos - robot2_pos
         distance = np.linalg.norm(robot1_rel)
         
-        # 🔥 robot1 速度信息
+        # robot1 velocity information
         try:
             robot1_vel = self.data.cvel[self.robot_1_rover_id][:2]
         except:
             robot1_vel = np.zeros(2)
         
-        # 🔥 robot1 朝向信息
+        # robot1 orientation information
         robot1_quat = self.data.xquat[self.robot_1_rover_id]
         robot1_orientation = self._quaternion_to_yaw(robot1_quat)
         
-        # 🔥 相对运动信息
+        # relative motion information
         robot2_vel = self.data.cvel[self.robot_2_rover_id][:2]
-        relative_velocity = robot1_vel - robot2_vel  # robot1相对于robot2的速度
+        relative_velocity = robot1_vel - robot2_vel  # robot1's velocity relative to robot2
         
-        # 🔥 接近/远离判断
+        # approaching/departing judgment
         if distance > 0:
-            # 径向速度：正值表示相互远离，负值表示相互接近
+            # radial velocity: positive value indicates moving apart, negative value indicates approaching
             radial_velocity = np.dot(relative_velocity, robot1_rel) / distance
         else:
             radial_velocity = 0.0
         
         return np.concatenate([
-            robot1_rel / self.max_distance,           # [2] 相对位置
-            [distance / self.max_distance],           # [1] 距离
-            robot1_vel / self.max_speed,              # [2] robot1速度
-            [robot1_orientation / np.pi],             # [1] robot1朝向
-            relative_velocity / self.max_speed,       # [2] 相对速度
-            [radial_velocity / self.max_speed],       # [1] 径向速度
+            robot1_rel / self.max_distance,           # [2] relative position
+            [distance / self.max_distance],           # [1] distance
+            robot1_vel / self.max_speed,              # [2] robot1 velocity
+            [robot1_orientation / np.pi],             # [1] robot1 orientation
+            relative_velocity / self.max_speed,       # [2] relative velocity
+            [radial_velocity / self.max_speed],       # [1] radial velocity
         ])

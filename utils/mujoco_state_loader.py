@@ -22,7 +22,7 @@ def load_mujoco_state_from_file(filepath):
         return None
 
 def restore_mujoco_state(model, data, state_data):
-    # 恢复主要状态
+    # Restore main state
     data.qpos[:] = state_data['qpos']
     data.qvel[:] = state_data['qvel'] 
     data.ctrl[:] = state_data['ctrl']
@@ -56,11 +56,11 @@ def view_saved_state(state_filepath):
     
     restore_mujoco_state(mujoco_model, mujoco_data, state_data)
 
-    # 🎯 打印所有object joints的位置
+    # Print all object joints positions
     print("\n📦 Object joints positions:")
     print("=" * 50)
     
-    # 🎯 查找所有object joints
+    # Find all object joints
     object_joints = []
     for i in range(mujoco_model.njnt):
         joint_name = mujoco.mj_id2name(mujoco_model, mujoco.mjtObj.mjOBJ_JOINT, i)
@@ -71,16 +71,16 @@ def view_saved_state(state_filepath):
             except (ValueError, IndexError):
                 continue
     
-    # 🎯 按object_id排序
+    # Sort by object_id
     object_joints.sort(key=lambda x: x[0])
     
-    # 🎯 打印每个object joint的位置
+    # Print position of each object joint
     for object_id, joint_id, joint_name in object_joints:
-        # 获取joint对应的body位置
+        # Get body position corresponding to joint
         body_id = mujoco_model.jnt_bodyid[joint_id]
         body_name = mujoco.mj_id2name(mujoco_model, mujoco.mjtObj.mjOBJ_BODY, body_id)
         
-        # 获取位置信息
+        # Get position information
         position = mujoco_data.xpos[body_id]
         quaternion = mujoco_data.xquat[body_id]
         
@@ -90,7 +90,7 @@ def view_saved_state(state_filepath):
         print(f"   Quaternion: [{quaternion[0]:6.3f}, {quaternion[1]:6.3f}, {quaternion[2]:6.3f}, {quaternion[3]:6.3f}]")
         print()
     
-    # 🎯 打印统计信息
+    # Print statistics
     print(f"📊 Total objects found: {len(object_joints)}")
     
     print("=" * 50)
@@ -104,22 +104,22 @@ def view_saved_state(state_filepath):
             
             step_count = 0
             while viewer.is_running():
-                # 可选：运行少量物理步骤保持场景活跃
-                # if step_count % 100 == 0:  # 每100帧运行一次物理
+                # Optional: run a few physics steps to keep scene active
+                # if step_count % 100 == 0:  # Run physics every 100 frames
                 #     mujoco.mj_step(mujoco_model, mujoco_data)
                 mujoco.mj_step(mujoco_model, mujoco_data)
                 
                 viewer.sync()
                 step_count += 1
                 
-                # 防止无限循环
+                # Prevent infinite loop
                 if step_count > 100000:
-                    print("⏱️ 达到最大步数，退出查看器")
+                    print("⏱️ Reached maximum steps, exiting viewer")
                     break
                     
     except Exception as e:
-        print(f"❌ 查看器错误: {e}")
+        print(f"❌ Viewer error: {e}")
         import traceback
         traceback.print_exc()
     
-    print("✅ 查看器已关闭")
+    print("✅ Viewer closed")

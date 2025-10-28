@@ -67,9 +67,9 @@ def plot_episode_analysis(episodes, metadata=None, final_metadata=None, save_pat
     total_steps = [ep['total_steps'] for ep in episodes]
     avg_rewards_per_step = [ep['average_reward_per_step'] for ep in episodes]
     
-    # 🎯 计算最近10个episode的移动平均
+    # 📊 Calculate moving average for recent 10 episodes
     def calculate_moving_average(data, window_size=10):
-        """计算移动平均"""
+        """Calculate moving average"""
         moving_avg = []
         for i in range(len(data)):
             start_idx = max(0, i - window_size + 1)
@@ -77,28 +77,28 @@ def plot_episode_analysis(episodes, metadata=None, final_metadata=None, save_pat
             moving_avg.append(np.mean(window_data))
         return moving_avg
     
-    # 计算移动平均线
+    # Calculate moving average
     moving_avg_rewards = calculate_moving_average(total_rewards, window_size=200)
     
     # Create figure with subplots
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
     fig.suptitle('Episode Analysis Dashboard', fontsize=16, fontweight='bold')
     
-    # 🎯 Plot 1: Total Reward per Episode (增强版)
-    # 原始奖励曲线
+    # 📊 Plot 1: Total Reward per Episode (Enhanced version)
+    # Original reward curve
     # ax1.plot(episode_numbers, total_rewards, 'b-', linewidth=1.5, marker='o', 
     #          markersize=3, alpha=0.6, label='Episode Reward')
     
-    # 🎯 添加移动平均线
+    # 📊 Add moving average line
     ax1.plot(episode_numbers, moving_avg_rewards, 'r-', linewidth=3, 
              label='Moving Average (10 episodes)', alpha=0.9)
     
-    # 平均线
+    # Average line
     overall_mean = np.mean(total_rewards)
     ax1.axhline(y=overall_mean, color='gray', linestyle='--', alpha=0.7, 
                 label=f'Overall Mean: {overall_mean:.1f}')
     
-    # 🎯 添加趋势信息
+    # 📊 Add trend information
     recent_10_mean = np.mean(total_rewards[-10:]) if len(total_rewards) >= 10 else np.mean(total_rewards)
     first_10_mean = np.mean(total_rewards[:10]) if len(total_rewards) >= 10 else np.mean(total_rewards)
     trend = "📈 Improving" if recent_10_mean > first_10_mean else "📉 Declining"
@@ -109,9 +109,9 @@ def plot_episode_analysis(episodes, metadata=None, final_metadata=None, save_pat
     ax1.grid(True, alpha=0.3)
     ax1.legend(loc='best')
     
-    # 🎯 添加趋势标注
+    # 📊 Add trend annotation
     if len(total_rewards) >= 20:
-        # 在图上标注最近趋势
+        # Annotate recent trend on the plot
         ax1.text(0.02, 0.98, f'Recent 10 avg: {recent_10_mean:.1f}\nFirst 10 avg: {first_10_mean:.1f}', 
                 transform=ax1.transAxes, verticalalignment='top',
                 bbox=dict(boxstyle="round,pad=0.3", facecolor="lightyellow", alpha=0.8),
@@ -126,7 +126,7 @@ def plot_episode_analysis(episodes, metadata=None, final_metadata=None, save_pat
     ax2.axhline(y=np.mean(total_steps), color='r', linestyle='--', alpha=0.7, label=f'Mean: {np.mean(total_steps):.1f}')
     ax2.legend()
     
-    # Plot 3: Average Reward per Step (也添加移动平均)
+    # Plot 3: Average Reward per Step (also add moving average)
     moving_avg_efficiency = calculate_moving_average(avg_rewards_per_step, window_size=10)
     
     ax3.plot(episode_numbers, avg_rewards_per_step, 'orange', linewidth=1.5, 
@@ -149,7 +149,7 @@ def plot_episode_analysis(episodes, metadata=None, final_metadata=None, save_pat
     ax4.grid(True, alpha=0.3)
     plt.colorbar(scatter, ax=ax4, label='Episode Number')
     
-    # 🎯 增强的统计信息
+    # 📊 Enhanced statistics information
     stats_text = f"""
     Statistics Summary:
     Total Episodes: {len(episodes)}

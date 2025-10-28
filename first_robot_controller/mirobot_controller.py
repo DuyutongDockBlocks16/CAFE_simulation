@@ -506,7 +506,7 @@ class MirobotController:
         #     robot1_vacuum_quat = self.data.xquat[robot1_vacuum_body_id]
         #     print(f"🔍 Robot1 Vacuum Quat: [{robot1_vacuum_quat[0]:7.4f}, {robot1_vacuum_quat[1]:7.4f}, {robot1_vacuum_quat[2]:7.4f}, {robot1_vacuum_quat[3]:7.4f}] (State: {self.state})")
         # except Exception as e:
-        #     print(f"❌ 无法获取robot1真空吸嘴四元数: {e}")
+        #     print(f"❌ Unable to get robot1 vacuum quaternion: {e}")
 
         # self._check_vacuum_touch_sensor()
 
@@ -636,18 +636,18 @@ class MirobotController:
         self.state = state
 
     def _check_vacuum_touch_sensor(self):
-        # print(f"🔍 当前状态: {self.state.name}")
-        """使用接触传感器检查接触"""
+        # print(f"🔍 Current state: {self.state.name}")
+        """Use contact sensor to check contact"""
         try:
             sensor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "robot1:vacuum_touch")
             sensor_data = self.data.sensordata[sensor_id]
-            # print(f"🔍 接触传感器数据: {sensor_data:.6f} (State: {self.state})")
+            # print(f"🔍 Contact sensor data: {sensor_data:.6f} (State: {self.state})")
             
-            # sensor_data > 0 表示有接触
+            # sensor_data > 0 indicates contact
             if sensor_data > 0:
-                print(f"🔍 接触传感器检测到接触: {sensor_data:.6f}")
+                print(f"🔍 Contact sensor detected contact: {sensor_data:.6f}")
                 return True
             return False
         except Exception as e:
-            print(f"❌ 读取接触传感器失败: {e}")
+            print(f"❌ Failed to read contact sensor: {e}")
             return False
