@@ -178,8 +178,11 @@ class SecondRobotPickingMuJoCoEnv(gym.Env):
         )
 
         self.low_bounds = np.array([-1.0, -10, 0, -1.565, -3.142, -0.2], dtype=np.float32)
-        # self.low_bounds = np.array([-1.0, -1.919, -0.611, -1.565, -3.142, -0.2], dtype=np.float32)
         self.high_bounds = np.array([1.0, 10, 1.222, 1.40, 3.142, 0.2], dtype=np.float32)
+        
+        
+        # self.low_bounds = np.array([-1.0, -1.919, -0.611, -1.565, -3.142, -0.2], dtype=np.float32)
+        # self.high_bounds = np.array([1.0, 2.792, 1.222, 1.40, 3.142, 0.2], dtype=np.float32)
 
         num_actuators = self.model.nu
 

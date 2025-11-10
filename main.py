@@ -3,7 +3,7 @@ import mujoco.viewer
 # from test_controller import MirobotController, Direction, Layer, FiniteState
 from first_robot_controller.mirobot_controller import MirobotController, Direction, Layer, FiniteState
 from util_threads.object_remover import remove_object_on_plane
-from util_threads.object_placer import place_object_on_table
+from util_threads.object_placer import place_object_on_table, place_object_on_table_random
 from util_threads.object_remover_step_counter import remove_object_on_plane_with_step_counter
 import threading
 import time
@@ -69,7 +69,7 @@ def start_object_remover_threads(model, data, object_joint_ids):
 def start_object_placer_thread(model, data, object_joint_ids, left_object_position, right_object_position, shared_state):
     # object positions parameters
     threading.Thread(
-        target=place_object_on_table,
+        target=place_object_on_table_random,
         args=(model, data, left_object_position, right_object_position, object_joint_ids),
         kwargs={"shared_state": shared_state},
         daemon=True
@@ -101,14 +101,15 @@ def main():
         controller = MirobotController(model, data, left_object_position, right_object_position)
         
         step = 0
+        time.sleep(10) 
         while True:
             status = controller.get_status()
-            print(f"Current object index: {shared_state['current_object_index']}")
+            # print(f"Current object index: {shared_state['current_object_index']}")
             if shared_state["current_object_index"] >= len(object_joint_ids) and status == FiniteState.IDLE:
                 print("All objects have been placed. Exit")
                 break
 
-            # controller.step(shared_state["current_object_position"])
+            controller.step(shared_state["current_object_position"])
 
             mujoco.mj_step(model, data)
             step += 1

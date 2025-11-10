@@ -5,8 +5,10 @@ sec_robot_backward_model_path="../models/final_model_continued_56000K_20250724_1
 
 APPROACHING_MODEL_NAME =  sec_robot_forward_model_path
 # PICKING_MODEL_NAME = "../models/final_picking_model_continued_13000K_20250729_102650.zip"
+# PICKING_MODEL_NAME = "../models/final_picking_model_3000K_20250722_192051.zip.bak"
 PICKING_MODEL_NAME = "../models_bak/final_picking_model_5000K_20250731_124426.zip"
 # PICKING_MODEL_NAME = "../models/final_picking_model_3000K_20250726_163849.zip"
+# models_bak/final_picking_model_5000K_20250731_124426.zip
 DRIVER_MODEL_NAME = "../models_bak/final_driver_model_continued_12000K_20250820_201438.zip"
 
 PLACING_MODEL_NAME = "../models_bak/final_placing_model_50000K_20250907_124625.zip" 

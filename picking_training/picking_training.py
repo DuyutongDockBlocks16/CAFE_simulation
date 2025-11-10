@@ -37,11 +37,11 @@ gym.register(
         #     "saved_states/robot_state_20250726_154225.pkl", 
         #     # "saved_states/robot_state_20250721_151909.pkl"
         # ]
-        "state_filepath": "../saved_states/robot_state_20250721_151909.pkl"
+        # "state_filepath": "../saved_states/robot_state_20250721_151909.pkl"
         # "state_filepath": "../saved_states/robot_state_20250726_154225.pkl"
         # "state_filepath": "saved_states/robot_state_20250728_173657.pkl"
         # "state_filepath": "../saved_states/robot_state_20250728_191655.pkl"
-        # "state_filepath": "../saved_states/robot_state_20250730_113734.pkl"
+        "state_filepath": "../saved_states/robot_state_20250730_113734.pkl"
     }
 )
 
@@ -316,17 +316,17 @@ def picking_model_implementation(env):
     obs, info = env.reset()
 
     env.render()
-    sleep(5)
+    sleep(15)
 
     for _ in range(200000000000):
         env.render()  # Render at every step
-        # sleep(0.1)
+        sleep(0.1)
         action, _ = model.predict(obs, deterministic=True)
         # save all action to file
         # with open("picking_obs_log.txt", "a") as f:
         #     f.write(f"{obs.tolist()}\n")
-        # obs, reward, terminated, truncated, info = env.step(action)
-        terminated, truncated = False, False
+        obs, reward, terminated, truncated, info = env.step(action)
+        # terminated, truncated = False, False
         if terminated or truncated:
             # obs, info = env.reset()
             # env.unwrapped.data.ctrl[:] = 0

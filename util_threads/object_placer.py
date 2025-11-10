@@ -76,7 +76,7 @@ def place_object_on_table(model, data, left_object_position, right_object_positi
 
     shared_state["stopped"] = True
 
-def place_object_on_table_random(model, data, left_object_position, right_object_position, object_joint_ids, shared_state, check_interval=0.1):
+def place_object_on_table_random(model, data, left_object_position, right_object_position, object_joint_ids, shared_state, check_interval=3.0):
 
     placed_flag = False
     next_object_position = random.choice([left_object_position, right_object_position])
